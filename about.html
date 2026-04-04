@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>About Us | ee_tasha hairs</title>
+  <meta name="description" content="The story behind ee_tasha hairs. Premium luxury hair, handpicked with love.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="about" class="page-enter">
+  <div id="siteNav"></div>
+
+  <!-- Hero -->
+  <section style="background:var(--gold-bg);padding:100px 0 60px;margin-top:60px;">
+    <div class="container text-center" style="max-width:700px;">
+      <span class="section-subtitle">Our Story</span>
+      <h1 class="serif mb-2">About ee_tasha hairs</h1>
+      <p style="color:var(--gray-600);font-size:1.05rem;line-height:1.8;">
+        Born from a passion for quality and a love for making women feel their most beautiful.
+        ee_tasha hairs is a one-woman brand built on trust, premium products, and personalised service.
+      </p>
+    </div>
+  </section>
+
+  <!-- Mission -->
+  <section class="section">
+    <div class="container" style="max-width:800px;">
+      <div class="grid-2" style="gap:40px;align-items:center;">
+        <div>
+          <span class="section-subtitle">The Mission</span>
+          <h2 class="serif mb-2">Empowerment Through Elegance</h2>
+          <p style="color:var(--gray-600);line-height:1.8;margin-bottom:16px;">
+            Every bundle, wig, and frontal in our collection is hand-selected for quality.
+            We believe luxury hair shouldn't come with a luxury hassle — which is why we keep
+            things simple, personal, and honest.
+          </p>
+          <p style="color:var(--gray-600);line-height:1.8;">
+            From choosing your hair to aftercare, I'm here to help every step of the way —
+            just send a message on WhatsApp and I'll personally guide you.
+          </p>
+        </div>
+        <div style="background:var(--gray-100);border-radius:var(--radius-lg);aspect-ratio:4/5;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+          <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuCUoUQNO9SqOsajPMuqw3MhLo7nTXTyDXLX7eWZu2Z-tPdXCQ0yIL4TFvfyWtgVZSELb6Tg-jjdJ3_zxKTGp4xRE5V_21M5rFz1-pkQO-ZL0PjPUuXrBcY7iNUoMxMBEFjzWI6EXqFcmw7tNxlilkKxAR1vN7MbIUlPKpMlU-X5Qy-wGJKr8n3KGa8iW-M-KIdWKHUv54j1okmXHFW5aJFwpI4SFprxcfQGKGUxLqOt4Jyc5s3DzHXuYlGELhc4d9B4Cc-UPeg" alt="ee_tasha hairs mission" style="width:100%;height:100%;object-fit:cover;">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Values -->
+  <section class="section" style="background:var(--gray-900);color:white;">
+    <div class="container text-center">
+      <span class="section-subtitle" style="color:var(--gold);">Our Promise</span>
+      <h2 class="serif mb-3" style="color:white;">What We Stand For</h2>
+      <div class="grid-3" style="max-width:900px;margin:0 auto;">
+        <div style="padding:24px;">
+          <span class="material-symbols-outlined" style="font-size:36px;color:var(--gold);margin-bottom:12px;">diamond</span>
+          <h3 style="color:white;margin-bottom:8px;font-size:1rem;">Premium Quality</h3>
+          <p style="color:var(--gray-400);font-size:0.85rem;">100% virgin human hair, sourced ethically and built to last.</p>
+        </div>
+        <div style="padding:24px;">
+          <span class="material-symbols-outlined" style="font-size:36px;color:var(--gold);margin-bottom:12px;">favorite</span>
+          <h3 style="color:white;margin-bottom:8px;font-size:1rem;">Personal Touch</h3>
+          <p style="color:var(--gray-400);font-size:0.85rem;">Every customer matters. I'm always just a WhatsApp message away.</p>
+        </div>
+        <div style="padding:24px;">
+          <span class="material-symbols-outlined" style="font-size:36px;color:var(--gold);margin-bottom:12px;">eco</span>
+          <h3 style="color:white;margin-bottom:8px;font-size:1rem;">Honest Business</h3>
+          <p style="color:var(--gray-400);font-size:0.85rem;">No hidden fees, no fake reviews. Just real hair and real service.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Contact -->
+  <section class="section" id="contact">
+    <div class="container text-center" style="max-width:600px;">
+      <span class="section-subtitle">Get in Touch</span>
+      <h2 class="serif mb-2">Let's Chat</h2>
+      <p style="color:var(--gray-600);margin-bottom:24px;">
+        Have questions about a product? Need help choosing the right hair? Reach out — I'd love to help.
+      </p>
+      <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
+        <a href="#" id="whatsappLink" target="_blank" rel="noopener" class="btn btn-primary" style="background:#25D366;">
+          <span class="material-symbols-outlined" style="font-size:18px;">chat</span> WhatsApp
+        </a>
+        <a href="#" id="instagramLink" target="_blank" rel="noopener" class="btn btn-secondary">
+          <span class="material-symbols-outlined" style="font-size:18px;">photo_camera</span> Instagram
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <div id="siteFooter"></div>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      await initApp();
+      renderNav('about');
+      renderFooter();
+      updateCartCount();
+
+      const s  = Store.getSettings();
+      const wa = (s.whatsapp || '').replace(/[^0-9]/g, '');
+      const ig = (s.instagram || '').replace('@', '');
+      document.getElementById('whatsappLink').href  = wa ? `https://wa.me/${wa}` : '#';
+      document.getElementById('instagramLink').href = ig ? `https://instagram.com/${ig}` : '#';
+    });
+  </script>
+</body>
+</html>

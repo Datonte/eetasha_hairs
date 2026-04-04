@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard | ee_tasha hairs</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .admin-product-row { display: flex; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--gray-100); flex-wrap: wrap; }
+    .admin-product-img { width: 52px; height: 60px; border-radius: 6px; object-fit: cover; background: var(--gray-100); flex-shrink: 0; }
+    .admin-product-info { flex: 1; min-width: 140px; }
+    .admin-product-name { font-weight: 600; font-size: 0.85rem; }
+    .admin-product-cat  { font-size: 0.7rem; color: var(--gray-500); }
+    .admin-product-price { font-family: var(--font-head); color: var(--gold-dark); min-width: 70px; }
+    .admin-product-actions { display: flex; align-items: center; gap: 8px; }
+    .admin-tab-content { display: none; }
+    .admin-tab-content.active { display: block; }
+    .img-preview { max-width:100%; max-height:180px; border-radius:var(--radius); margin-top:8px; object-fit:cover; background:var(--gray-100); }
+  </style>
+</head>
+<body data-page="admin" class="page-enter">
+  <div id="siteNav"></div>
+
+  <!-- Admin Login Gate -->
+  <div class="auth-page" id="adminLogin">
+    <div class="auth-card">
+      <h1 class="serif" style="font-size:1.5rem;">Admin Access</h1>
+      <p class="auth-card-subtitle">Enter your admin password</p>
+      <form onsubmit="adminAuth(event)">
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-input" id="adminPwd" placeholder="Admin password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary btn-full" id="adminLoginBtn">Enter Dashboard</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Admin Dashboard -->
+  <div class="admin-layout hidden" id="adminDash">
+    <aside class="admin-sidebar">
+      <button class="admin-nav-item active" onclick="switchTab('products', this)">
+        <span class="material-symbols-outlined">inventory_2</span> Products
+      </button>
+      <button class="admin-nav-item" onclick="switchTab('orders', this)">
+        <span class="material-symbols-outlined">receipt_long</span> Orders
+      </button>
+      <button class="admin-nav-item" onclick="switchTab('settings', this)">
+        <span class="material-symbols-outlined">settings</span> Settings
+      </button>
+      <button class="admin-nav-item" onclick="adminLogout()" style="margin-top:auto;">
+        <span class="material-symbols-outlined">logout</span> Log Out
+      </button>
+    </aside>
+
+    <main class="admin-main">
+      <!-- Stats -->
+      <div class="grid-4 mb-3" id="adminStats"></div>
+
+      <!-- Products Tab -->
+      <div class="admin-tab-content active" id="tabProducts">
+        <div class="admin-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+            <h2 class="serif">Products</h2>
+            <button class="btn btn-primary btn-sm" onclick="openProductModal()">
+              <span class="material-symbols-outlined" style="font-size:16px;">add</span> Add Product
+            </button>
+          </div>
+          <div id="adminProductList"></div>
+        </div>
+      </div>
+
+      <!-- Orders Tab -->
+      <div class="admin-tab-content" id="tabOrders">
+        <div class="admin-card">
+          <h2 class="serif mb-2">Orders</h2>
+          <div id="adminOrderList"></div>
+          <div id="adminOrderEmpty" class="hidden text-center" style="padding:40px;color:var(--gray-400);">
+            <p>No orders yet. They'll appear here when customers order.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings Tab -->
+      <div class="admin-tab-content" id="tabSettings">
+        <div class="admin-card">
+          <h2 class="serif mb-2">Business Settings</h2>
+          <form onsubmit="saveSettings(event)">
+            <div class="grid-2">
+              <div class="form-group">
+                <label class="form-label">WhatsApp Number</label>
+                <input type="text" class="form-input" id="setWhatsapp" placeholder="+447012345678">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Instagram Handle</label>
+                <input type="text" class="form-input" id="setInstagram" placeholder="@eetashahairs">
+              </div>
+            </div>
+            <h3 class="serif mt-3 mb-2" style="font-size:1.1rem;">Bank Transfer Details</h3>
+            <div class="grid-2">
+              <div class="form-group">
+                <label class="form-label">Bank Name</label>
+                <input type="text" class="form-input" id="setBankName" placeholder="e.g. Monzo, Barclays">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Account Name</label>
+                <input type="text" class="form-input" id="setAccountName" placeholder="ee_tasha hairs">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Sort Code</label>
+                <input type="text" class="form-input" id="setSortCode" placeholder="12-34-56">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Account Number</label>
+                <input type="text" class="form-input" id="setAccountNumber" placeholder="12345678">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Delivery Fee (£)</label>
+              <input type="number" class="form-input" id="setDeliveryFee" placeholder="5.99" step="0.01" min="0">
+            </div>
+            <button type="submit" class="btn btn-primary mt-2">Save Settings</button>
+          </form>
+        </div>
+
+        <!-- Change Password -->
+        <div class="admin-card" style="margin-top:24px;">
+          <h2 class="serif mb-2">Change Admin Password</h2>
+          <form onsubmit="changePassword(event)">
+            <div class="grid-2">
+              <div class="form-group">
+                <label class="form-label">Current Password</label>
+                <input type="password" class="form-input" id="pwdCurrent" placeholder="Current password" autocomplete="current-password">
+              </div>
+              <div></div>
+              <div class="form-group">
+                <label class="form-label">New Password</label>
+                <input type="password" class="form-input" id="pwdNew" placeholder="At least 8 characters" minlength="8" autocomplete="new-password">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Confirm New Password</label>
+                <input type="password" class="form-input" id="pwdConfirm" placeholder="Confirm" autocomplete="new-password">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary mt-2">Update Password</button>
+          </form>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Add/Edit Product Modal -->
+  <div class="modal-overlay" id="productModal">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 class="serif" id="productModalTitle">Add Product</h3>
+        <button onclick="closeProductModal()"><span class="material-symbols-outlined">close</span></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="pmId">
+        <div class="form-group">
+          <label class="form-label">Product Name</label>
+          <input type="text" class="form-input" id="pmName" placeholder="e.g. Brazilian Body Wave Bundle" required>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Price (£)</label>
+            <input type="number" class="form-input" id="pmPrice" placeholder="285" step="0.01" min="0.01" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Category</label>
+            <input type="text" class="form-input" id="pmCategory" placeholder="e.g. Wigs, Bundles, Care" list="catList">
+            <datalist id="catList">
+              <option value="Wigs">
+              <option value="Bundles">
+              <option value="Frontals">
+              <option value="Closures">
+              <option value="Care">
+            </datalist>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Image URL</label>
+          <input type="url" class="form-input" id="pmImage" placeholder="Paste an image link here">
+          <img id="pmPreview" class="img-preview hidden" alt="Preview">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea class="form-input" id="pmDesc" placeholder="A short description of the product" rows="3"></textarea>
+        </div>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;">
+          <div class="form-group" style="display:flex;align-items:center;gap:12px;">
+            <label class="toggle">
+              <input type="checkbox" id="pmInStock" checked>
+              <span class="toggle-track"></span>
+              <span class="toggle-thumb"></span>
+            </label>
+            <span style="font-size:0.85rem;font-weight:600;">In Stock</span>
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:12px;">
+            <label class="toggle">
+              <input type="checkbox" id="pmFeatured">
+              <span class="toggle-track"></span>
+              <span class="toggle-thumb"></span>
+            </label>
+            <span style="font-size:0.85rem;font-weight:600;">⭐ Featured on Homepage</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" onclick="closeProductModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="saveProductBtn" onclick="saveProduct()">Save Product</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    // =================== AUTH ===================
+    async function adminAuth(e) {
+      e.preventDefault();
+      const btn = document.getElementById('adminLoginBtn');
+      btn.disabled = true; btn.textContent = 'Checking…';
+      try {
+        await API.post('/api/admin/login', { password: document.getElementById('adminPwd').value });
+        showAdminDash();
+      } catch (err) {
+        Toast.show(err.message, 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Enter Dashboard';
+      }
+    }
+
+    async function adminLogout() {
+      await API.post('/api/admin/logout').catch(() => {});
+      document.getElementById('adminLogin').classList.remove('hidden');
+      document.getElementById('adminDash').classList.add('hidden');
+    }
+
+    async function showAdminDash() {
+      document.getElementById('adminLogin').classList.add('hidden');
+      document.getElementById('adminDash').classList.remove('hidden');
+      await Promise.all([loadAdminStats(), loadAdminProducts(), loadAdminOrders(), loadSettings()]);
+    }
+
+    // =================== TAB ===================
+    function switchTab(tab, btn) {
+      document.querySelectorAll('.admin-tab-content').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.admin-nav-item').forEach(b => b.classList.remove('active'));
+      document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+      if (btn) btn.classList.add('active');
+    }
+
+    // =================== STATS ===================
+    async function loadAdminStats() {
+      try {
+        const s = await API.get('/api/admin/stats');
+        document.getElementById('adminStats').innerHTML = `
+          <div class="admin-card admin-stat"><div class="admin-stat-value">${s.products}</div><div class="admin-stat-label">Products</div></div>
+          <div class="admin-card admin-stat"><div class="admin-stat-value">${s.orders}</div><div class="admin-stat-label">Total Orders</div></div>
+          <div class="admin-card admin-stat"><div class="admin-stat-value">${formatCurrency(s.revenue)}</div><div class="admin-stat-label">Revenue</div></div>
+          <div class="admin-card admin-stat"><div class="admin-stat-value">${s.pending}</div><div class="admin-stat-label">Pending</div></div>`;
+      } catch {}
+    }
+
+    // =================== PRODUCTS ===================
+    async function loadAdminProducts() {
+      try {
+        const products = await API.get('/api/products');
+        State.products = products;  // keep local cache in sync
+        renderAdminProducts(products);
+      } catch (err) {
+        Toast.show('Failed to load products.', 'error');
+      }
+    }
+
+    function renderAdminProducts(products) {
+      const list = document.getElementById('adminProductList');
+      if (!products.length) {
+        list.innerHTML = '<p style="text-align:center;color:var(--gray-400);padding:30px;">No products yet. Click "Add Product" to get started.</p>';
+        return;
+      }
+      list.innerHTML = products.map(p => `
+        <div class="admin-product-row">
+          <img class="admin-product-img" src="${escHtml(p.image_url || '')}" alt="${escHtml(p.name)}" onerror="this.style.background='var(--gray-200)'">
+          <div class="admin-product-info">
+            <div class="admin-product-name">${escHtml(p.name)}</div>
+            <div class="admin-product-cat">${escHtml(p.category || 'Uncategorised')}</div>
+          </div>
+          <div class="admin-product-price">${formatCurrency(p.price)}</div>
+          <button class="btn-icon" onclick="toggleFeatured(${p.id}, ${!p.featured})" title="${p.featured ? 'Remove from Featured' : 'Add to Featured'}"
+            style="color:${p.featured ? 'var(--gold-dark)' : 'var(--gray-300)'};">
+            <span class="material-symbols-outlined" style="font-size:20px;font-variation-settings:'FILL' ${p.featured ? '1' : '0'};">star</span>
+          </button>
+          <label class="toggle" title="${p.in_stock ? 'In Stock' : 'Out of Stock'}">
+            <input type="checkbox" ${p.in_stock ? 'checked' : ''} onchange="toggleStock(${p.id}, this.checked)">
+            <span class="toggle-track"></span><span class="toggle-thumb"></span>
+          </label>
+          <div class="admin-product-actions">
+            <button class="btn-icon" onclick="editProduct(${p.id})" title="Edit">
+              <span class="material-symbols-outlined" style="font-size:18px;">edit</span>
+            </button>
+            <button class="btn-icon" onclick="deleteProduct(${p.id})" title="Delete" style="color:var(--error);">
+              <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
+            </button>
+          </div>
+        </div>`).join('');
+    }
+
+    async function toggleStock(id, inStock) {
+      const p = State.products.find(x => x.id === id);
+      if (!p) return;
+      try {
+        await API.put(`/api/products/${id}`, { ...p, in_stock: inStock });
+        Toast.show(inStock ? 'Marked as in stock.' : 'Marked as out of stock.', 'success');
+        await loadAdminProducts();
+        await loadAdminStats();
+      } catch (err) { Toast.show(err.message, 'error'); }
+    }
+
+    async function toggleFeatured(id, featured) {
+      const p = State.products.find(x => x.id === id);
+      if (!p) return;
+      try {
+        await API.put(`/api/products/${id}`, { ...p, featured });
+        Toast.show(featured ? '⭐ Added to Featured.' : 'Removed from Featured.', 'success');
+        await loadAdminProducts();
+      } catch (err) { Toast.show(err.message, 'error'); }
+    }
+
+    async function deleteProduct(id) {
+      if (!confirm('Delete this product? This cannot be undone.')) return;
+      try {
+        await API.delete(`/api/products/${id}`);
+        Toast.show('Product deleted.', 'success');
+        await loadAdminProducts();
+        await loadAdminStats();
+      } catch (err) { Toast.show(err.message, 'error'); }
+    }
+
+    function openProductModal(product = null) {
+      document.getElementById('productModalTitle').textContent = product ? 'Edit Product' : 'Add Product';
+      document.getElementById('pmId').value       = product?.id       || '';
+      document.getElementById('pmName').value     = product?.name     || '';
+      document.getElementById('pmPrice').value    = product?.price    || '';
+      document.getElementById('pmCategory').value = product?.category || '';
+      document.getElementById('pmImage').value    = product?.image_url || '';
+      document.getElementById('pmDesc').value     = product?.description || '';
+      document.getElementById('pmInStock').checked  = product ? !!product.in_stock : true;
+      document.getElementById('pmFeatured').checked = product ? !!product.featured  : false;
+      updateImagePreview();
+      document.getElementById('productModal').classList.add('open');
+    }
+
+    function closeProductModal() { document.getElementById('productModal').classList.remove('open'); }
+
+    function editProduct(id) {
+      const p = State.products.find(x => x.id === id);
+      if (p) openProductModal(p);
+    }
+
+    async function saveProduct() {
+      const id   = document.getElementById('pmId').value;
+      const data = {
+        name:        document.getElementById('pmName').value.trim(),
+        price:       parseFloat(document.getElementById('pmPrice').value) || 0,
+        category:    document.getElementById('pmCategory').value.trim(),
+        image_url:   document.getElementById('pmImage').value.trim(),
+        description: document.getElementById('pmDesc').value.trim(),
+        in_stock:    document.getElementById('pmInStock').checked,
+        featured:    document.getElementById('pmFeatured').checked,
+      };
+      if (!data.name || !data.price) { Toast.show('Name and price are required.', 'error'); return; }
+
+      const btn = document.getElementById('saveProductBtn');
+      btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        if (id) {
+          await API.put(`/api/products/${id}`, data);
+          Toast.show('Product updated.', 'success');
+        } else {
+          await API.post('/api/products', data);
+          Toast.show('Product added!', 'success');
+        }
+        closeProductModal();
+        await loadAdminProducts();
+        await loadAdminStats();
+      } catch (err) {
+        Toast.show(err.message, 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Save Product';
+      }
+    }
+
+    function updateImagePreview() {
+      const url     = document.getElementById('pmImage').value;
+      const preview = document.getElementById('pmPreview');
+      if (url) { preview.src = url; preview.classList.remove('hidden'); }
+      else      { preview.classList.add('hidden'); }
+    }
+
+    // =================== ORDERS ===================
+    async function loadAdminOrders() {
+      try {
+        const orders = await API.get('/api/orders');
+        const list   = document.getElementById('adminOrderList');
+        const empty  = document.getElementById('adminOrderEmpty');
+
+        if (!orders.length) { list.innerHTML = ''; empty.classList.remove('hidden'); return; }
+        empty.classList.add('hidden');
+
+        list.innerHTML = orders.map(o => `
+          <div class="order-card">
+            <div class="order-header">
+              <span class="order-id serif">${escHtml(o.order_number)}</span>
+              <select class="form-input" style="width:auto;padding:6px 10px;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;"
+                onchange="updateOrderStatus(${o.id}, this.value)">
+                <option value="pending"   ${o.order_status === 'pending'   ? 'selected' : ''}>Pending</option>
+                <option value="confirmed" ${o.order_status === 'confirmed' ? 'selected' : ''}>Confirmed</option>
+                <option value="shipped"   ${o.order_status === 'shipped'   ? 'selected' : ''}>Shipped</option>
+                <option value="delivered" ${o.order_status === 'delivered' ? 'selected' : ''}>Delivered</option>
+                <option value="cancelled" ${o.order_status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
+              </select>
+            </div>
+            <div style="font-size:0.82rem;color:var(--gray-600);margin-bottom:4px;">
+              <strong>${escHtml(o.customer_name)}</strong> · ${escHtml(o.customer_phone || '')} · ${o.payment_method === 'stripe' ? '💳 Card' : '🏦 Transfer'}
+            </div>
+            <div class="order-items">${(o.items || []).map(i => `${escHtml(i.product_name)} × ${i.quantity}`).join(', ')}</div>
+            <div style="font-size:0.78rem;color:var(--gray-400);margin-top:4px;">${escHtml(o.delivery_address || '')}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+              <span class="order-date">${formatDate(o.created_at)}</span>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <span class="order-total serif">${formatCurrency(o.total)}</span>
+                ${o.customer_phone ? `<a href="https://wa.me/${o.customer_phone.replace(/[^0-9]/g,'')}" target="_blank" rel="noopener" class="btn btn-sm" style="background:#25D366;color:white;padding:6px 10px;">
+                  <span class="material-symbols-outlined" style="font-size:14px;">chat</span>
+                </a>` : ''}
+              </div>
+            </div>
+          </div>`).join('');
+      } catch (err) { Toast.show('Failed to load orders.', 'error'); }
+    }
+
+    async function updateOrderStatus(id, status) {
+      try {
+        await API.put(`/api/orders/${id}/status`, { status });
+        Toast.show(`Order updated → ${status.charAt(0).toUpperCase() + status.slice(1)}`, 'success');
+        await loadAdminStats();
+      } catch (err) { Toast.show(err.message, 'error'); }
+    }
+
+    // =================== SETTINGS ===================
+    async function loadSettings() {
+      try {
+        const s = await API.get('/api/settings');
+        document.getElementById('setWhatsapp').value     = s.whatsapp      || '';
+        document.getElementById('setInstagram').value    = s.instagram     || '';
+        document.getElementById('setBankName').value     = s.bankName      || '';
+        document.getElementById('setAccountName').value  = s.accountName   || '';
+        document.getElementById('setSortCode').value     = s.sortCode      || '';
+        document.getElementById('setAccountNumber').value= s.accountNumber || '';
+        document.getElementById('setDeliveryFee').value  = s.deliveryFee   ?? 5.99;
+      } catch {}
+    }
+
+    async function saveSettings(e) {
+      e.preventDefault();
+      try {
+        await API.put('/api/settings', {
+          whatsapp:      document.getElementById('setWhatsapp').value.trim(),
+          instagram:     document.getElementById('setInstagram').value.trim(),
+          bankName:      document.getElementById('setBankName').value.trim(),
+          accountName:   document.getElementById('setAccountName').value.trim(),
+          sortCode:      document.getElementById('setSortCode').value.trim(),
+          accountNumber: document.getElementById('setAccountNumber').value.trim(),
+          deliveryFee:   parseFloat(document.getElementById('setDeliveryFee').value) || 0,
+        });
+        Toast.show('Settings saved!', 'success');
+      } catch (err) { Toast.show(err.message, 'error'); }
+    }
+
+    async function changePassword(e) {
+      e.preventDefault();
+      try {
+        await API.post('/api/admin/change-password', {
+          currentPassword: document.getElementById('pwdCurrent').value,
+          newPassword:     document.getElementById('pwdNew').value,
+          confirmPassword: document.getElementById('pwdConfirm').value,
+        });
+        Toast.show('Password changed successfully.', 'success');
+        document.getElementById('pwdCurrent').value = '';
+        document.getElementById('pwdNew').value     = '';
+        document.getElementById('pwdConfirm').value = '';
+      } catch (err) { Toast.show(err.message, 'error'); }
+    }
+
+    // =================== INIT ===================
+    document.getElementById('pmImage')?.addEventListener('input', updateImagePreview);
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await initApp();
+      renderNav('');
+
+      // Check if already logged in as admin (server-side session)
+      try {
+        const { isAdmin } = await API.get('/api/admin/me');
+        if (isAdmin) showAdminDash();
+      } catch {}
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Account | ee_tasha hairs</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="account" class="page-enter">
+  <div id="siteNav"></div>
+
+  <!-- LOGIN / SIGNUP -->
+  <div class="auth-page" id="authSection">
+    <div class="auth-card">
+      <h1 class="serif">Welcome</h1>
+      <p class="auth-card-subtitle">Sign in to track orders &amp; manage your account</p>
+
+      <div class="auth-toggle">
+        <button class="active" id="tabLogin" onclick="showTab('login')">Sign In</button>
+        <button id="tabSignup" onclick="showTab('signup')">Create Account</button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" class="form-input" id="loginEmail" placeholder="you@email.com" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-input" id="loginPassword" placeholder="Your password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary btn-full" id="loginBtn">Sign In</button>
+      </form>
+
+      <!-- Signup Form -->
+      <form id="signupForm" class="hidden" onsubmit="handleSignup(event)">
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input type="text" class="form-input" id="signupName" placeholder="Your full name" required autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" class="form-input" id="signupEmail" placeholder="you@email.com" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-input" id="signupPassword" placeholder="At least 8 characters" minlength="8" required autocomplete="new-password">
+        </div>
+        <button type="submit" class="btn btn-primary btn-full" id="signupBtn">Create Account</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ACCOUNT DASHBOARD -->
+  <section class="section page-top hidden" id="accountSection">
+    <div class="container" style="max-width:800px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
+        <div>
+          <span class="section-subtitle">My Account</span>
+          <h1 class="serif" id="welcomeName">Welcome back</h1>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="handleLogout()">
+          <span class="material-symbols-outlined" style="font-size:16px;">logout</span> Sign Out
+        </button>
+      </div>
+
+      <!-- Quick Stats -->
+      <div class="grid-3 mb-3" style="max-width:500px;">
+        <div class="admin-card admin-stat">
+          <div class="admin-stat-value" id="statOrders">0</div>
+          <div class="admin-stat-label">Orders</div>
+        </div>
+        <div class="admin-card admin-stat">
+          <div class="admin-stat-value" id="statSpent">£0</div>
+          <div class="admin-stat-label">Total Spent</div>
+        </div>
+        <div class="admin-card admin-stat">
+          <div class="admin-stat-value" id="statMember">—</div>
+          <div class="admin-stat-label">Member Since</div>
+        </div>
+      </div>
+
+      <!-- Orders -->
+      <h2 class="serif mb-2">Order History</h2>
+      <div id="ordersList"></div>
+      <div id="ordersEmpty" class="hidden text-center" style="padding:40px;color:var(--gray-400);">
+        <span class="material-symbols-outlined" style="font-size:40px;opacity:0.3;margin-bottom:8px;">receipt_long</span>
+        <p>No orders yet. <a href="shop.html" style="color:var(--gold-dark);text-decoration:underline;">Start shopping</a></p>
+      </div>
+    </div>
+  </section>
+
+  <div id="siteFooter"></div>
+  <script src="js/app.js"></script>
+  <script>
+    function showTab(tab) {
+      document.getElementById('loginForm').classList.toggle('hidden', tab !== 'login');
+      document.getElementById('signupForm').classList.toggle('hidden', tab !== 'signup');
+      document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
+      document.getElementById('tabSignup').classList.toggle('active', tab === 'signup');
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const btn = document.getElementById('loginBtn');
+      btn.disabled = true; btn.textContent = 'Signing in…';
+      try {
+        const { user } = await API.post('/api/auth/login', {
+          email:    document.getElementById('loginEmail').value,
+          password: document.getElementById('loginPassword').value,
+        });
+        State.session = user;
+        Toast.show('Welcome back!', 'success');
+        renderNav('account');
+        await showDashboard();
+      } catch (err) {
+        Toast.show(err.message, 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Sign In';
+      }
+    }
+
+    async function handleSignup(e) {
+      e.preventDefault();
+      const btn = document.getElementById('signupBtn');
+      btn.disabled = true; btn.textContent = 'Creating account…';
+      try {
+        const { user } = await API.post('/api/auth/register', {
+          name:     document.getElementById('signupName').value,
+          email:    document.getElementById('signupEmail').value,
+          password: document.getElementById('signupPassword').value,
+        });
+        State.session = user;
+        Toast.show('Account created! Welcome to ee_tasha hairs.', 'success');
+        renderNav('account');
+        await showDashboard();
+      } catch (err) {
+        Toast.show(err.message, 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Create Account';
+      }
+    }
+
+    async function handleLogout() {
+      await API.post('/api/auth/logout').catch(() => {});
+      State.session = null;
+      Toast.show('Signed out.', 'info');
+      renderNav('account');
+      document.getElementById('authSection').classList.remove('hidden');
+      document.getElementById('accountSection').classList.add('hidden');
+    }
+
+    async function showDashboard() {
+      const session = Store.getSession();
+      if (!session) return;
+
+      document.getElementById('authSection').classList.add('hidden');
+      document.getElementById('accountSection').classList.remove('hidden');
+      document.getElementById('welcomeName').textContent = `Hello, ${session.name.split(' ')[0]}`;
+
+      // Load orders
+      let orders = [];
+      try { orders = await API.get('/api/orders/mine'); } catch {}
+
+      const total = orders.reduce((s, o) => s + (o.total || 0), 0);
+      document.getElementById('statOrders').textContent = orders.length;
+      document.getElementById('statSpent').textContent   = formatCurrency(total);
+      document.getElementById('statMember').textContent  = formatDate(session.created_at).split(' ').slice(0, 2).join(' ');
+
+      const list  = document.getElementById('ordersList');
+      const empty = document.getElementById('ordersEmpty');
+
+      if (orders.length === 0) {
+        list.innerHTML = '';
+        empty.classList.remove('hidden');
+      } else {
+        empty.classList.add('hidden');
+        list.innerHTML = orders.map(o => {
+          const statusLabel = o.order_status.charAt(0).toUpperCase() + o.order_status.slice(1);
+          const itemsText   = (o.items || []).map(i => `${escHtml(i.product_name)} × ${i.quantity}`).join(', ');
+          return `<div class="order-card">
+            <div class="order-header">
+              <span class="order-id serif">${escHtml(o.order_number)}</span>
+              <span class="order-status status-${escHtml(o.order_status)}">${statusLabel}</span>
+            </div>
+            <div class="order-items">${itemsText}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span class="order-date">${formatDate(o.created_at)}</span>
+              <span class="order-total serif">${formatCurrency(o.total)}</span>
+            </div>
+          </div>`;
+        }).join('');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await initApp();
+      renderNav('account');
+      renderFooter();
+      updateCartCount();
+      if (Store.getSession()) await showDashboard();
+    });
+  </script>
+</body>
+</html>

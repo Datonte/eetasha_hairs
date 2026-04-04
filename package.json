@@ -1,0 +1,21 @@
+{
+  "name": "eetasha-hairs",
+  "version": "2.0.0",
+  "description": "ee_tasha hairs — Luxury Hair E-Commerce",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "stripe": "^14.0.0",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5",
+    "bcryptjs": "^2.4.3",
+    "express-session": "^1.17.3",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.2.0",
+    "express-validator": "^7.0.1"
+  }
+}

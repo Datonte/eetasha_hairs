@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ee_tasha hairs — Luxury Hair for the Modern Woman</title>
+  <meta name="description" content="Premium luxury hair extensions, wigs, and bundles. Handpicked quality, delivered to your door in the UK.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="home" class="page-enter">
+  <div id="siteNav"></div>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-bg">
+      <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuCYHPDG_q3h3P-qDH1l_4kNWcZYd2VJLhF5qMaIw-6OxY_NdIOIxnLqkpgBExBhJelPp60vb925mFJ-nwi1n3mApgJjlFE8Bf4fWNT-eqrk3PX8fBk0rMr4zyXRwywi7Ix_nqN9jqJmGG1bv8s0xm3xgeLxSkxHdKsPjbx9uVIMxaAOu6FY_1kGhNfCK7Xfe8v-S6M_sLLBhJ-j4RFYaCuHWbMkKVPbuN2TgAVwWPMkuqlCMawuMy0ACeCRB7cXn3UOG6TQYYilA" alt="Luxury Hair">
+      <div class="hero-overlay"></div>
+    </div>
+    <div class="hero-content container">
+      <span class="label gold" style="color: var(--gold-light); margin-bottom: 12px; display: block;">Premium Hair Collection</span>
+      <h1>Elevate Your Beauty</h1>
+      <p>Luxury hair for the modern woman. Experience the pinnacle of hair craftsmanship with our curated artisan collections.</p>
+      <a href="shop.html" class="btn btn-primary" style="background:white;color:var(--black)">Shop the Collection</a>
+    </div>
+  </section>
+
+  <!-- Featured Products -->
+  <section class="section">
+    <div class="container">
+      <div class="section-header">
+        <div>
+          <span class="section-subtitle">Curated Excellence</span>
+          <h2 class="serif">Featured Products</h2>
+        </div>
+        <a href="shop.html" class="btn btn-outline btn-sm">View All</a>
+      </div>
+      <div class="grid-3" id="featuredGrid">
+        <!-- loaded via JS -->
+        <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--gray-400);">Loading...</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Why Choose Us -->
+  <section class="section" style="background: var(--gold-bg);">
+    <div class="container text-center">
+      <span class="section-subtitle">Why ee_tasha?</span>
+      <h2 class="serif mb-3">The ee_tasha Difference</h2>
+      <div class="grid-3" style="max-width: 900px; margin: 0 auto;">
+        <div style="padding: 20px;">
+          <span class="material-symbols-outlined" style="font-size:36px; color:var(--gold-dark); margin-bottom:12px;">verified</span>
+          <h3 style="font-size:1rem; margin-bottom:8px;">100% Virgin Hair</h3>
+          <p style="font-size:0.85rem; color:var(--gray-600);">Single donor, unprocessed hair that lasts for years with proper care.</p>
+        </div>
+        <div style="padding: 20px;">
+          <span class="material-symbols-outlined" style="font-size:36px; color:var(--gold-dark); margin-bottom:12px;">local_shipping</span>
+          <h3 style="font-size:1rem; margin-bottom:8px;">UK Delivery</h3>
+          <p style="font-size:0.85rem; color:var(--gray-600);">Fast, tracked delivery across the UK. Your hair arrives safely at your door.</p>
+        </div>
+        <div style="padding: 20px;">
+          <span class="material-symbols-outlined" style="font-size:36px; color:var(--gold-dark); margin-bottom:12px;">support_agent</span>
+          <h3 style="font-size:1rem; margin-bottom:8px;">WhatsApp Support</h3>
+          <p style="font-size:0.85rem; color:var(--gray-600);">Questions? Reach us directly on WhatsApp for personalised help.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="section text-center">
+    <div class="container" style="max-width:600px;">
+      <span class="section-subtitle">Ready?</span>
+      <h2 class="serif mb-2">Find Your Perfect Hair</h2>
+      <p style="color:var(--gray-600); margin-bottom: 24px;">Browse our full range of luxury bundles, wigs, frontals, and care products.</p>
+      <a href="shop.html" class="btn btn-primary">Shop Now</a>
+    </div>
+  </section>
+
+  <div id="siteFooter"></div>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      await initApp();
+      renderNav('home');
+      renderFooter();
+      updateCartCount();
+
+      const all     = Store.getProducts().filter(p => p.in_stock);
+      let featured  = all.filter(p => p.featured);
+      if (featured.length < 3) featured = [...featured, ...all.filter(p => !p.featured)];
+
+      const grid = document.getElementById('featuredGrid');
+      if (featured.length === 0) {
+        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--gray-400);padding:40px;">No products available yet.</div>';
+      } else {
+        grid.innerHTML = featured.slice(0, 3).map(productCardHTML).join('');
+      }
+    });
+  </script>
+</body>
+</html>

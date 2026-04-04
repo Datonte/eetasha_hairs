@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Environment variables (contains secrets — NEVER commit this)
+.env
+
+# Database files (user data — keep private)
+data/
+
+# Temp files
+*.tmp
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
