@@ -105,9 +105,12 @@ const OTP      = mongoose.model('OTP',      otpSchema);
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/eetasha';
 let _dbReady = false;
 
+// Kick off connection immediately at module load — shared with connect-mongo
+const _dbPromise = mongoose.connect(MONGODB_URI).catch(err => console.error('DB connect error:', err.message));
+
 async function ensureDB() {
-  if (_dbReady && mongoose.connection.readyState === 1) return;
-  await mongoose.connect(MONGODB_URI);
+  await _dbPromise;
+  if (mongoose.connection.readyState !== 1) await mongoose.connect(MONGODB_URI);
   if (!_dbReady) {
     await seedData();
     _dbReady = true;
@@ -226,6 +229,15 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '500kb' }));
 app.use(express.urlencoded({ extended: true, limit: '500kb' }));
 
+// ---- Ensure DB is ready before session middleware reads from MongoDB store ----
+app.use(async (req, res, next) => {
+  try { await ensureDB(); next(); }
+  catch (err) {
+    console.error('DB unavailable:', err.message);
+    res.status(503).json({ error: 'Database temporarily unavailable. Please try again.' });
+  }
+});
+
 // ---- Sessions (stored in MongoDB — persists across cold starts) ----
 if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.includes('change-this')) {
   console.warn('  ⚠  SESSION_SECRET is not set — update it before going live.');
@@ -235,7 +247,7 @@ app.use(session({
   resave:            false,
   saveUninitialized: false,
   name:              'et.sid',
-  store:             MongoStore.create({ mongoUrl: MONGODB_URI, ttl: 7 * 24 * 60 * 60, touchAfter: 24 * 3600 }),
+  store:             MongoStore.create({ mongooseConnection: mongoose.connection, ttl: 7 * 24 * 60 * 60, touchAfter: 24 * 3600 }),
   cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 7 * 24 * 60 * 60 * 1000 },
 }));
 
@@ -247,14 +259,6 @@ app.use('/api/', generalLimiter);
 // Static files (used locally; Vercel serves these directly in production)
 app.use(express.static(path.join(__dirname)));
 
-// ---- Ensure DB is connected before every API request ----
-app.use('/api/', async (req, res, next) => {
-  try { await ensureDB(); next(); }
-  catch (err) {
-    console.error('DB unavailable:', err.message);
-    res.status(503).json({ error: 'Database temporarily unavailable. Please try again.' });
-  }
-});
 
 // ============================================================
 //  VALIDATION HELPER
