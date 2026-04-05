@@ -105,17 +105,15 @@ const OTP      = mongoose.model('OTP',      otpSchema);
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/eetasha';
 let _dbReady = false;
 
-// Kick off connection immediately at module load so it's ready before any request arrives
-let _dbPromise = mongoose.connect(MONGODB_URI);
+// One shared MongoClient for both mongoose queries AND the session store.
+// connect-mongo's clientPromise option awaits this before any session read/write.
+const _clientPromise = mongoose.connect(MONGODB_URI)
+  .then(() => mongoose.connection.getClient())
+  .catch(err => { console.error('DB connect error:', err.message); throw err; });
 
 async function ensureDB() {
-  try {
-    await _dbPromise;
-  } catch {
-    // Retry once on failure
-    _dbPromise = mongoose.connect(MONGODB_URI);
-    await _dbPromise;
-  }
+  await _clientPromise; // waits for the shared connection
+  if (mongoose.connection.readyState !== 1) await mongoose.connect(MONGODB_URI);
   if (!_dbReady) {
     await seedData();
     _dbReady = true;
@@ -252,7 +250,7 @@ app.use(session({
   resave:            false,
   saveUninitialized: false,
   name:              'et.sid',
-  store:             MongoStore.create({ mongoUrl: MONGODB_URI, ttl: 7 * 24 * 60 * 60, touchAfter: 24 * 3600 }),
+  store:             MongoStore.create({ clientPromise: _clientPromise, ttl: 7 * 24 * 60 * 60, touchAfter: 24 * 3600 }),
   cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 7 * 24 * 60 * 60 * 1000 },
 }));
 
