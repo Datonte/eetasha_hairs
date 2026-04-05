@@ -211,10 +211,10 @@ function renderNav(activePage = '') {
           <a href="account.html" class="${activePage === 'account' ? 'active' : ''}">${sess ? 'My Account' : 'Login'}</a>
         </div>
         <div class="nav-actions">
-          <button onclick="openCart()" aria-label="Cart">
+          ${sess ? `<button onclick="openCart()" aria-label="Cart">
             <span class="material-symbols-outlined">shopping_bag</span>
             <span class="cart-count"></span>
-          </button>
+          </button>` : ''}
           <button class="nav-mobile-toggle" onclick="document.getElementById('navLinks').classList.toggle('open')" aria-label="Menu">
             <span class="material-symbols-outlined">menu</span>
           </button>
@@ -288,10 +288,19 @@ function productCardHTML(p) {
         <div class="product-card-name">${escHtml(p.name)}</div>
         <div class="product-card-price">${currency}${Number(p.price).toFixed(2)}</div>
         ${p.in_stock
-          ? `<button class="btn btn-primary btn-sm btn-full" onclick="Store.addToCart(${p.id})">Add to Bag</button>`
+          ? `<button class="btn btn-primary btn-sm btn-full" onclick="addToCartOrLogin('${p.id}')">Add to Bag</button>`
           : `<span class="product-card-stock stock-out">Out of Stock</span>`}
       </div>
     </div>`;
+}
+
+function addToCartOrLogin(productId) {
+  if (!Store.getSession()) {
+    window.location.href = 'account.html';
+    return;
+  }
+  Store.addToCart(productId);
+  openCart();
 }
 
 // ============================================================
