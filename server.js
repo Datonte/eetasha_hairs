@@ -13,6 +13,7 @@ const mongoose   = require('mongoose');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
+app.set('trust proxy', 1); // Vercel terminates SSL — tell Express to trust X-Forwarded-Proto
 
 // ============================================================
 //  MONGOOSE MODELS
