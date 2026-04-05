@@ -19,7 +19,6 @@ const PORT = process.env.PORT || 3000;
 //  MONGOOSE MODELS
 // ============================================================
 
-// Reusable toJSON transform: expose _id as id, strip __v
 const toJson = {
   transform: (_doc, ret) => {
     ret.id = ret._id.toString();
@@ -92,6 +91,21 @@ const Order    = mongoose.model('Order',    orderSchema);
 const Settings = mongoose.model('Settings', settingsSchema);
 
 // ============================================================
+//  DATABASE CONNECTION  (cached for Vercel serverless)
+// ============================================================
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/eetasha';
+let _dbReady = false;
+
+async function ensureDB() {
+  if (_dbReady && mongoose.connection.readyState === 1) return;
+  await mongoose.connect(MONGODB_URI);
+  if (!_dbReady) {
+    await seedData();
+    _dbReady = true;
+  }
+}
+
+// ============================================================
 //  HELPERS
 // ============================================================
 function clean(str) { return String(str || '').replace(/[<>]/g, '').trim(); }
@@ -103,22 +117,19 @@ async function getSettings() {
 }
 
 // ============================================================
-//  SEED DEFAULT DATA (runs once on first boot)
+//  SEED DEFAULT DATA  (runs once on first boot)
 // ============================================================
 async function seedData() {
-  // Ensure settings doc exists
   await Settings.findOneAndUpdate(
     { _key: 'global' }, {}, { upsert: true, new: true, setDefaultsOnInsert: true }
   );
 
-  // Default admin account (password: eetasha2024)
   if (!(await Admin.countDocuments())) {
     const hash = await bcrypt.hash('eetasha2024', 12);
     await Admin.create({ username: 'admin', password_hash: hash });
     console.log('  ✅ Admin account created  →  password: eetasha2024  (change this in the dashboard!)');
   }
 
-  // Sample products
   if (!(await Product.countDocuments())) {
     await Product.insertMany([
       { name: 'Luxury HD Lace Frontal Wig',  price: 285, category: 'Wigs',     in_stock: true,  featured: true,
@@ -174,9 +185,7 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '500kb' }));
 app.use(express.urlencoded({ extended: true, limit: '500kb' }));
 
-// ---- Sessions (stored in MongoDB so they survive Render restarts) ----
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/eetasha';
-
+// ---- Sessions (stored in MongoDB — persists across cold starts) ----
 if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.includes('change-this')) {
   console.warn('  ⚠  SESSION_SECRET is not set — update it before going live.');
 }
@@ -194,8 +203,17 @@ const authLimiter    = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHe
 const generalLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
 app.use('/api/', generalLimiter);
 
-// Static files
+// Static files (used locally; Vercel serves these directly in production)
 app.use(express.static(path.join(__dirname)));
+
+// ---- Ensure DB is connected before every API request ----
+app.use('/api/', async (req, res, next) => {
+  try { await ensureDB(); next(); }
+  catch (err) {
+    console.error('DB unavailable:', err.message);
+    res.status(503).json({ error: 'Database temporarily unavailable. Please try again.' });
+  }
+});
 
 // ============================================================
 //  VALIDATION HELPER
@@ -345,7 +363,7 @@ app.get('/api/admin/stats', requireAdmin, async (req, res) => {
     const revenue = orders.filter(o => o.order_status !== 'cancelled').reduce((s, o) => s + (o.total || 0), 0);
     const pending = orders.filter(o => o.order_status === 'pending').length;
     res.json({ products: productCount, orders: orders.length, revenue, pending, customers: customerCount });
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: 'Failed to load stats.' });
   }
 });
@@ -388,7 +406,7 @@ app.post('/api/products', requireAdmin, [
       in_stock: !!in_stock, featured: !!featured,
     });
     res.status(201).json(product.toJSON());
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: 'Failed to create product.' });
   }
 });
@@ -518,7 +536,7 @@ app.put('/api/orders/:id/status', requireAdmin, [
 // ============================================================
 app.get('/api/settings', async (req, res) => {
   try {
-    const s = await getSettings();
+    const s   = await getSettings();
     const obj = s.toObject();
     delete obj._id; delete obj.__v; delete obj._key;
     res.json(obj);
@@ -582,7 +600,6 @@ app.post('/api/create-checkout-session', async (req, res) => {
 
     order.stripe_session_id = sess.id;
     await order.save();
-
     res.json({ url: sess.url });
   } catch (err) {
     console.error('Stripe error:', err.message);
@@ -615,19 +632,17 @@ app.use((err, req, res, next) => {   // eslint-disable-line no-unused-vars
 });
 
 // ============================================================
-//  CONNECT TO MONGODB, THEN START SERVER
+//  EXPORT FOR VERCEL  /  LISTEN LOCALLY
 // ============================================================
-mongoose.connect(MONGODB_URI)
-  .then(async () => {
-    console.log('  ✅ MongoDB connected');
-    await seedData();
-    app.listen(PORT, () => {
+module.exports = app;
+
+if (require.main === module) {
+  // Running directly with `node server.js` (local dev)
+  ensureDB()
+    .then(() => app.listen(PORT, () => {
       console.log(`\n  ✨ ee_tasha hairs  →  http://localhost:${PORT}\n`);
       if (!hasStripe) console.log('  ⚠  Stripe NOT configured — add STRIPE_SECRET_KEY to .env\n');
       else            console.log('  ✅ Stripe connected.\n');
-    });
-  })
-  .catch(err => {
-    console.error('  ❌ MongoDB connection failed:', err.message);
-    process.exit(1);
-  });
+    }))
+    .catch(err => { console.error('  ❌ Startup failed:', err.message); process.exit(1); });
+}
