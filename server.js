@@ -336,7 +336,7 @@ app.post('/api/auth/verify-otp', authLimiter, [
     const user = await User.findOneAndUpdate({ email }, { verified: true }, { new: true });
     if (!user) return res.status(400).json({ error: 'Account not found.' });
     req.session.userId = user._id.toString();
-    await req.session.save();
+    await new Promise((resolve, reject) => req.session.save(err => (err ? reject(err) : resolve())));
     const safe = user.toJSON();
     delete safe.password_hash;
     res.json({ user: safe });
@@ -359,7 +359,7 @@ app.post('/api/auth/login', authLimiter, [
     if (!ok) return res.status(401).json({ error: 'Incorrect password.' });
     if (emailEnabled && !user.verified) return res.status(401).json({ error: 'Please verify your email before logging in.', needsVerification: true, email: user.email });
     req.session.userId = user._id.toString();
-    await req.session.save();
+    await new Promise((resolve, reject) => req.session.save(err => (err ? reject(err) : resolve())));
     const safe = user.toJSON();
     delete safe.password_hash;
     res.json({ user: safe });

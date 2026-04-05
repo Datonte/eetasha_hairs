@@ -48,13 +48,14 @@ function initApp() {
 }
 async function _doInit() {
   try {
-    const [products, { user }, settings] = await Promise.all([
+    const [productsRes, authRes, settingsRes] = await Promise.allSettled([
       API.get('/api/products'),
       API.get('/api/auth/me'),
       API.get('/api/settings'),
     ]);
-    State.products = Array.isArray(products) ? products : [];
-    State.session  = user || null;
+    State.products = (productsRes.status === 'fulfilled' && Array.isArray(productsRes.value)) ? productsRes.value : [];
+    State.session  = (authRes.status === 'fulfilled' ? authRes.value?.user : null) || null;
+    const settings = settingsRes.status === 'fulfilled' ? settingsRes.value : null;
     if (settings && typeof settings === 'object') {
       State.settings = { ...State.settings, ...settings, deliveryFee: parseFloat(settings.deliveryFee) || 5.99 };
     }
