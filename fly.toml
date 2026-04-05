@@ -1,0 +1,26 @@
+# Fly.io configuration for ee_tasha hairs
+app = "eetasha-hairs"
+primary_region = "lhr"  # London — closest to UK customers
+
+[build]
+
+[env]
+  PORT = "3000"
+  NODE_ENV = "production"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = false   # keep always on (free tier)
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+# Persistent volume — keeps your database files safe across deploys
+[mounts]
+  source = "eetasha_data"
+  destination = "/app/data"

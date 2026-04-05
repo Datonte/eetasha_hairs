@@ -42,6 +42,7 @@ const userSchema = new mongoose.Schema({
   email:         { type: String, required: true, unique: true, lowercase: true },
   password_hash: { type: String, required: true },
   role:          { type: String, default: 'customer' },
+  verified:      { type: Boolean, default: false },
 }, { timestamps: { createdAt: 'created_at', updatedAt: false }, toJSON: toJson });
 
 const adminSchema = new mongoose.Schema({
@@ -84,11 +85,19 @@ const settingsSchema = new mongoose.Schema({
   deliveryFee:   { type: String, default: '5.99' },
 });
 
+const otpSchema = new mongoose.Schema({
+  email:      { type: String, required: true },
+  code:       { type: String, required: true },
+  expiresAt:  { type: Date, required: true },
+}, { timestamps: false });
+otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
 const Product  = mongoose.model('Product',  productSchema);
 const User     = mongoose.model('User',     userSchema);
 const Admin    = mongoose.model('Admin',    adminSchema);
 const Order    = mongoose.model('Order',    orderSchema);
 const Settings = mongoose.model('Settings', settingsSchema);
+const OTP      = mongoose.model('OTP',      otpSchema);
 
 // ============================================================
 //  DATABASE CONNECTION  (cached for Vercel serverless)
@@ -114,6 +123,38 @@ async function getSettings() {
   let s = await Settings.findOne({ _key: 'global' });
   if (!s) s = await Settings.create({ _key: 'global' });
   return s;
+}
+
+// ============================================================
+//  EMAIL / OTP
+// ============================================================
+const emailEnabled = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+let transporter;
+if (emailEnabled) {
+  const nodemailer = require('nodemailer');
+  transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+  });
+}
+
+function generateOTP() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+async function sendOTPEmail(email, code) {
+  if (!emailEnabled) return; // skip in dev if no email configured
+  await transporter.sendMail({
+    from:    `"ee_tasha hairs" <${process.env.EMAIL_USER}>`,
+    to:      email,
+    subject: 'Your verification code — ee_tasha hairs',
+    html:    `<div style="font-family:sans-serif;max-width:480px;margin:auto;">
+      <h2 style="color:#b8860b;">ee_tasha hairs</h2>
+      <p>Your verification code is:</p>
+      <div style="font-size:2.5rem;font-weight:700;letter-spacing:0.2em;color:#1a1a1a;padding:16px 0;">${code}</div>
+      <p style="color:#666;font-size:0.85rem;">This code expires in 15 minutes. Do not share it with anyone.</p>
+    </div>`,
+  });
 }
 
 // ============================================================
@@ -251,7 +292,19 @@ app.post('/api/auth/register', authLimiter, [
       return res.status(400).json({ error: 'An account with this email already exists.' });
     }
     const hash = await bcrypt.hash(password, 12);
-    const user = await User.create({ name: clean(name), email, password_hash: hash });
+    // Create unverified user (verified: false until OTP confirmed)
+    const user = await User.create({ name: clean(name), email, password_hash: hash, verified: !emailEnabled });
+
+    if (emailEnabled) {
+      // Send OTP
+      const code = generateOTP();
+      await OTP.deleteMany({ email }); // clear any old codes
+      await OTP.create({ email, code, expiresAt: new Date(Date.now() + 15 * 60 * 1000) });
+      await sendOTPEmail(email, code);
+      return res.json({ needsVerification: true, email });
+    }
+
+    // Email not configured — log in directly
     req.session.userId = user._id.toString();
     await req.session.save();
     const safe = user.toJSON();
@@ -260,6 +313,29 @@ app.post('/api/auth/register', authLimiter, [
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Registration failed. Please try again.' });
+  }
+});
+
+app.post('/api/auth/verify-otp', authLimiter, [
+  body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
+  body('code').isLength({ min: 6, max: 6 }).withMessage('Invalid code'),
+], async (req, res) => {
+  if (!valid(req, res)) return;
+  try {
+    const { email, code } = req.body;
+    const record = await OTP.findOne({ email, code, expiresAt: { $gt: new Date() } });
+    if (!record) return res.status(400).json({ error: 'Invalid or expired code. Please try again.' });
+    await OTP.deleteMany({ email });
+    const user = await User.findOneAndUpdate({ email }, { verified: true }, { new: true });
+    if (!user) return res.status(400).json({ error: 'Account not found.' });
+    req.session.userId = user._id.toString();
+    await req.session.save();
+    const safe = user.toJSON();
+    delete safe.password_hash;
+    res.json({ user: safe });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Verification failed. Please try again.' });
   }
 });
 
@@ -274,6 +350,7 @@ app.post('/api/auth/login', authLimiter, [
     if (!user) return res.status(401).json({ error: 'No account found with that email.' });
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: 'Incorrect password.' });
+    if (emailEnabled && !user.verified) return res.status(401).json({ error: 'Please verify your email before logging in.', needsVerification: true, email: user.email });
     req.session.userId = user._id.toString();
     await req.session.save();
     const safe = user.toJSON();

@@ -49,6 +49,26 @@
         </div>
         <button type="submit" class="btn btn-primary btn-full" id="signupBtn">Create Account</button>
       </form>
+
+      <!-- OTP Verification -->
+      <div id="otpSection" class="hidden">
+        <p style="text-align:center;color:var(--gray-600);margin-bottom:20px;">
+          We sent a 6-digit code to <strong id="otpEmail"></strong>. Enter it below.
+        </p>
+        <form onsubmit="handleVerifyOTP(event)">
+          <div class="form-group">
+            <label class="form-label">Verification Code</label>
+            <input type="text" class="form-input" id="otpCode" placeholder="123456" maxlength="6"
+              inputmode="numeric" autocomplete="one-time-code" required
+              style="font-size:1.5rem;letter-spacing:0.3em;text-align:center;">
+          </div>
+          <button type="submit" class="btn btn-primary btn-full" id="otpBtn">Verify Email</button>
+        </form>
+        <p style="text-align:center;margin-top:16px;font-size:0.8rem;color:var(--gray-500);">
+          Didn't get it? Check your spam folder or
+          <button onclick="showTab('signup')" style="color:var(--gold-dark);text-decoration:underline;background:none;border:none;cursor:pointer;font-size:inherit;">try again</button>.
+        </p>
+      </div>
     </div>
   </div>
 
@@ -126,19 +146,48 @@
       const btn = document.getElementById('signupBtn');
       btn.disabled = true; btn.textContent = 'Creating account…';
       try {
-        const { user } = await API.post('/api/auth/register', {
+        const result = await API.post('/api/auth/register', {
           name:     document.getElementById('signupName').value,
           email:    document.getElementById('signupEmail').value,
           password: document.getElementById('signupPassword').value,
         });
+        if (result.needsVerification) {
+          // Show OTP screen
+          document.getElementById('loginForm').classList.add('hidden');
+          document.getElementById('signupForm').classList.add('hidden');
+          document.getElementById('otpSection').classList.remove('hidden');
+          document.getElementById('otpEmail').textContent = result.email;
+          document.querySelector('.auth-toggle').classList.add('hidden');
+          Toast.show('Check your email for a verification code.', 'success');
+        } else {
+          State.session = result.user;
+          Toast.show('Account created! Welcome to ee_tasha hairs.', 'success');
+          renderNav('account');
+          await showDashboard();
+        }
+      } catch (err) {
+        Toast.show(err.message, 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Create Account';
+      }
+    }
+
+    async function handleVerifyOTP(e) {
+      e.preventDefault();
+      const btn = document.getElementById('otpBtn');
+      btn.disabled = true; btn.textContent = 'Verifying…';
+      try {
+        const email = document.getElementById('otpEmail').textContent;
+        const code  = document.getElementById('otpCode').value.trim();
+        const { user } = await API.post('/api/auth/verify-otp', { email, code });
         State.session = user;
-        Toast.show('Account created! Welcome to ee_tasha hairs.', 'success');
+        Toast.show('Email verified! Welcome to ee_tasha hairs.', 'success');
         renderNav('account');
         await showDashboard();
       } catch (err) {
         Toast.show(err.message, 'error');
       } finally {
-        btn.disabled = false; btn.textContent = 'Create Account';
+        btn.disabled = false; btn.textContent = 'Verify Email';
       }
     }
 

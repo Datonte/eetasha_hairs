@@ -22,7 +22,7 @@ const State = {
 // ============================================================
 const API = {
   async _req(method, url, data) {
-    const opts = { method, credentials: 'same-origin', headers: {} };
+    const opts = { method, credentials: 'include', headers: {} };
     if (data !== undefined) {
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(data);
