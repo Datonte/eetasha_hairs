@@ -5,8 +5,7 @@ const express    = require('express');
 const cors       = require('cors');
 const helmet     = require('helmet');
 const rateLimit  = require('express-rate-limit');
-const session    = require('express-session');
-const MongoStore = require('connect-mongo');
+const cookieSession = require('cookie-session');
 const bcrypt     = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
 const path       = require('path');
@@ -105,19 +104,14 @@ const OTP      = mongoose.model('OTP',      otpSchema);
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/eetasha';
 let _dbReady = false;
 
-// One shared MongoClient for both mongoose queries AND the session store.
-// connect-mongo's clientPromise option awaits this before any session read/write.
-const _clientPromise = mongoose.connect(MONGODB_URI)
-  .then(() => mongoose.connection.getClient())
-  .catch(err => { console.error('DB connect error:', err.message); throw err; });
+let _dbPromise = mongoose.connect(MONGODB_URI);
 
 async function ensureDB() {
-  await _clientPromise; // waits for the shared connection
-  if (mongoose.connection.readyState !== 1) await mongoose.connect(MONGODB_URI);
-  if (!_dbReady) {
-    await seedData();
-    _dbReady = true;
+  try { await _dbPromise; } catch {
+    _dbPromise = mongoose.connect(MONGODB_URI);
+    await _dbPromise;
   }
+  if (!_dbReady) { await seedData(); _dbReady = true; }
 }
 
 // ============================================================
@@ -232,27 +226,24 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '500kb' }));
 app.use(express.urlencoded({ extended: true, limit: '500kb' }));
 
-// ---- Ensure DB is ready before session middleware reads from MongoDB store ----
-app.use(async (req, res, next) => {
+// ---- Sessions (stored in signed cookie — no DB required, works on Vercel) ----
+app.use(cookieSession({
+  name:    'et.sid',
+  keys:    [process.env.SESSION_SECRET || 'et-fallback-secret'],
+  maxAge:  7 * 24 * 60 * 60 * 1000,
+  httpOnly: true,
+  sameSite: 'lax',
+  secure:   process.env.NODE_ENV === 'production',
+}));
+
+// ---- Ensure DB is connected before API routes ----
+app.use('/api/', async (req, res, next) => {
   try { await ensureDB(); next(); }
   catch (err) {
     console.error('DB unavailable:', err.message);
     res.status(503).json({ error: 'Database temporarily unavailable. Please try again.' });
   }
 });
-
-// ---- Sessions (stored in MongoDB — persists across cold starts) ----
-if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.includes('change-this')) {
-  console.warn('  ⚠  SESSION_SECRET is not set — update it before going live.');
-}
-app.use(session({
-  secret:            process.env.SESSION_SECRET || 'et-fallback-secret',
-  resave:            false,
-  saveUninitialized: false,
-  name:              'et.sid',
-  store:             MongoStore.create({ clientPromise: _clientPromise, ttl: 7 * 24 * 60 * 60, touchAfter: 24 * 3600 }),
-  cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 7 * 24 * 60 * 60 * 1000 },
-}));
 
 // ---- Rate limiters ----
 const authLimiter    = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true, message: { error: 'Too many attempts — please try again in 15 minutes.' } });
@@ -313,7 +304,6 @@ app.post('/api/auth/register', authLimiter, [
 
     // Email not configured — log in directly
     req.session.userId = user._id.toString();
-    await req.session.save();
     const safe = user.toJSON();
     delete safe.password_hash;
     res.json({ user: safe });
@@ -336,7 +326,6 @@ app.post('/api/auth/verify-otp', authLimiter, [
     const user = await User.findOneAndUpdate({ email }, { verified: true }, { new: true });
     if (!user) return res.status(400).json({ error: 'Account not found.' });
     req.session.userId = user._id.toString();
-    await new Promise((resolve, reject) => req.session.save(err => (err ? reject(err) : resolve())));
     const safe = user.toJSON();
     delete safe.password_hash;
     res.json({ user: safe });
@@ -359,7 +348,6 @@ app.post('/api/auth/login', authLimiter, [
     if (!ok) return res.status(401).json({ error: 'Incorrect password.' });
     if (emailEnabled && !user.verified) return res.status(401).json({ error: 'Please verify your email before logging in.', needsVerification: true, email: user.email });
     req.session.userId = user._id.toString();
-    await new Promise((resolve, reject) => req.session.save(err => (err ? reject(err) : resolve())));
     const safe = user.toJSON();
     delete safe.password_hash;
     res.json({ user: safe });
@@ -370,7 +358,8 @@ app.post('/api/auth/login', authLimiter, [
 });
 
 app.post('/api/auth/logout', (req, res) => {
-  req.session.destroy(() => res.json({ ok: true }));
+  req.session = null;
+  res.json({ ok: true });
 });
 
 app.get('/api/auth/me', async (req, res) => {
@@ -399,7 +388,6 @@ app.post('/api/admin/login', authLimiter, [
     const ok = await bcrypt.compare(req.body.password, admin.password_hash);
     if (!ok) return res.status(401).json({ error: 'Incorrect admin password.' });
     req.session.adminId = admin._id.toString();
-    await req.session.save();
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -409,7 +397,6 @@ app.post('/api/admin/login', authLimiter, [
 
 app.post('/api/admin/logout', async (req, res) => {
   delete req.session.adminId;
-  await req.session.save();
   res.json({ ok: true });
 });
 
