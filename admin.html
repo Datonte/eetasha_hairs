@@ -288,19 +288,19 @@
             <div class="admin-product-cat">${escHtml(p.category || 'Uncategorised')}</div>
           </div>
           <div class="admin-product-price">${formatCurrency(p.price)}</div>
-          <button class="btn-icon" onclick="toggleFeatured(${p.id}, ${!p.featured})" title="${p.featured ? 'Remove from Featured' : 'Add to Featured'}"
+          <button class="btn-icon" onclick="toggleFeatured('${p.id}', ${!p.featured})" title="${p.featured ? 'Remove from Featured' : 'Add to Featured'}"
             style="color:${p.featured ? 'var(--gold-dark)' : 'var(--gray-300)'};">
             <span class="material-symbols-outlined" style="font-size:20px;font-variation-settings:'FILL' ${p.featured ? '1' : '0'};">star</span>
           </button>
           <label class="toggle" title="${p.in_stock ? 'In Stock' : 'Out of Stock'}">
-            <input type="checkbox" ${p.in_stock ? 'checked' : ''} onchange="toggleStock(${p.id}, this.checked)">
+            <input type="checkbox" ${p.in_stock ? 'checked' : ''} onchange="toggleStock('${p.id}', this.checked)">
             <span class="toggle-track"></span><span class="toggle-thumb"></span>
           </label>
           <div class="admin-product-actions">
-            <button class="btn-icon" onclick="editProduct(${p.id})" title="Edit">
+            <button class="btn-icon" onclick="editProduct('${p.id}')" title="Edit">
               <span class="material-symbols-outlined" style="font-size:18px;">edit</span>
             </button>
-            <button class="btn-icon" onclick="deleteProduct(${p.id})" title="Delete" style="color:var(--error);">
+            <button class="btn-icon" onclick="deleteProduct('${p.id}')" title="Delete" style="color:var(--error);">
               <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
             </button>
           </div>
@@ -308,7 +308,7 @@
     }
 
     async function toggleStock(id, inStock) {
-      const p = State.products.find(x => x.id === id);
+      const p = State.products.find(x => String(x.id) === String(id));
       if (!p) return;
       try {
         await API.put(`/api/products/${id}`, { ...p, in_stock: inStock });
@@ -319,7 +319,7 @@
     }
 
     async function toggleFeatured(id, featured) {
-      const p = State.products.find(x => x.id === id);
+      const p = State.products.find(x => String(x.id) === String(id));
       if (!p) return;
       try {
         await API.put(`/api/products/${id}`, { ...p, featured });
@@ -355,7 +355,7 @@
     function closeProductModal() { document.getElementById('productModal').classList.remove('open'); }
 
     function editProduct(id) {
-      const p = State.products.find(x => x.id === id);
+      const p = State.products.find(x => String(x.id) === String(id));
       if (p) openProductModal(p);
     }
 
@@ -414,7 +414,7 @@
             <div class="order-header">
               <span class="order-id serif">${escHtml(o.order_number)}</span>
               <select class="form-input" style="width:auto;padding:6px 10px;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;"
-                onchange="updateOrderStatus(${o.id}, this.value)">
+                onchange="updateOrderStatus('${o.id}', this.value)">
                 <option value="pending"   ${o.order_status === 'pending'   ? 'selected' : ''}>Pending</option>
                 <option value="confirmed" ${o.order_status === 'confirmed' ? 'selected' : ''}>Confirmed</option>
                 <option value="shipped"   ${o.order_status === 'shipped'   ? 'selected' : ''}>Shipped</option>
