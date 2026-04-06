@@ -229,7 +229,10 @@ function renderNav(activePage = '') {
           <a href="account.html" class="${activePage === 'account' ? 'active' : ''}">${sess ? 'My Account' : 'Login'}</a>
         </div>
         <div class="nav-actions">
-          ${sess ? `<button onclick="openCart()" aria-label="Cart">
+          ${sess ? `
+          <button onclick="openChangePasswordModal()" aria-label="Change Password" title="Change Password" style="font-size:0.78rem;padding:6px 10px;border:1px solid var(--gold-dark);border-radius:6px;color:var(--gold-dark);background:none;cursor:pointer;font-family:inherit;">Password</button>
+          <button onclick="navLogout()" aria-label="Sign Out" title="Sign Out" style="font-size:0.78rem;padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;color:var(--gray-600);background:none;cursor:pointer;font-family:inherit;">Sign Out</button>
+          <button onclick="openCart()" aria-label="Cart">
             <span class="material-symbols-outlined">shopping_bag</span>
             <span class="cart-count"></span>
           </button>` : ''}
@@ -255,6 +258,60 @@ function renderNav(activePage = '') {
       </div>
     </div>`;
   updateCartCount();
+}
+
+// ============================================================
+//  NAV AUTH ACTIONS (available on all pages)
+// ============================================================
+async function navLogout() {
+  if (window._supabase) await window._supabase.auth.signOut().catch(() => {});
+  State.session = null;
+  Toast.show('Signed out.', 'info');
+  setTimeout(() => { window.location.href = 'index.html'; }, 800);
+}
+
+function openChangePasswordModal() {
+  let modal = document.getElementById('_cpModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = '_cpModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:12px;padding:32px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+        <h2 style="margin:0 0 8px;font-family:var(--font-serif);">Change Password</h2>
+        <p style="color:var(--gray-500);font-size:0.9rem;margin:0 0 20px;">Enter a new password for your account.</p>
+        <form onsubmit="submitChangePassword(event)">
+          <div class="form-group">
+            <label class="form-label">New Password</label>
+            <input type="password" class="form-input" id="_cpInput" placeholder="At least 8 characters" minlength="8" required autocomplete="new-password">
+          </div>
+          <div style="display:flex;gap:10px;margin-top:8px;">
+            <button type="submit" class="btn btn-primary" id="_cpBtn" style="flex:1;">Update Password</button>
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('_cpModal').remove()">Cancel</button>
+          </div>
+        </form>
+      </div>`;
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('_cpInput')?.focus(), 50);
+}
+
+async function submitChangePassword(e) {
+  e.preventDefault();
+  const btn = document.getElementById('_cpBtn');
+  btn.disabled = true; btn.textContent = 'Updating…';
+  try {
+    const password = document.getElementById('_cpInput').value;
+    const { error } = await window._supabase.auth.updateUser({ password });
+    if (error) throw new Error(error.message);
+    Toast.show('Password changed successfully.', 'success');
+    document.getElementById('_cpModal').remove();
+  } catch (err) {
+    Toast.show(err.message, 'error');
+    btn.disabled = false; btn.textContent = 'Update Password';
+  }
 }
 
 // ============================================================
