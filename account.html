@@ -194,6 +194,8 @@
     async function handleLogout() {
       await API.post('/api/auth/logout').catch(() => {});
       State.session = null;
+      document.getElementById('loginEmail').value = '';
+      document.getElementById('loginPassword').value = '';
       Toast.show('Signed out.', 'info');
       renderNav('account');
       document.getElementById('authSection').classList.remove('hidden');
