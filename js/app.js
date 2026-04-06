@@ -80,6 +80,22 @@ async function _doInit() {
     if (settings && typeof settings === 'object') {
       State.settings = { ...State.settings, ...settings, deliveryFee: parseFloat(settings.deliveryFee) || 5.99 };
     }
+
+    // Sync cart — remove items that no longer exist or are out of stock
+    if (State.products.length > 0) {
+      const before  = _getRawCart();
+      const after   = before.filter(item => {
+        const p = State.products.find(p => String(p.id) === String(item.productId));
+        return p && p.in_stock;
+      });
+      if (after.length < before.length) {
+        _saveRawCart(after);
+        const removed = before.length - after.length;
+        setTimeout(() => Toast.show(
+          `${removed} item${removed > 1 ? 's were' : ' was'} removed from your cart — no longer available.`, 'info'
+        ), 600);
+      }
+    }
   } catch (err) {
     console.warn('initApp error:', err.message);
   }
