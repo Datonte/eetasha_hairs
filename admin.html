@@ -19,7 +19,12 @@
   </style>
 </head>
 <body data-page="admin" class="page-enter">
-  <div id="siteNav"></div>
+  <div style="background:#fff;border-bottom:1px solid var(--gray-100);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;">
+    <span style="font-family:var(--font-head);font-size:1.1rem;color:var(--black);">ee_tasha hairs &mdash; Admin</span>
+    <span id="adminHeaderLogout" class="hidden">
+      <button onclick="adminLogout()" style="font-size:0.8rem;padding:6px 14px;border:1px solid var(--gray-300);border-radius:6px;background:none;cursor:pointer;color:var(--gray-600);">Sign Out</button>
+    </span>
+  </div>
 
   <!-- Admin Login Gate -->
   <div class="auth-page" id="adminLogin">
@@ -242,11 +247,13 @@
       await API.post('/api/admin/logout').catch(() => {});
       document.getElementById('adminLogin').classList.remove('hidden');
       document.getElementById('adminDash').classList.add('hidden');
+      document.getElementById('adminHeaderLogout').classList.add('hidden');
     }
 
     async function showAdminDash() {
       document.getElementById('adminLogin').classList.add('hidden');
       document.getElementById('adminDash').classList.remove('hidden');
+      document.getElementById('adminHeaderLogout').classList.remove('hidden');
       await Promise.all([loadAdminStats(), loadAdminProducts(), loadAdminOrders(), loadSettings()]);
     }
 
@@ -527,7 +534,6 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
       await initApp();
-      renderNav('', { adminMode: true });
 
       // Check if already logged in as admin (server-side session)
       try {
