@@ -527,7 +527,7 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
       await initApp();
-      renderNav('');
+      renderNav('', { adminMode: true });
 
       // Check if already logged in as admin (server-side session)
       try {

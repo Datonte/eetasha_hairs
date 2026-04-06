@@ -230,10 +230,11 @@ const Toast = {
 // ============================================================
 //  NAV
 // ============================================================
-function renderNav(activePage = '') {
+function renderNav(activePage = '', opts = {}) {
   const nav  = document.getElementById('siteNav');
   if (!nav) return;
-  const sess = Store.getSession();
+  const sess       = Store.getSession();
+  const adminMode  = opts.adminMode || false;
   nav.innerHTML = `
     <nav class="nav">
       <div class="nav-inner">
@@ -245,16 +246,16 @@ function renderNav(activePage = '') {
           <a href="account.html" class="${activePage === 'account' ? 'active' : ''}">${sess ? 'My Account' : 'Login'}</a>
         </div>
         <div class="nav-actions">
-          ${sess ? `
+          ${!adminMode && sess ? `
           <button onclick="openChangePasswordModal()" aria-label="Change Password" title="Change Password" style="font-size:0.78rem;padding:6px 10px;border:1px solid var(--gold-dark);border-radius:6px;color:var(--gold-dark);background:none;cursor:pointer;font-family:inherit;">Password</button>
           <button onclick="navLogout()" aria-label="Sign Out" title="Sign Out" style="font-size:0.78rem;padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;color:var(--gray-600);background:none;cursor:pointer;font-family:inherit;">Sign Out</button>
           <button onclick="openCart()" aria-label="Cart">
             <span class="material-symbols-outlined">shopping_bag</span>
             <span class="cart-count"></span>
           </button>` : ''}
-          <button class="nav-mobile-toggle" onclick="document.getElementById('navLinks').classList.toggle('open')" aria-label="Menu">
+          ${!adminMode ? `<button class="nav-mobile-toggle" onclick="document.getElementById('navLinks').classList.toggle('open')" aria-label="Menu">
             <span class="material-symbols-outlined">menu</span>
-          </button>
+          </button>` : ''}
         </div>
       </div>
     </nav>
