@@ -189,8 +189,8 @@ app.use('/api/', (req, res, next) => { ensureDefaults(); next(); });
 // ============================================================
 //  RATE LIMITERS
 // ============================================================
-const authLimiter    = rateLimit({ windowMs: 15*60*1000, max: 10, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true, message: { error: 'Too many attempts — please try again in 15 minutes.' } });
-const generalLimiter = rateLimit({ windowMs: 60*1000,    max: 200, standardHeaders: true, legacyHeaders: false });
+const authLimiter    = rateLimit({ windowMs: 60*60*1000, max: 10, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true, message: { error: 'Too many attempts — please try again in an hour.' } });
+const generalLimiter = rateLimit({ windowMs: 60*60*1000, max: 500, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many requests — please try again in an hour.' } });
 app.use('/api/', generalLimiter);
 
 // Static files (local dev only — Vercel serves these directly in production)
