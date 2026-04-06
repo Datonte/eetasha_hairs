@@ -10,7 +10,7 @@
   <div id="siteNav"></div>
 
   <!-- LOGIN / SIGNUP -->
-  <div class="auth-page" id="authSection">
+  <div class="auth-page hidden" id="authSection">
     <div class="auth-card">
       <h1 class="serif">Welcome</h1>
       <p class="auth-card-subtitle">Sign in to track orders &amp; manage your account</p>
@@ -249,6 +249,7 @@
       renderFooter();
       updateCartCount();
       if (Store.getSession()) await showDashboard();
+      else document.getElementById('authSection').classList.remove('hidden');
     });
   </script>
 </body>
