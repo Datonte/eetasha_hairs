@@ -292,20 +292,6 @@ app.use(express.static(path.join(__dirname)));
 
 // ============================================================
 //  VALIDATION HELPER
-// ============================================================
-//  TEMPORARY DEBUG — remove after session issue is resolved
-// ============================================================
-app.get('/api/debug', (req, res) => {
-  res.json({
-    secure:   req.secure,
-    proto:    req.headers['x-forwarded-proto'],
-    session:  req.session,
-    cookie:   req.headers.cookie || '(none)',
-    nodeEnv:  process.env.NODE_ENV,
-    hasSecret: !!process.env.SESSION_SECRET,
-  });
-});
-// ============================================================
 function valid(req, res) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) { res.status(400).json({ error: errors.array()[0].msg }); return false; }
