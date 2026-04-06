@@ -173,7 +173,7 @@
 
       document.getElementById('coSubtotal').textContent    = formatCurrency(subtotal);
       document.getElementById('coDelivery').textContent    = delivery > 0 ? formatCurrency(delivery) : 'Free';
-      document.getElementById('coCarrierLabel').textContent = `${_selectedDelivery.carrier} ${_selectedDelivery.service} · ${_selectedDelivery.regionLabel} · ${_selectedDelivery.days}`;
+      document.getElementById('coCarrierLabel').textContent = `${_selectedDelivery.carrier} ${_selectedDelivery.service} · ${_selectedDelivery.country || _selectedDelivery.regionLabel} · ${_selectedDelivery.days}`;
       document.getElementById('coTotal').textContent        = formatCurrency(total);
     }
 

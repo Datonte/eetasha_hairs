@@ -7,16 +7,20 @@
   <link rel="stylesheet" href="css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    .region-grid { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:4px; }
-    .region-label { flex:1; min-width:130px; cursor:pointer; }
-    .region-label input { display:none; }
-    .region-card {
-      padding:14px 18px; border:2px solid var(--gray-200); border-radius:var(--radius);
-      text-align:center; font-size:0.9rem; font-weight:600; transition:all var(--transition);
-      background:#fff;
+    .country-select-wrap { position:relative; }
+    .country-select-wrap select {
+      width:100%; padding:12px 16px; border:1.5px solid var(--gray-200);
+      border-radius:var(--radius); font-size:0.95rem; font-family:inherit;
+      background:#fff; cursor:pointer; appearance:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat:no-repeat; background-position:right 14px center;
+      padding-right:36px;
     }
-    .region-label input:checked + .region-card {
-      border-color:var(--gold-dark); background:var(--gold-bg); color:var(--gold-dark);
+    .country-select-wrap select:focus { outline:none; border-color:var(--gold-dark); }
+    .region-badge {
+      display:inline-flex; align-items:center; gap:6px; margin-top:10px;
+      padding:6px 14px; border-radius:20px; font-size:0.78rem; font-weight:600;
+      background:var(--gold-bg); color:var(--gold-dark); border:1px solid var(--gold-light);
     }
     .carrier-option { cursor:pointer; display:block; }
     .carrier-option input { display:none; }
@@ -57,32 +61,186 @@
       </div>
 
       <div id="deliveryContent">
-        <!-- Region -->
+        <!-- Country -->
         <div class="admin-card mb-3">
           <h3 class="serif mb-2"><span class="step-badge">1</span>Where are we delivering to?</h3>
-          <div class="region-grid">
-            <label class="region-label">
-              <input type="radio" name="region" value="uk" checked onchange="renderCarriers()">
-              <div class="region-card">🇬🇧 United Kingdom</div>
-            </label>
-            <label class="region-label">
-              <input type="radio" name="region" value="europe" onchange="renderCarriers()">
-              <div class="region-card">🇪🇺 Europe</div>
-            </label>
-            <label class="region-label">
-              <input type="radio" name="region" value="world" onchange="renderCarriers()">
-              <div class="region-card">🌍 Rest of World</div>
-            </label>
+          <div class="country-select-wrap">
+            <select id="countrySelect" onchange="onCountryChange()">
+              <option value="">— Select your country —</option>
+              <optgroup label="🇬🇧 United Kingdom">
+                <option value="United Kingdom|uk">United Kingdom</option>
+              </optgroup>
+              <optgroup label="🇪🇺 Europe">
+                <option value="Albania|europe">Albania</option>
+                <option value="Andorra|europe">Andorra</option>
+                <option value="Austria|europe">Austria</option>
+                <option value="Belarus|europe">Belarus</option>
+                <option value="Belgium|europe">Belgium</option>
+                <option value="Bosnia & Herzegovina|europe">Bosnia &amp; Herzegovina</option>
+                <option value="Bulgaria|europe">Bulgaria</option>
+                <option value="Croatia|europe">Croatia</option>
+                <option value="Cyprus|europe">Cyprus</option>
+                <option value="Czech Republic|europe">Czech Republic</option>
+                <option value="Denmark|europe">Denmark</option>
+                <option value="Estonia|europe">Estonia</option>
+                <option value="Finland|europe">Finland</option>
+                <option value="France|europe">France</option>
+                <option value="Germany|europe">Germany</option>
+                <option value="Greece|europe">Greece</option>
+                <option value="Hungary|europe">Hungary</option>
+                <option value="Iceland|europe">Iceland</option>
+                <option value="Ireland|europe">Ireland</option>
+                <option value="Italy|europe">Italy</option>
+                <option value="Kosovo|europe">Kosovo</option>
+                <option value="Latvia|europe">Latvia</option>
+                <option value="Liechtenstein|europe">Liechtenstein</option>
+                <option value="Lithuania|europe">Lithuania</option>
+                <option value="Luxembourg|europe">Luxembourg</option>
+                <option value="Malta|europe">Malta</option>
+                <option value="Moldova|europe">Moldova</option>
+                <option value="Monaco|europe">Monaco</option>
+                <option value="Montenegro|europe">Montenegro</option>
+                <option value="Netherlands|europe">Netherlands</option>
+                <option value="North Macedonia|europe">North Macedonia</option>
+                <option value="Norway|europe">Norway</option>
+                <option value="Poland|europe">Poland</option>
+                <option value="Portugal|europe">Portugal</option>
+                <option value="Romania|europe">Romania</option>
+                <option value="Russia|europe">Russia</option>
+                <option value="San Marino|europe">San Marino</option>
+                <option value="Serbia|europe">Serbia</option>
+                <option value="Slovakia|europe">Slovakia</option>
+                <option value="Slovenia|europe">Slovenia</option>
+                <option value="Spain|europe">Spain</option>
+                <option value="Sweden|europe">Sweden</option>
+                <option value="Switzerland|europe">Switzerland</option>
+                <option value="Turkey|europe">Turkey</option>
+                <option value="Ukraine|europe">Ukraine</option>
+              </optgroup>
+              <optgroup label="🌍 Africa">
+                <option value="Algeria|world">Algeria</option>
+                <option value="Angola|world">Angola</option>
+                <option value="Benin|world">Benin</option>
+                <option value="Botswana|world">Botswana</option>
+                <option value="Burkina Faso|world">Burkina Faso</option>
+                <option value="Cameroon|world">Cameroon</option>
+                <option value="Cape Verde|world">Cape Verde</option>
+                <option value="Chad|world">Chad</option>
+                <option value="Côte d'Ivoire|world">Côte d'Ivoire</option>
+                <option value="DR Congo|world">DR Congo</option>
+                <option value="Egypt|world">Egypt</option>
+                <option value="Ethiopia|world">Ethiopia</option>
+                <option value="Gabon|world">Gabon</option>
+                <option value="Ghana|world">Ghana</option>
+                <option value="Guinea|world">Guinea</option>
+                <option value="Kenya|world">Kenya</option>
+                <option value="Liberia|world">Liberia</option>
+                <option value="Libya|world">Libya</option>
+                <option value="Madagascar|world">Madagascar</option>
+                <option value="Malawi|world">Malawi</option>
+                <option value="Mali|world">Mali</option>
+                <option value="Mauritius|world">Mauritius</option>
+                <option value="Morocco|world">Morocco</option>
+                <option value="Mozambique|world">Mozambique</option>
+                <option value="Namibia|world">Namibia</option>
+                <option value="Niger|world">Niger</option>
+                <option value="Nigeria|world">Nigeria</option>
+                <option value="Rwanda|world">Rwanda</option>
+                <option value="Senegal|world">Senegal</option>
+                <option value="Sierra Leone|world">Sierra Leone</option>
+                <option value="Somalia|world">Somalia</option>
+                <option value="South Africa|world">South Africa</option>
+                <option value="South Sudan|world">South Sudan</option>
+                <option value="Sudan|world">Sudan</option>
+                <option value="Tanzania|world">Tanzania</option>
+                <option value="Togo|world">Togo</option>
+                <option value="Tunisia|world">Tunisia</option>
+                <option value="Uganda|world">Uganda</option>
+                <option value="Zambia|world">Zambia</option>
+                <option value="Zimbabwe|world">Zimbabwe</option>
+              </optgroup>
+              <optgroup label="🌎 Americas">
+                <option value="Argentina|world">Argentina</option>
+                <option value="Barbados|world">Barbados</option>
+                <option value="Bolivia|world">Bolivia</option>
+                <option value="Brazil|world">Brazil</option>
+                <option value="Canada|world">Canada</option>
+                <option value="Chile|world">Chile</option>
+                <option value="Colombia|world">Colombia</option>
+                <option value="Costa Rica|world">Costa Rica</option>
+                <option value="Cuba|world">Cuba</option>
+                <option value="Dominican Republic|world">Dominican Republic</option>
+                <option value="Ecuador|world">Ecuador</option>
+                <option value="El Salvador|world">El Salvador</option>
+                <option value="Guatemala|world">Guatemala</option>
+                <option value="Guyana|world">Guyana</option>
+                <option value="Haiti|world">Haiti</option>
+                <option value="Honduras|world">Honduras</option>
+                <option value="Jamaica|world">Jamaica</option>
+                <option value="Mexico|world">Mexico</option>
+                <option value="Nicaragua|world">Nicaragua</option>
+                <option value="Panama|world">Panama</option>
+                <option value="Paraguay|world">Paraguay</option>
+                <option value="Peru|world">Peru</option>
+                <option value="Trinidad & Tobago|world">Trinidad &amp; Tobago</option>
+                <option value="United States|world">United States</option>
+                <option value="Uruguay|world">Uruguay</option>
+                <option value="Venezuela|world">Venezuela</option>
+              </optgroup>
+              <optgroup label="🌏 Asia & Middle East">
+                <option value="Afghanistan|world">Afghanistan</option>
+                <option value="Bahrain|world">Bahrain</option>
+                <option value="Bangladesh|world">Bangladesh</option>
+                <option value="Cambodia|world">Cambodia</option>
+                <option value="China|world">China</option>
+                <option value="Hong Kong|world">Hong Kong</option>
+                <option value="India|world">India</option>
+                <option value="Indonesia|world">Indonesia</option>
+                <option value="Iran|world">Iran</option>
+                <option value="Iraq|world">Iraq</option>
+                <option value="Israel|world">Israel</option>
+                <option value="Japan|world">Japan</option>
+                <option value="Jordan|world">Jordan</option>
+                <option value="Kuwait|world">Kuwait</option>
+                <option value="Lebanon|world">Lebanon</option>
+                <option value="Malaysia|world">Malaysia</option>
+                <option value="Myanmar|world">Myanmar</option>
+                <option value="Nepal|world">Nepal</option>
+                <option value="Oman|world">Oman</option>
+                <option value="Pakistan|world">Pakistan</option>
+                <option value="Philippines|world">Philippines</option>
+                <option value="Qatar|world">Qatar</option>
+                <option value="Saudi Arabia|world">Saudi Arabia</option>
+                <option value="Singapore|world">Singapore</option>
+                <option value="South Korea|world">South Korea</option>
+                <option value="Sri Lanka|world">Sri Lanka</option>
+                <option value="Syria|world">Syria</option>
+                <option value="Taiwan|world">Taiwan</option>
+                <option value="Thailand|world">Thailand</option>
+                <option value="UAE|world">UAE</option>
+                <option value="Vietnam|world">Vietnam</option>
+                <option value="Yemen|world">Yemen</option>
+              </optgroup>
+              <optgroup label="🌏 Oceania">
+                <option value="Australia|world">Australia</option>
+                <option value="Fiji|world">Fiji</option>
+                <option value="New Zealand|world">New Zealand</option>
+                <option value="Papua New Guinea|world">Papua New Guinea</option>
+              </optgroup>
+            </select>
+          </div>
+          <div id="regionBadge" class="hidden">
+            <span class="region-badge" id="regionBadgeText"></span>
           </div>
         </div>
 
         <!-- Carriers -->
-        <div class="admin-card mb-3">
+        <div class="admin-card mb-3 hidden" id="carrierSection">
           <h3 class="serif mb-2"><span class="step-badge">2</span>Select a carrier</h3>
           <div id="carrierList"></div>
         </div>
 
-        <button class="btn btn-primary btn-full" id="continueBtn" onclick="continueToCheckout()">
+        <button class="btn btn-primary btn-full hidden" id="continueBtn" onclick="continueToCheckout()">
           Continue to Checkout →
         </button>
       </div>
@@ -101,19 +259,41 @@
       'dhl':        '🟡',
     };
 
-    function getRegion() {
-      return document.querySelector('input[name="region"]:checked')?.value || 'uk';
-    }
+    const REGION_LABELS = {
+      uk:     '🇬🇧 United Kingdom',
+      europe: '🇪🇺 Europe',
+      world:  '🌍 International',
+    };
 
-    function getRegionLabel(r) {
-      return r === 'uk' ? 'UK' : r === 'europe' ? 'Europe' : 'Rest of World';
+    let _selectedCountry = '';
+    let _selectedRegion  = '';
+
+    function onCountryChange() {
+      const val = document.getElementById('countrySelect').value;
+      if (!val) {
+        _selectedCountry = '';
+        _selectedRegion  = '';
+        document.getElementById('regionBadge').classList.add('hidden');
+        document.getElementById('carrierSection').classList.add('hidden');
+        document.getElementById('continueBtn').classList.add('hidden');
+        return;
+      }
+      const [country, region] = val.split('|');
+      _selectedCountry = country;
+      _selectedRegion  = region;
+
+      document.getElementById('regionBadgeText').textContent = REGION_LABELS[region] + ' shipping rates apply';
+      document.getElementById('regionBadge').classList.remove('hidden');
+      document.getElementById('carrierSection').classList.remove('hidden');
+      document.getElementById('continueBtn').classList.remove('hidden');
+      renderCarriers();
     }
 
     function renderCarriers() {
-      const region  = getRegion();
-      const options = (Store.getSettings().deliveryOptions || []).filter(o => o.active);
+      const region   = _selectedRegion;
+      const options  = (Store.getSettings().deliveryOptions || []).filter(o => o.active);
       const { currency } = Store.getSettings();
-      const list    = document.getElementById('carrierList');
+      const list     = document.getElementById('carrierList');
 
       if (!options.length) {
         list.innerHTML = '<p style="color:var(--gray-400);text-align:center;padding:20px;">No delivery options available.</p>';
@@ -136,22 +316,25 @@
     }
 
     function continueToCheckout() {
-      const region     = getRegion();
-      const carrierId  = document.querySelector('input[name="carrier"]:checked')?.value;
+      if (!_selectedCountry || !_selectedRegion) {
+        Toast.show('Please select your country.', 'error'); return;
+      }
+      const carrierId = document.querySelector('input[name="carrier"]:checked')?.value;
       if (!carrierId) { Toast.show('Please select a carrier.', 'error'); return; }
 
-      const options  = Store.getSettings().deliveryOptions || [];
-      const carrier  = options.find(o => o.id === carrierId);
+      const options = Store.getSettings().deliveryOptions || [];
+      const carrier = options.find(o => o.id === carrierId);
       if (!carrier) { Toast.show('Invalid carrier selected.', 'error'); return; }
 
       sessionStorage.setItem('et_delivery', JSON.stringify({
         carrierId,
-        carrier:  carrier.carrier,
-        service:  carrier.service,
-        region,
-        regionLabel: getRegionLabel(region),
-        price:    carrier.prices?.[region] || 0,
-        days:     carrier.days?.[region]   || '',
+        carrier:     carrier.carrier,
+        service:     carrier.service,
+        region:      _selectedRegion,
+        country:     _selectedCountry,
+        regionLabel: REGION_LABELS[_selectedRegion],
+        price:       carrier.prices?.[_selectedRegion] || 0,
+        days:        carrier.days?.[_selectedRegion]   || '',
       }));
 
       window.location.href = 'checkout.html';
@@ -169,7 +352,6 @@
         document.getElementById('deliveryEmpty').classList.remove('hidden');
         return;
       }
-      renderCarriers();
     });
   </script>
 </body>
