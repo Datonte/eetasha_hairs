@@ -38,12 +38,13 @@ if (hasStripe) stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 function clean(str) { return String(str || '').replace(/[<>]/g, '').trim(); }
 
 const DEFAULT_DELIVERY_OPTIONS = [
-  { id:'royal-mail', carrier:'Royal Mail', service:'Tracked',  prices:{ uk:3.49,  europe:11.99, world:16.99 }, days:{ uk:'2-3 days', europe:'5-7 days',  world:'7-14 days'  }, active:true },
-  { id:'evri',       carrier:'Evri',       service:'Standard', prices:{ uk:2.99,  europe:10.99, world:14.99 }, days:{ uk:'2-4 days', europe:'5-8 days',  world:'8-15 days'  }, active:true },
-  { id:'dpd',        carrier:'DPD',        service:'Next Day', prices:{ uk:5.99,  europe:14.99, world:22.99 }, days:{ uk:'1-2 days', europe:'3-5 days',  world:'5-10 days'  }, active:true },
-  { id:'parcel2go',  carrier:'Parcel2Go',  service:'Standard', prices:{ uk:3.99,  europe:12.99, world:18.99 }, days:{ uk:'2-3 days', europe:'5-7 days',  world:'7-14 days'  }, active:true },
-  { id:'ups',        carrier:'UPS',        service:'Express',  prices:{ uk:6.99,  europe:17.99, world:25.99 }, days:{ uk:'1-2 days', europe:'2-4 days',  world:'4-7 days'   }, active:true },
-  { id:'dhl',        carrier:'DHL',        service:'Express',  prices:{ uk:7.99,  europe:18.99, world:27.99 }, days:{ uk:'1-2 days', europe:'2-4 days',  world:'4-7 days'   }, active:true },
+  { id:'evri',          carrier:'Evri',       service:'Standard',   prices:{ uk:3.20,  europe:9.99,  world:13.99 }, days:{ uk:'2-4 days', europe:'5-8 days', world:'8-14 days'  }, minDays:{ uk:2, europe:5, world:8  }, active:true },
+  { id:'royal-mail-48', carrier:'Royal Mail', service:'Tracked 48', prices:{ uk:3.40,  europe:12.99, world:16.99 }, days:{ uk:'2-3 days', europe:'5-7 days', world:'7-14 days'  }, minDays:{ uk:2, europe:5, world:7  }, active:true },
+  { id:'parcel2go',     carrier:'Parcel2Go',  service:'Standard',   prices:{ uk:3.99,  europe:11.99, world:14.99 }, days:{ uk:'2-4 days', europe:'5-8 days', world:'7-14 days'  }, minDays:{ uk:2, europe:5, world:7  }, active:true },
+  { id:'royal-mail-24', carrier:'Royal Mail', service:'Tracked 24', prices:{ uk:4.19,  europe:14.99, world:18.99 }, days:{ uk:'1-2 days', europe:'5-7 days', world:'7-10 days'  }, minDays:{ uk:1, europe:5, world:7  }, active:true },
+  { id:'dpd',           carrier:'DPD',        service:'Next Day',   prices:{ uk:7.99,  europe:15.99, world:24.99 }, days:{ uk:'Next day', europe:'3-5 days', world:'5-8 days'   }, minDays:{ uk:1, europe:3, world:5  }, active:true },
+  { id:'dhl',           carrier:'DHL',        service:'Express',    prices:{ uk:9.99,  europe:19.99, world:29.99 }, days:{ uk:'1-2 days', europe:'2-3 days', world:'3-5 days'   }, minDays:{ uk:1, europe:2, world:3  }, active:true },
+  { id:'ups',           carrier:'UPS',        service:'Express',    prices:{ uk:10.99, europe:22.99, world:34.99 }, days:{ uk:'1-2 days', europe:'2-3 days', world:'3-5 days'   }, minDays:{ uk:1, europe:2, world:3  }, active:true },
 ];
 function valid(req, res) {
   const errors = validationResult(req);
@@ -61,9 +62,10 @@ async function ensureDefaults() {
   try {
     // Seed delivery options if not set
     const { data: settData } = await supabase.from('settings').select('delivery_options').eq('id', 1).single();
-    if (!settData?.delivery_options || settData.delivery_options.length === 0) {
+    const needsDeliveryUpdate = !settData?.delivery_options?.length || !settData.delivery_options[0]?.minDays;
+    if (needsDeliveryUpdate) {
       await supabase.from('settings').update({ delivery_options: DEFAULT_DELIVERY_OPTIONS }).eq('id', 1);
-      console.log('  ✅ Default delivery options seeded.');
+      console.log('  ✅ Delivery options seeded/updated with accurate prices.');
     }
 
     // Create product-images storage bucket if it doesn't exist

@@ -39,6 +39,9 @@
     .carrier-service { font-size:0.75rem; color:var(--gray-500); }
     .carrier-days { font-size:0.75rem; color:var(--gray-400); margin-top:2px; }
     .carrier-price { font-family:var(--font-head); font-size:1.1rem; color:var(--gold-dark); font-weight:700; }
+    .carrier-badges { display:flex; gap:5px; margin-top:5px; flex-wrap:wrap; }
+    .badge-cheap { background:var(--gold-bg); color:var(--gold-dark); border:1px solid var(--gold-light); font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:20px; }
+    .badge-fast  { background:#1a1a1a; color:#fff; font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:20px; }
     .step-badge {
       display:inline-block; background:var(--gold-dark); color:#fff;
       border-radius:50%; width:24px; height:24px; line-height:24px;
@@ -291,16 +294,36 @@
 
     function renderCarriers() {
       const region   = _selectedRegion;
-      const options  = (Store.getSettings().deliveryOptions || []).filter(o => o.active);
       const { currency } = Store.getSettings();
       const list     = document.getElementById('carrierList');
+
+      // Sort active carriers by price for this region (cheapest first)
+      const options = (Store.getSettings().deliveryOptions || [])
+        .filter(o => o.active)
+        .sort((a, b) => (a.prices?.[region] || 0) - (b.prices?.[region] || 0));
 
       if (!options.length) {
         list.innerHTML = '<p style="color:var(--gray-400);text-align:center;padding:20px;">No delivery options available.</p>';
         return;
       }
 
-      list.innerHTML = options.map((o, i) => `
+      // Find cheapest and fastest
+      const cheapestPrice = Math.min(...options.map(o => o.prices?.[region] || Infinity));
+      const fastestDays   = Math.min(...options.map(o => o.minDays?.[region] || Infinity));
+      const cheapestIds   = options.filter(o => o.prices?.[region] === cheapestPrice).map(o => o.id);
+      const fastestIds    = options.filter(o => o.minDays?.[region] === fastestDays).map(o => o.id);
+
+      list.innerHTML = options.map((o, i) => {
+        const isCheapest = cheapestIds.includes(o.id);
+        const isFastest  = fastestIds.includes(o.id);
+        const isBoth     = isCheapest && isFastest;
+        const badges = isBoth
+          ? `<div class="carrier-badges"><span class="badge-cheap">💰 Best Value</span></div>`
+          : `<div class="carrier-badges">
+               ${isCheapest ? `<span class="badge-cheap">💰 Best Price</span>` : ''}
+               ${isFastest  ? `<span class="badge-fast">⚡ Fastest</span>`    : ''}
+             </div>`;
+        return `
         <label class="carrier-option">
           <input type="radio" name="carrier" value="${o.id}" ${i === 0 ? 'checked' : ''}>
           <div class="carrier-card">
@@ -309,10 +332,12 @@
               <div class="carrier-name">${escHtml(o.carrier)}</div>
               <div class="carrier-service">${escHtml(o.service)}</div>
               <div class="carrier-days">⏱ ${escHtml(o.days?.[region] || '')}</div>
+              ${badges}
             </div>
             <div class="carrier-price">${currency}${Number(o.prices?.[region] || 0).toFixed(2)}</div>
           </div>
-        </label>`).join('');
+        </label>`;
+      }).join('');
     }
 
     function continueToCheckout() {
