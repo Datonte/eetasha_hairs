@@ -59,13 +59,6 @@ async function _doInit() {
     if (settings && typeof settings === 'object') {
       State.settings = { ...State.settings, ...settings, deliveryFee: parseFloat(settings.deliveryFee) || 5.99 };
     }
-    // Remove cart items whose product IDs no longer exist in the DB
-    // Only do this if products loaded successfully (avoid wiping cart on network failure)
-    if (State.products.length > 0) {
-      const cart      = _getRawCart();
-      const validCart = cart.filter(i => State.products.some(p => String(p.id) === i.productId));
-      if (validCart.length !== cart.length) _saveRawCart(validCart);
-    }
   } catch (err) {
     console.warn('initApp error:', err.message);
   }
