@@ -5,7 +5,7 @@ const express    = require('express');
 const cors       = require('cors');
 const helmet     = require('helmet');
 const rateLimit  = require('express-rate-limit');
-const cookieSession = require('cookie-session');
+const crypto = require('crypto');
 const bcrypt     = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
 const path       = require('path');
@@ -227,15 +227,50 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '500kb' }));
 app.use(express.urlencoded({ extended: true, limit: '500kb' }));
 
-// ---- Sessions (stored in signed cookie — no DB required, works on Vercel) ----
-app.use(cookieSession({
-  name:    'et.sid',
-  keys:    [process.env.SESSION_SECRET || 'et-fallback-secret'],
-  maxAge:  7 * 24 * 60 * 60 * 1000,
-  httpOnly: true,
-  sameSite: 'lax',
-  secure:   process.env.NODE_ENV === 'production',
-}));
+// ---- Sessions: custom signed-cookie middleware (no on-headers, works on Vercel) ----
+const _sessSecret = process.env.SESSION_SECRET || 'et-fallback-secret';
+function _sessSign(payload) {
+  return payload + '.' + crypto.createHmac('sha256', _sessSecret).update(payload).digest('base64url');
+}
+function _sessUnsign(token) {
+  const i = token.lastIndexOf('.');
+  if (i < 0) return null;
+  const payload = token.slice(0, i);
+  const expected = _sessSign(payload);
+  if (token.length !== expected.length) return null;
+  let diff = 0;
+  for (let j = 0; j < token.length; j++) diff |= token.charCodeAt(j) ^ expected.charCodeAt(j);
+  return diff === 0 ? payload : null;
+}
+app.use(function sessionMiddleware(req, res, next) {
+  // Parse session from signed cookie
+  const cookies = {};
+  (req.headers.cookie || '').split(';').forEach(c => {
+    const eq = c.indexOf('='); if (eq > 0) cookies[c.slice(0, eq).trim()] = c.slice(eq + 1).trim();
+  });
+  req.session = {};
+  const token = cookies['et_sess'];
+  if (token) {
+    const payload = _sessUnsign(token);
+    if (payload) { try { Object.assign(req.session, JSON.parse(Buffer.from(payload, 'base64url').toString())); } catch {} }
+  }
+  // Write session cookie on every response by patching res.end directly
+  const origEnd = res.end.bind(res);
+  res.end = function(...args) {
+    if (!res.headersSent) {
+      const sess = req.session;
+      const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+      if (sess === null) {
+        res.setHeader('Set-Cookie', 'et_sess=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
+      } else if (Object.keys(sess).length > 0) {
+        const payload = Buffer.from(JSON.stringify(sess)).toString('base64url');
+        res.setHeader('Set-Cookie', `et_sess=${_sessSign(payload)}; Path=/; Max-Age=${7*24*3600}; HttpOnly; SameSite=Lax${secure}`);
+      }
+    }
+    return origEnd.apply(this, args);
+  };
+  next();
+});
 
 // ---- Ensure DB is connected before API routes ----
 app.use('/api/', async (req, res, next) => {
@@ -261,8 +296,6 @@ app.use(express.static(path.join(__dirname)));
 //  TEMPORARY DEBUG — remove after session issue is resolved
 // ============================================================
 app.get('/api/debug', (req, res) => {
-  // Set a raw cookie directly to test if Vercel allows Set-Cookie at all
-  res.setHeader('Set-Cookie', 'dbg_test=hello123; Path=/; Max-Age=3600; SameSite=Lax');
   res.json({
     secure:   req.secure,
     proto:    req.headers['x-forwarded-proto'],
