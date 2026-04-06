@@ -7,21 +7,66 @@
   <link rel="stylesheet" href="css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    .country-select-wrap { position:relative; }
-    .country-select-wrap select {
-      width:100%; padding:12px 16px; border:1.5px solid var(--gray-200);
-      border-radius:var(--radius); font-size:0.95rem; font-family:inherit;
-      background:#fff; cursor:pointer; appearance:none;
-      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-      background-repeat:no-repeat; background-position:right 14px center;
-      padding-right:36px;
+    /* ── Country search ── */
+    .country-search-wrap { position:relative; }
+    .country-search-input-row {
+      display:flex; align-items:center; gap:10px;
+      border:1.5px solid var(--gray-200); border-radius:var(--radius);
+      background:#fff; padding:0 14px; transition:border-color 0.18s;
     }
-    .country-select-wrap select:focus { outline:none; border-color:var(--gold-dark); }
+    .country-search-input-row:focus-within { border-color:var(--gold-dark); }
+    .country-search-input-row .material-symbols-outlined { color:var(--gray-400); font-size:20px; flex-shrink:0; }
+    .country-search-input-row input {
+      flex:1; border:none; outline:none; padding:12px 0;
+      font-size:0.95rem; font-family:inherit; background:transparent;
+    }
+    .country-clear-btn {
+      background:none; border:none; cursor:pointer; color:var(--gray-400);
+      font-size:18px; padding:4px; display:none; line-height:1;
+    }
+    .country-clear-btn.visible { display:block; }
+
+    .country-dropdown {
+      position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:200;
+      background:#fff; border:1.5px solid var(--gray-200); border-radius:var(--radius);
+      box-shadow:0 8px 24px rgba(0,0,0,0.10); max-height:260px; overflow-y:auto;
+      display:none;
+    }
+    .country-dropdown.open { display:block; }
+    .country-option {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:11px 16px; cursor:pointer; font-size:0.92rem;
+      transition:background 0.12s;
+    }
+    .country-option:hover, .country-option.focused { background:var(--gold-bg); }
+    .country-option-name { font-weight:500; }
+    .country-option-region {
+      font-size:0.72rem; font-weight:600; color:var(--gold-dark);
+      background:var(--gold-bg); border:1px solid var(--gold-light);
+      padding:2px 8px; border-radius:20px; white-space:nowrap;
+    }
+    .country-no-results { padding:16px; color:var(--gray-400); text-align:center; font-size:0.88rem; }
+    .country-selected-display {
+      display:none; align-items:center; gap:10px; margin-top:10px;
+      padding:10px 14px; border-radius:var(--radius); background:var(--gold-bg);
+      border:1px solid var(--gold-light);
+    }
+    .country-selected-display.visible { display:flex; }
+    .country-selected-name { font-weight:600; font-size:0.92rem; color:var(--gold-dark); flex:1; }
+    .country-change-btn {
+      background:none; border:none; cursor:pointer; font-size:0.78rem;
+      color:var(--gray-500); text-decoration:underline; padding:0;
+    }
+    .country-change-btn:hover { color:var(--gold-dark); }
+
+    /* ── Region badge ── */
     .region-badge {
       display:inline-flex; align-items:center; gap:6px; margin-top:10px;
       padding:6px 14px; border-radius:20px; font-size:0.78rem; font-weight:600;
       background:var(--gold-bg); color:var(--gold-dark); border:1px solid var(--gold-light);
     }
+
+    /* ── Carrier cards ── */
     .carrier-option { cursor:pointer; display:block; }
     .carrier-option input { display:none; }
     .carrier-card {
@@ -67,171 +112,34 @@
         <!-- Country -->
         <div class="admin-card mb-3">
           <h3 class="serif mb-2"><span class="step-badge">1</span>Where are we delivering to?</h3>
-          <div class="country-select-wrap">
-            <select id="countrySelect" onchange="onCountryChange()">
-              <option value="">— Select your country —</option>
-              <optgroup label="🇬🇧 United Kingdom">
-                <option value="United Kingdom|uk">United Kingdom</option>
-              </optgroup>
-              <optgroup label="🇪🇺 Europe">
-                <option value="Albania|europe">Albania</option>
-                <option value="Andorra|europe">Andorra</option>
-                <option value="Austria|europe">Austria</option>
-                <option value="Belarus|europe">Belarus</option>
-                <option value="Belgium|europe">Belgium</option>
-                <option value="Bosnia & Herzegovina|europe">Bosnia &amp; Herzegovina</option>
-                <option value="Bulgaria|europe">Bulgaria</option>
-                <option value="Croatia|europe">Croatia</option>
-                <option value="Cyprus|europe">Cyprus</option>
-                <option value="Czech Republic|europe">Czech Republic</option>
-                <option value="Denmark|europe">Denmark</option>
-                <option value="Estonia|europe">Estonia</option>
-                <option value="Finland|europe">Finland</option>
-                <option value="France|europe">France</option>
-                <option value="Germany|europe">Germany</option>
-                <option value="Greece|europe">Greece</option>
-                <option value="Hungary|europe">Hungary</option>
-                <option value="Iceland|europe">Iceland</option>
-                <option value="Ireland|europe">Ireland</option>
-                <option value="Italy|europe">Italy</option>
-                <option value="Kosovo|europe">Kosovo</option>
-                <option value="Latvia|europe">Latvia</option>
-                <option value="Liechtenstein|europe">Liechtenstein</option>
-                <option value="Lithuania|europe">Lithuania</option>
-                <option value="Luxembourg|europe">Luxembourg</option>
-                <option value="Malta|europe">Malta</option>
-                <option value="Moldova|europe">Moldova</option>
-                <option value="Monaco|europe">Monaco</option>
-                <option value="Montenegro|europe">Montenegro</option>
-                <option value="Netherlands|europe">Netherlands</option>
-                <option value="North Macedonia|europe">North Macedonia</option>
-                <option value="Norway|europe">Norway</option>
-                <option value="Poland|europe">Poland</option>
-                <option value="Portugal|europe">Portugal</option>
-                <option value="Romania|europe">Romania</option>
-                <option value="Russia|europe">Russia</option>
-                <option value="San Marino|europe">San Marino</option>
-                <option value="Serbia|europe">Serbia</option>
-                <option value="Slovakia|europe">Slovakia</option>
-                <option value="Slovenia|europe">Slovenia</option>
-                <option value="Spain|europe">Spain</option>
-                <option value="Sweden|europe">Sweden</option>
-                <option value="Switzerland|europe">Switzerland</option>
-                <option value="Turkey|europe">Turkey</option>
-                <option value="Ukraine|europe">Ukraine</option>
-              </optgroup>
-              <optgroup label="🌍 Africa">
-                <option value="Algeria|world">Algeria</option>
-                <option value="Angola|world">Angola</option>
-                <option value="Benin|world">Benin</option>
-                <option value="Botswana|world">Botswana</option>
-                <option value="Burkina Faso|world">Burkina Faso</option>
-                <option value="Cameroon|world">Cameroon</option>
-                <option value="Cape Verde|world">Cape Verde</option>
-                <option value="Chad|world">Chad</option>
-                <option value="Côte d'Ivoire|world">Côte d'Ivoire</option>
-                <option value="DR Congo|world">DR Congo</option>
-                <option value="Egypt|world">Egypt</option>
-                <option value="Ethiopia|world">Ethiopia</option>
-                <option value="Gabon|world">Gabon</option>
-                <option value="Ghana|world">Ghana</option>
-                <option value="Guinea|world">Guinea</option>
-                <option value="Kenya|world">Kenya</option>
-                <option value="Liberia|world">Liberia</option>
-                <option value="Libya|world">Libya</option>
-                <option value="Madagascar|world">Madagascar</option>
-                <option value="Malawi|world">Malawi</option>
-                <option value="Mali|world">Mali</option>
-                <option value="Mauritius|world">Mauritius</option>
-                <option value="Morocco|world">Morocco</option>
-                <option value="Mozambique|world">Mozambique</option>
-                <option value="Namibia|world">Namibia</option>
-                <option value="Niger|world">Niger</option>
-                <option value="Nigeria|world">Nigeria</option>
-                <option value="Rwanda|world">Rwanda</option>
-                <option value="Senegal|world">Senegal</option>
-                <option value="Sierra Leone|world">Sierra Leone</option>
-                <option value="Somalia|world">Somalia</option>
-                <option value="South Africa|world">South Africa</option>
-                <option value="South Sudan|world">South Sudan</option>
-                <option value="Sudan|world">Sudan</option>
-                <option value="Tanzania|world">Tanzania</option>
-                <option value="Togo|world">Togo</option>
-                <option value="Tunisia|world">Tunisia</option>
-                <option value="Uganda|world">Uganda</option>
-                <option value="Zambia|world">Zambia</option>
-                <option value="Zimbabwe|world">Zimbabwe</option>
-              </optgroup>
-              <optgroup label="🌎 Americas">
-                <option value="Argentina|world">Argentina</option>
-                <option value="Barbados|world">Barbados</option>
-                <option value="Bolivia|world">Bolivia</option>
-                <option value="Brazil|world">Brazil</option>
-                <option value="Canada|world">Canada</option>
-                <option value="Chile|world">Chile</option>
-                <option value="Colombia|world">Colombia</option>
-                <option value="Costa Rica|world">Costa Rica</option>
-                <option value="Cuba|world">Cuba</option>
-                <option value="Dominican Republic|world">Dominican Republic</option>
-                <option value="Ecuador|world">Ecuador</option>
-                <option value="El Salvador|world">El Salvador</option>
-                <option value="Guatemala|world">Guatemala</option>
-                <option value="Guyana|world">Guyana</option>
-                <option value="Haiti|world">Haiti</option>
-                <option value="Honduras|world">Honduras</option>
-                <option value="Jamaica|world">Jamaica</option>
-                <option value="Mexico|world">Mexico</option>
-                <option value="Nicaragua|world">Nicaragua</option>
-                <option value="Panama|world">Panama</option>
-                <option value="Paraguay|world">Paraguay</option>
-                <option value="Peru|world">Peru</option>
-                <option value="Trinidad & Tobago|world">Trinidad &amp; Tobago</option>
-                <option value="United States|world">United States</option>
-                <option value="Uruguay|world">Uruguay</option>
-                <option value="Venezuela|world">Venezuela</option>
-              </optgroup>
-              <optgroup label="🌏 Asia & Middle East">
-                <option value="Afghanistan|world">Afghanistan</option>
-                <option value="Bahrain|world">Bahrain</option>
-                <option value="Bangladesh|world">Bangladesh</option>
-                <option value="Cambodia|world">Cambodia</option>
-                <option value="China|world">China</option>
-                <option value="Hong Kong|world">Hong Kong</option>
-                <option value="India|world">India</option>
-                <option value="Indonesia|world">Indonesia</option>
-                <option value="Iran|world">Iran</option>
-                <option value="Iraq|world">Iraq</option>
-                <option value="Israel|world">Israel</option>
-                <option value="Japan|world">Japan</option>
-                <option value="Jordan|world">Jordan</option>
-                <option value="Kuwait|world">Kuwait</option>
-                <option value="Lebanon|world">Lebanon</option>
-                <option value="Malaysia|world">Malaysia</option>
-                <option value="Myanmar|world">Myanmar</option>
-                <option value="Nepal|world">Nepal</option>
-                <option value="Oman|world">Oman</option>
-                <option value="Pakistan|world">Pakistan</option>
-                <option value="Philippines|world">Philippines</option>
-                <option value="Qatar|world">Qatar</option>
-                <option value="Saudi Arabia|world">Saudi Arabia</option>
-                <option value="Singapore|world">Singapore</option>
-                <option value="South Korea|world">South Korea</option>
-                <option value="Sri Lanka|world">Sri Lanka</option>
-                <option value="Syria|world">Syria</option>
-                <option value="Taiwan|world">Taiwan</option>
-                <option value="Thailand|world">Thailand</option>
-                <option value="UAE|world">UAE</option>
-                <option value="Vietnam|world">Vietnam</option>
-                <option value="Yemen|world">Yemen</option>
-              </optgroup>
-              <optgroup label="🌏 Oceania">
-                <option value="Australia|world">Australia</option>
-                <option value="Fiji|world">Fiji</option>
-                <option value="New Zealand|world">New Zealand</option>
-                <option value="Papua New Guinea|world">Papua New Guinea</option>
-              </optgroup>
-            </select>
+
+          <div class="country-search-wrap" id="countrySearchWrap">
+            <!-- Search input (shown when no country selected) -->
+            <div class="country-search-input-row" id="countryInputRow">
+              <span class="material-symbols-outlined">search</span>
+              <input
+                type="text"
+                id="countrySearchInput"
+                placeholder="Type a country name…"
+                autocomplete="off"
+                oninput="onCountrySearch()"
+                onfocus="openDropdown()"
+                onkeydown="onCountryKeydown(event)"
+              >
+              <button class="country-clear-btn" id="countryClearBtn" onclick="clearCountry()" title="Clear">✕</button>
+            </div>
+
+            <!-- Dropdown results -->
+            <div class="country-dropdown" id="countryDropdown"></div>
+
+            <!-- Selected country display -->
+            <div class="country-selected-display" id="countrySelectedDisplay">
+              <span class="material-symbols-outlined" style="color:var(--gold-dark);font-size:20px;">check_circle</span>
+              <span class="country-selected-name" id="countrySelectedName"></span>
+              <button class="country-change-btn" onclick="clearCountry()">Change</button>
+            </div>
           </div>
+
           <div id="regionBadge" class="hidden">
             <span class="region-badge" id="regionBadgeText"></span>
           </div>
@@ -253,7 +161,166 @@
   <div id="siteFooter"></div>
   <script src="js/app.js"></script>
   <script>
-    // Fallback defaults used if DB hasn't been seeded yet
+    // ── All countries with region mapping ──
+    const ALL_COUNTRIES = [
+      { name:'United Kingdom',         region:'uk'     },
+      { name:'Albania',                region:'europe' },
+      { name:'Andorra',                region:'europe' },
+      { name:'Austria',                region:'europe' },
+      { name:'Belarus',                region:'europe' },
+      { name:'Belgium',                region:'europe' },
+      { name:'Bosnia & Herzegovina',   region:'europe' },
+      { name:'Bulgaria',               region:'europe' },
+      { name:'Croatia',                region:'europe' },
+      { name:'Cyprus',                 region:'europe' },
+      { name:'Czech Republic',         region:'europe' },
+      { name:'Denmark',                region:'europe' },
+      { name:'Estonia',                region:'europe' },
+      { name:'Finland',                region:'europe' },
+      { name:'France',                 region:'europe' },
+      { name:'Germany',                region:'europe' },
+      { name:'Greece',                 region:'europe' },
+      { name:'Hungary',                region:'europe' },
+      { name:'Iceland',                region:'europe' },
+      { name:'Ireland',                region:'europe' },
+      { name:'Italy',                  region:'europe' },
+      { name:'Kosovo',                 region:'europe' },
+      { name:'Latvia',                 region:'europe' },
+      { name:'Liechtenstein',          region:'europe' },
+      { name:'Lithuania',              region:'europe' },
+      { name:'Luxembourg',             region:'europe' },
+      { name:'Malta',                  region:'europe' },
+      { name:'Moldova',                region:'europe' },
+      { name:'Monaco',                 region:'europe' },
+      { name:'Montenegro',             region:'europe' },
+      { name:'Netherlands',            region:'europe' },
+      { name:'North Macedonia',        region:'europe' },
+      { name:'Norway',                 region:'europe' },
+      { name:'Poland',                 region:'europe' },
+      { name:'Portugal',               region:'europe' },
+      { name:'Romania',                region:'europe' },
+      { name:'Russia',                 region:'europe' },
+      { name:'San Marino',             region:'europe' },
+      { name:'Serbia',                 region:'europe' },
+      { name:'Slovakia',               region:'europe' },
+      { name:'Slovenia',               region:'europe' },
+      { name:'Spain',                  region:'europe' },
+      { name:'Sweden',                 region:'europe' },
+      { name:'Switzerland',            region:'europe' },
+      { name:'Turkey',                 region:'europe' },
+      { name:'Ukraine',                region:'europe' },
+      { name:'Algeria',                region:'world'  },
+      { name:'Angola',                 region:'world'  },
+      { name:'Benin',                  region:'world'  },
+      { name:'Botswana',               region:'world'  },
+      { name:'Burkina Faso',           region:'world'  },
+      { name:'Cameroon',               region:'world'  },
+      { name:'Cape Verde',             region:'world'  },
+      { name:'Chad',                   region:'world'  },
+      { name:"Côte d'Ivoire",          region:'world'  },
+      { name:'DR Congo',               region:'world'  },
+      { name:'Egypt',                  region:'world'  },
+      { name:'Ethiopia',               region:'world'  },
+      { name:'Gabon',                  region:'world'  },
+      { name:'Ghana',                  region:'world'  },
+      { name:'Guinea',                 region:'world'  },
+      { name:'Kenya',                  region:'world'  },
+      { name:'Liberia',                region:'world'  },
+      { name:'Libya',                  region:'world'  },
+      { name:'Madagascar',             region:'world'  },
+      { name:'Malawi',                 region:'world'  },
+      { name:'Mali',                   region:'world'  },
+      { name:'Mauritius',              region:'world'  },
+      { name:'Morocco',                region:'world'  },
+      { name:'Mozambique',             region:'world'  },
+      { name:'Namibia',                region:'world'  },
+      { name:'Niger',                  region:'world'  },
+      { name:'Nigeria',                region:'world'  },
+      { name:'Rwanda',                 region:'world'  },
+      { name:'Senegal',                region:'world'  },
+      { name:'Sierra Leone',           region:'world'  },
+      { name:'Somalia',                region:'world'  },
+      { name:'South Africa',           region:'world'  },
+      { name:'South Sudan',            region:'world'  },
+      { name:'Sudan',                  region:'world'  },
+      { name:'Tanzania',               region:'world'  },
+      { name:'Togo',                   region:'world'  },
+      { name:'Tunisia',                region:'world'  },
+      { name:'Uganda',                 region:'world'  },
+      { name:'Zambia',                 region:'world'  },
+      { name:'Zimbabwe',               region:'world'  },
+      { name:'Argentina',              region:'world'  },
+      { name:'Barbados',               region:'world'  },
+      { name:'Bolivia',                region:'world'  },
+      { name:'Brazil',                 region:'world'  },
+      { name:'Canada',                 region:'world'  },
+      { name:'Chile',                  region:'world'  },
+      { name:'Colombia',               region:'world'  },
+      { name:'Costa Rica',             region:'world'  },
+      { name:'Cuba',                   region:'world'  },
+      { name:'Dominican Republic',     region:'world'  },
+      { name:'Ecuador',                region:'world'  },
+      { name:'El Salvador',            region:'world'  },
+      { name:'Guatemala',              region:'world'  },
+      { name:'Guyana',                 region:'world'  },
+      { name:'Haiti',                  region:'world'  },
+      { name:'Honduras',               region:'world'  },
+      { name:'Jamaica',                region:'world'  },
+      { name:'Mexico',                 region:'world'  },
+      { name:'Nicaragua',              region:'world'  },
+      { name:'Panama',                 region:'world'  },
+      { name:'Paraguay',               region:'world'  },
+      { name:'Peru',                   region:'world'  },
+      { name:'Trinidad & Tobago',      region:'world'  },
+      { name:'United States',          region:'world'  },
+      { name:'Uruguay',                region:'world'  },
+      { name:'Venezuela',              region:'world'  },
+      { name:'Afghanistan',            region:'world'  },
+      { name:'Bahrain',                region:'world'  },
+      { name:'Bangladesh',             region:'world'  },
+      { name:'Cambodia',               region:'world'  },
+      { name:'China',                  region:'world'  },
+      { name:'Hong Kong',              region:'world'  },
+      { name:'India',                  region:'world'  },
+      { name:'Indonesia',              region:'world'  },
+      { name:'Iran',                   region:'world'  },
+      { name:'Iraq',                   region:'world'  },
+      { name:'Israel',                 region:'world'  },
+      { name:'Japan',                  region:'world'  },
+      { name:'Jordan',                 region:'world'  },
+      { name:'Kuwait',                 region:'world'  },
+      { name:'Lebanon',                region:'world'  },
+      { name:'Malaysia',               region:'world'  },
+      { name:'Myanmar',                region:'world'  },
+      { name:'Nepal',                  region:'world'  },
+      { name:'Oman',                   region:'world'  },
+      { name:'Pakistan',               region:'world'  },
+      { name:'Philippines',            region:'world'  },
+      { name:'Qatar',                  region:'world'  },
+      { name:'Saudi Arabia',           region:'world'  },
+      { name:'Singapore',              region:'world'  },
+      { name:'South Korea',            region:'world'  },
+      { name:'Sri Lanka',              region:'world'  },
+      { name:'Syria',                  region:'world'  },
+      { name:'Taiwan',                 region:'world'  },
+      { name:'Thailand',               region:'world'  },
+      { name:'UAE',                    region:'world'  },
+      { name:'Vietnam',                region:'world'  },
+      { name:'Yemen',                  region:'world'  },
+      { name:'Australia',              region:'world'  },
+      { name:'Fiji',                   region:'world'  },
+      { name:'New Zealand',            region:'world'  },
+      { name:'Papua New Guinea',       region:'world'  },
+    ];
+
+    const REGION_LABELS = {
+      uk:     '🇬🇧 United Kingdom',
+      europe: '🇪🇺 Europe',
+      world:  '🌍 International',
+    };
+    const REGION_SHORT = { uk:'UK', europe:'Europe', world:'International' };
+
+    // ── Fallback carrier defaults ──
     const FALLBACK_OPTIONS = [
       { id:'evri',          carrier:'Evri',       service:'Standard',   prices:{uk:3.20,  europe:9.99,  world:13.99}, days:{uk:'2-4 days', europe:'5-8 days', world:'8-14 days'}, minDays:{uk:2, europe:5, world:8},  active:true },
       { id:'royal-mail-48', carrier:'Royal Mail', service:'Tracked 48', prices:{uk:3.40,  europe:12.99, world:16.99}, days:{uk:'2-3 days', europe:'5-7 days', world:'7-14 days'}, minDays:{uk:2, europe:5, world:7},  active:true },
@@ -265,54 +332,138 @@
     ];
 
     const CARRIER_LOGOS = {
-      'royal-mail': '📮',
       'evri':       '📦',
+      'royal-mail-48': '📮',
+      'royal-mail-24': '📮',
       'dpd':        '🚚',
       'parcel2go':  '📬',
       'ups':        '🟤',
       'dhl':        '🟡',
     };
 
-    const REGION_LABELS = {
-      uk:     '🇬🇧 United Kingdom',
-      europe: '🇪🇺 Europe',
-      world:  '🌍 International',
-    };
-
     let _selectedCountry = '';
     let _selectedRegion  = '';
+    let _focusedIndex    = -1;
+    let _filtered        = [];
 
-    function onCountryChange() {
-      const val = document.getElementById('countrySelect').value;
-      if (!val) {
-        _selectedCountry = '';
-        _selectedRegion  = '';
-        document.getElementById('regionBadge').classList.add('hidden');
-        document.getElementById('carrierSection').classList.add('hidden');
-        document.getElementById('continueBtn').classList.add('hidden');
+    // ── Country search logic ──
+    function onCountrySearch() {
+      const q = document.getElementById('countrySearchInput').value.trim().toLowerCase();
+      document.getElementById('countryClearBtn').classList.toggle('visible', q.length > 0);
+      _focusedIndex = -1;
+      if (!q) { closeDropdown(); return; }
+      _filtered = ALL_COUNTRIES.filter(c => c.name.toLowerCase().includes(q))
+                               .sort((a, b) => {
+                                 // prioritise starts-with matches
+                                 const aStarts = a.name.toLowerCase().startsWith(q) ? 0 : 1;
+                                 const bStarts = b.name.toLowerCase().startsWith(q) ? 0 : 1;
+                                 return aStarts - bStarts || a.name.localeCompare(b.name);
+                               });
+      renderDropdown();
+      openDropdown();
+    }
+
+    function openDropdown() {
+      const q = document.getElementById('countrySearchInput').value.trim().toLowerCase();
+      if (!q || _selectedCountry) return;
+      if (_filtered.length === 0 && q) { renderDropdown(); }
+      document.getElementById('countryDropdown').classList.add('open');
+    }
+
+    function closeDropdown() {
+      document.getElementById('countryDropdown').classList.remove('open');
+      _focusedIndex = -1;
+    }
+
+    function renderDropdown() {
+      const dd = document.getElementById('countryDropdown');
+      if (!_filtered.length) {
+        dd.innerHTML = '<div class="country-no-results">No countries found — try a different spelling</div>';
         return;
       }
-      const [country, region] = val.split('|');
-      _selectedCountry = country;
-      _selectedRegion  = region;
+      dd.innerHTML = _filtered.map((c, i) => `
+        <div class="country-option" data-index="${i}" onmousedown="selectCountry(${i})">
+          <span class="country-option-name">${escHtml(c.name)}</span>
+          <span class="country-option-region">${REGION_SHORT[c.region]}</span>
+        </div>`).join('');
+    }
 
-      document.getElementById('regionBadgeText').textContent = REGION_LABELS[region] + ' shipping rates apply';
+    function selectCountry(index) {
+      const c = _filtered[index];
+      if (!c) return;
+      _selectedCountry = c.name;
+      _selectedRegion  = c.region;
+
+      // Update UI
+      document.getElementById('countryInputRow').style.display = 'none';
+      const disp = document.getElementById('countrySelectedDisplay');
+      disp.classList.add('visible');
+      document.getElementById('countrySelectedName').textContent = c.name;
+      closeDropdown();
+
+      document.getElementById('regionBadgeText').textContent = REGION_LABELS[c.region] + ' shipping rates apply';
       document.getElementById('regionBadge').classList.remove('hidden');
       document.getElementById('carrierSection').classList.remove('hidden');
       document.getElementById('continueBtn').classList.remove('hidden');
       renderCarriers();
     }
 
-    function renderCarriers() {
-      const region   = _selectedRegion;
-      const { currency } = Store.getSettings();
-      const list     = document.getElementById('carrierList');
+    function clearCountry() {
+      _selectedCountry = '';
+      _selectedRegion  = '';
+      _filtered        = [];
+      _focusedIndex    = -1;
 
-      // Use DB options if available, else fall back to hardcoded defaults
+      document.getElementById('countryInputRow').style.display = '';
+      document.getElementById('countrySelectedDisplay').classList.remove('visible');
+      document.getElementById('countrySearchInput').value = '';
+      document.getElementById('countryClearBtn').classList.remove('visible');
+      document.getElementById('regionBadge').classList.add('hidden');
+      document.getElementById('carrierSection').classList.add('hidden');
+      document.getElementById('continueBtn').classList.add('hidden');
+      closeDropdown();
+      document.getElementById('countrySearchInput').focus();
+    }
+
+    function onCountryKeydown(e) {
+      const dd = document.getElementById('countryDropdown');
+      const items = dd.querySelectorAll('.country-option');
+      if (!items.length) return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _focusedIndex = Math.min(_focusedIndex + 1, items.length - 1);
+        updateFocused(items);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _focusedIndex = Math.max(_focusedIndex - 1, 0);
+        updateFocused(items);
+      } else if (e.key === 'Enter' && _focusedIndex >= 0) {
+        e.preventDefault();
+        selectCountry(_focusedIndex);
+      } else if (e.key === 'Escape') {
+        closeDropdown();
+      }
+    }
+
+    function updateFocused(items) {
+      items.forEach((el, i) => el.classList.toggle('focused', i === _focusedIndex));
+      if (_focusedIndex >= 0) items[_focusedIndex].scrollIntoView({ block:'nearest' });
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', e => {
+      if (!document.getElementById('countrySearchWrap').contains(e.target)) closeDropdown();
+    });
+
+    // ── Carrier rendering ──
+    function renderCarriers() {
+      const region = _selectedRegion;
+      const { currency } = Store.getSettings();
+      const list   = document.getElementById('carrierList');
       const dbOptions = Store.getSettings().deliveryOptions;
       const source    = (dbOptions && dbOptions.length > 0) ? dbOptions : FALLBACK_OPTIONS;
 
-      // Sort active carriers by price for this region (cheapest first)
       const options = source
         .filter(o => o.active)
         .sort((a, b) => (a.prices?.[region] || 0) - (b.prices?.[region] || 0));
@@ -322,7 +473,6 @@
         return;
       }
 
-      // Find cheapest and fastest
       const cheapestPrice = Math.min(...options.map(o => o.prices?.[region] || Infinity));
       const fastestDays   = Math.min(...options.map(o => o.minDays?.[region] || Infinity));
       const cheapestIds   = options.filter(o => o.prices?.[region] === cheapestPrice).map(o => o.id);
@@ -355,6 +505,7 @@
       }).join('');
     }
 
+    // ── Continue to checkout ──
     function continueToCheckout() {
       if (!_selectedCountry || !_selectedRegion) {
         Toast.show('Please select your country.', 'error'); return;
