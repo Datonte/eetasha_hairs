@@ -11,7 +11,7 @@ const State = {
   products: [],
   session:  null,   // logged-in customer { id, name, email, ... }
   settings: {
-    whatsapp: '+44', instagram: '@eetashahairs',
+    whatsapp: '+447951828832', instagram: '@ee_tasha.hairs',
     currency: '£',  deliveryFee: 5.99,
     bankName: '', sortCode: '', accountNumber: '', accountName: 'ee_tasha hairs',
   },

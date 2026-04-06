@@ -75,8 +75,8 @@ const orderSchema = new mongoose.Schema({
 
 const settingsSchema = new mongoose.Schema({
   _key:          { type: String, default: 'global', unique: true },
-  whatsapp:      { type: String, default: '+44' },
-  instagram:     { type: String, default: '@eetashahairs' },
+  whatsapp:      { type: String, default: '+447951828832' },
+  instagram:     { type: String, default: '@ee_tasha.hairs' },
   bankName:      { type: String, default: '' },
   sortCode:      { type: String, default: '' },
   accountNumber: { type: String, default: '' },
@@ -164,6 +164,11 @@ async function sendOTPEmail(email, code) {
 async function seedData() {
   await Settings.findOneAndUpdate(
     { _key: 'global' }, {}, { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+  // Migrate old placeholder contact details to real values
+  await Settings.updateOne(
+    { _key: 'global', whatsapp: { $in: ['+44', ''] } },
+    { $set: { whatsapp: '+447951828832', instagram: '@ee_tasha.hairs' } }
   );
 
   if (!(await Admin.countDocuments())) {
