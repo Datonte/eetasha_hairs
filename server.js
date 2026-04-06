@@ -261,6 +261,8 @@ app.use(express.static(path.join(__dirname)));
 //  TEMPORARY DEBUG — remove after session issue is resolved
 // ============================================================
 app.get('/api/debug', (req, res) => {
+  // Set a raw cookie directly to test if Vercel allows Set-Cookie at all
+  res.setHeader('Set-Cookie', 'dbg_test=hello123; Path=/; Max-Age=3600; SameSite=Lax');
   res.json({
     secure:   req.secure,
     proto:    req.headers['x-forwarded-proto'],
