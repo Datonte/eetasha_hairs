@@ -22,7 +22,12 @@ const State = {
 // ============================================================
 const API = {
   async _req(method, url, data) {
-    const opts = { method, credentials: 'include', headers: {} };
+    const opts = { method, headers: {} };
+    // Attach Supabase JWT for authenticated requests
+    if (window._supabase) {
+      const { data: { session } } = await window._supabase.auth.getSession();
+      if (session?.access_token) opts.headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
     if (data !== undefined) {
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(data);
@@ -48,13 +53,29 @@ function initApp() {
 }
 async function _doInit() {
   try {
-    const [productsRes, authRes, settingsRes] = await Promise.allSettled([
+    // Step 1: fetch config and initialise Supabase client
+    const config = await API.get('/api/config').catch(() => ({}));
+    if (config.supabaseUrl && config.supabaseAnonKey) {
+      window._supabase = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+    }
+
+    // Step 2: session + products + settings in parallel
+    const [sessionRes, productsRes, settingsRes] = await Promise.allSettled([
+      window._supabase ? window._supabase.auth.getSession() : Promise.resolve(null),
       API.get('/api/products'),
-      API.get('/api/auth/me'),
       API.get('/api/settings'),
     ]);
+
+    // Auth state comes from Supabase directly (no /api/auth/me needed)
+    const supaUser = sessionRes.value?.data?.session?.user || null;
+    State.session  = supaUser ? {
+      id:         supaUser.id,
+      name:       supaUser.user_metadata?.name || '',
+      email:      supaUser.email,
+      created_at: supaUser.created_at,
+    } : null;
+
     State.products = (productsRes.status === 'fulfilled' && Array.isArray(productsRes.value)) ? productsRes.value : [];
-    State.session  = (authRes.status === 'fulfilled' ? authRes.value?.user : null) || null;
     const settings = settingsRes.status === 'fulfilled' ? settingsRes.value : null;
     if (settings && typeof settings === 'object') {
       State.settings = { ...State.settings, ...settings, deliveryFee: parseFloat(settings.deliveryFee) || 5.99 };

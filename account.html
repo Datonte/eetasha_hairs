@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My Account | ee_tasha hairs</title>
   <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body data-page="account" class="page-enter">
   <div id="siteNav"></div>
@@ -121,16 +122,25 @@
       document.getElementById('tabSignup').classList.toggle('active', tab === 'signup');
     }
 
+    function _setSessionFromSupaUser(user) {
+      State.session = user ? {
+        id:         user.id,
+        name:       user.user_metadata?.name || '',
+        email:      user.email,
+        created_at: user.created_at,
+      } : null;
+    }
+
     async function handleLogin(e) {
       e.preventDefault();
       const btn = document.getElementById('loginBtn');
       btn.disabled = true; btn.textContent = 'Signing in…';
       try {
-        const { user } = await API.post('/api/auth/login', {
-          email:    document.getElementById('loginEmail').value,
-          password: document.getElementById('loginPassword').value,
-        });
-        State.session = user;
+        const email    = document.getElementById('loginEmail').value;
+        const password = document.getElementById('loginPassword').value;
+        const { data, error } = await window._supabase.auth.signInWithPassword({ email, password });
+        if (error) throw new Error(error.message);
+        _setSessionFromSupaUser(data.user);
         Toast.show('Welcome back!', 'success');
         renderNav('account');
         await showDashboard();
@@ -146,21 +156,24 @@
       const btn = document.getElementById('signupBtn');
       btn.disabled = true; btn.textContent = 'Creating account…';
       try {
-        const result = await API.post('/api/auth/register', {
-          name:     document.getElementById('signupName').value,
-          email:    document.getElementById('signupEmail').value,
-          password: document.getElementById('signupPassword').value,
+        const name     = document.getElementById('signupName').value.trim();
+        const email    = document.getElementById('signupEmail').value;
+        const password = document.getElementById('signupPassword').value;
+        const { data, error } = await window._supabase.auth.signUp({
+          email, password, options: { data: { name } },
         });
-        if (result.needsVerification) {
-          // Show OTP screen
+        if (error) throw new Error(error.message);
+        if (data.user && !data.session) {
+          // Email confirmation required — show OTP screen
           document.getElementById('loginForm').classList.add('hidden');
           document.getElementById('signupForm').classList.add('hidden');
           document.getElementById('otpSection').classList.remove('hidden');
-          document.getElementById('otpEmail').textContent = result.email;
+          document.getElementById('otpEmail').textContent = email;
           document.querySelector('.auth-toggle').classList.add('hidden');
           Toast.show('Check your email for a verification code.', 'success');
-        } else {
-          State.session = result.user;
+        } else if (data.session) {
+          // Email confirmation disabled — logged in immediately
+          _setSessionFromSupaUser(data.user);
           Toast.show('Account created! Welcome to ee_tasha hairs.', 'success');
           renderNav('account');
           await showDashboard();
@@ -178,21 +191,22 @@
       btn.disabled = true; btn.textContent = 'Verifying…';
       try {
         const email = document.getElementById('otpEmail').textContent;
-        const code  = document.getElementById('otpCode').value.trim();
-        const { user } = await API.post('/api/auth/verify-otp', { email, code });
-        State.session = user;
+        const token = document.getElementById('otpCode').value.trim();
+        const { data, error } = await window._supabase.auth.verifyOtp({ email, token, type: 'signup' });
+        if (error) throw new Error(error.message);
+        _setSessionFromSupaUser(data.user);
         Toast.show('Email verified! Welcome to ee_tasha hairs.', 'success');
         renderNav('account');
         await showDashboard();
       } catch (err) {
-        Toast.show(err.message, 'error');
+        Toast.show('Invalid or expired code. Please try again.', 'error');
       } finally {
         btn.disabled = false; btn.textContent = 'Verify Email';
       }
     }
 
     async function handleLogout() {
-      await API.post('/api/auth/logout').catch(() => {});
+      if (window._supabase) await window._supabase.auth.signOut().catch(() => {});
       State.session = null;
       document.getElementById('loginEmail').value = '';
       document.getElementById('loginPassword').value = '';

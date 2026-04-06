@@ -1,203 +1,27 @@
 'use strict';
 require('dotenv').config();
 
-const express    = require('express');
-const cors       = require('cors');
-const helmet     = require('helmet');
-const rateLimit  = require('express-rate-limit');
-const crypto = require('crypto');
-const bcrypt     = require('bcryptjs');
+const express   = require('express');
+const cors      = require('cors');
+const helmet    = require('helmet');
+const rateLimit = require('express-rate-limit');
+const crypto    = require('crypto');
+const bcrypt    = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
-const path       = require('path');
-const mongoose   = require('mongoose');
+const path      = require('path');
+const { createClient } = require('@supabase/supabase-js');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-app.set('trust proxy', 1); // Vercel terminates SSL — tell Express to trust X-Forwarded-Proto
+app.set('trust proxy', 1);
 
 // ============================================================
-//  MONGOOSE MODELS
+//  SUPABASE CLIENT  (server-side, service role — never exposed to client)
 // ============================================================
-
-const toJson = {
-  transform: (_doc, ret) => {
-    ret.id = ret._id.toString();
-    delete ret._id;
-    delete ret.__v;
-  },
-};
-
-const productSchema = new mongoose.Schema({
-  name:        { type: String, required: true, maxlength: 200 },
-  price:       { type: Number, required: true, min: 0 },
-  category:    { type: String, required: true, maxlength: 100 },
-  description: { type: String, maxlength: 2000, default: '' },
-  image_url:   { type: String, maxlength: 2000, default: '' },
-  in_stock:    { type: Boolean, default: true },
-  featured:    { type: Boolean, default: false },
-}, { timestamps: { createdAt: 'created_at', updatedAt: false }, toJSON: toJson });
-
-const userSchema = new mongoose.Schema({
-  name:          { type: String, required: true, maxlength: 100 },
-  email:         { type: String, required: true, unique: true, lowercase: true },
-  password_hash: { type: String, required: true },
-  role:          { type: String, default: 'customer' },
-  verified:      { type: Boolean, default: false },
-}, { timestamps: { createdAt: 'created_at', updatedAt: false }, toJSON: toJson });
-
-const adminSchema = new mongoose.Schema({
-  username:      { type: String, required: true, unique: true },
-  password_hash: { type: String, required: true },
-}, { timestamps: { createdAt: 'created_at', updatedAt: false }, toJSON: toJson });
-
-const orderSchema = new mongoose.Schema({
-  order_number:      { type: String, required: true, unique: true },
-  user_id:           { type: String, default: null },
-  customer_name:     { type: String, required: true },
-  customer_email:    { type: String, required: true },
-  customer_phone:    { type: String, required: true },
-  delivery_address:  { type: String, required: true },
-  subtotal:          Number,
-  delivery_fee:      Number,
-  total:             Number,
-  payment_method:    { type: String, enum: ['stripe', 'transfer'] },
-  payment_status:    { type: String, default: 'pending' },
-  order_status:      { type: String, default: 'pending' },
-  stripe_session_id: { type: String, default: null },
-  items: [{
-    product_id:   String,
-    product_name: String,
-    price:        Number,
-    quantity:     Number,
-    _id:          false,
-  }],
-}, { timestamps: { createdAt: 'created_at', updatedAt: false }, toJSON: toJson });
-
-const settingsSchema = new mongoose.Schema({
-  _key:          { type: String, default: 'global', unique: true },
-  whatsapp:      { type: String, default: '+447951828832' },
-  instagram:     { type: String, default: '@ee_tasha.hairs' },
-  bankName:      { type: String, default: '' },
-  sortCode:      { type: String, default: '' },
-  accountNumber: { type: String, default: '' },
-  accountName:   { type: String, default: 'ee_tasha hairs' },
-  currency:      { type: String, default: '£' },
-  deliveryFee:   { type: String, default: '5.99' },
-});
-
-const otpSchema = new mongoose.Schema({
-  email:      { type: String, required: true },
-  code:       { type: String, required: true },
-  expiresAt:  { type: Date, required: true },
-}, { timestamps: false });
-otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-
-const Product  = mongoose.model('Product',  productSchema);
-const User     = mongoose.model('User',     userSchema);
-const Admin    = mongoose.model('Admin',    adminSchema);
-const Order    = mongoose.model('Order',    orderSchema);
-const Settings = mongoose.model('Settings', settingsSchema);
-const OTP      = mongoose.model('OTP',      otpSchema);
-
-// ============================================================
-//  DATABASE CONNECTION  (cached for Vercel serverless)
-// ============================================================
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/eetasha';
-let _dbReady = false;
-
-let _dbPromise = mongoose.connect(MONGODB_URI);
-
-async function ensureDB() {
-  try { await _dbPromise; } catch {
-    _dbPromise = mongoose.connect(MONGODB_URI);
-    await _dbPromise;
-  }
-  if (!_dbReady) { await seedData(); _dbReady = true; }
-}
-
-// ============================================================
-//  HELPERS
-// ============================================================
-function clean(str) { return String(str || '').replace(/[<>]/g, '').trim(); }
-
-async function getSettings() {
-  let s = await Settings.findOne({ _key: 'global' });
-  if (!s) s = await Settings.create({ _key: 'global' });
-  return s;
-}
-
-// ============================================================
-//  EMAIL / OTP
-// ============================================================
-const emailEnabled = !!process.env.RESEND_API_KEY;
-let resendClient;
-if (emailEnabled) {
-  const { Resend } = require('resend');
-  resendClient = new Resend(process.env.RESEND_API_KEY);
-}
-
-function generateOTP() {
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
-
-async function sendOTPEmail(email, code) {
-  if (!emailEnabled) return;
-  await resendClient.emails.send({
-    from:    process.env.RESEND_FROM || 'ee_tasha hairs <onboarding@resend.dev>',
-    to:      email,
-    subject: 'Your verification code — ee_tasha hairs',
-    html:    `<div style="font-family:sans-serif;max-width:480px;margin:auto;">
-      <h2 style="color:#b8860b;">ee_tasha hairs</h2>
-      <p>Your verification code is:</p>
-      <div style="font-size:2.5rem;font-weight:700;letter-spacing:0.2em;color:#1a1a1a;padding:16px 0;">${code}</div>
-      <p style="color:#666;font-size:0.85rem;">This code expires in 15 minutes. Do not share it with anyone.</p>
-    </div>`,
-  });
-}
-
-// ============================================================
-//  SEED DEFAULT DATA  (runs once on first boot)
-// ============================================================
-async function seedData() {
-  await Settings.findOneAndUpdate(
-    { _key: 'global' }, {}, { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
-  // Migrate old placeholder contact details to real values
-  await Settings.updateOne(
-    { _key: 'global', whatsapp: { $in: ['+44', ''] } },
-    { $set: { whatsapp: '+447951828832', instagram: '@ee_tasha.hairs' } }
-  );
-
-  if (!(await Admin.countDocuments())) {
-    const hash = await bcrypt.hash('eetasha2024', 12);
-    await Admin.create({ username: 'admin', password_hash: hash });
-    console.log('  ✅ Admin account created  →  password: eetasha2024  (change this in the dashboard!)');
-  }
-
-  if (!(await Product.countDocuments())) {
-    await Product.insertMany([
-      { name: 'Luxury HD Lace Frontal Wig',  price: 285, category: 'Wigs',     in_stock: true,  featured: true,
-        image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBT_acbnNJllCa-myvQXbTiAfGG1Ng-QqFbGAkiQs-N2gTLamTG-VBCqWdJxYoLxkEHflEoVFQEO1dNJ7tDEsxeMaI-fo6TsDC2elJ8qLlmjTXj_jIOcxcRzSNC0kF2ZsgbKen96SmIlF-3tdv4-rUDhn5AuTOyqyLkIA5DYLTlTyV68_uJmM-kaukOSoiFnar8gf2jS663m_7sqDHdtlHRRh97ebJC7ktW1AmDgPtNkxRfvLnB4XtTUF6AN4IujIMcVb-dpYiJgg',
-        description: '100% Virgin Human Hair, 180% Density, pre-plucked hairline. HD Swiss Lace.' },
-      { name: 'Brazilian Body Wave Bundle',   price: 148, category: 'Bundles',  in_stock: true,  featured: true,
-        image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCtFlFGnIJDEScExko8LZfFdetzllUe281nGmyY-_5mvrSwbeNkgPiogL9PDYqoUtYpx5L5S0HJL4veqzYtae3i1_10ziTvrN8pF-Ve4OBKpc97oPc_A_bZxSTAcPY7t_-hTRCktKceWAcVrNgCTsZistyHHHYdd7KBuCFBG76GwV7raWzJ2WLo0hO2ltxV3pEgy-KUGOCbcIO1PCB_icgqMJmBKNGuzYVPvDShIiXHqIDJO3Fvn6nZxQUoPzuqOommSKJKAm9Y-A',
-        description: 'Premium Brazilian body wave, double drawn, natural colour. 12-30 inches.' },
-      { name: 'Raw Indian Deep Curl',          price: 165, category: 'Bundles',  in_stock: true,  featured: true,
-        image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCXS7g1NieJeyr80RdjUm0BGQe6WnTY1Dx98Az0nawtHWwKH6JbViftriQhDH99-yLvdGwXPMddit-PO2rQbPUvy5mdRcneQIpje-tWqQJHSvTaXb4EI-ESQc8cEsuRjAUoQVshPtYz67j72oYe5akSCQXOCJSrINxy2JQtc-Q1X8DF3hpVk9qDYChMz8VcD995q1KWQaYp4sK7qup7Mnw8p0CtnpIs1bS4OPzumNiFLyaAfUU9XBFczNct9xDqZfbebcGdchIk4A',
-        description: 'Single donor, unprocessed deep curl. Maintains pattern after wash.' },
-      { name: 'HD Lace Frontal 13×6',          price: 95,  category: 'Frontals', in_stock: true,  featured: false,
-        image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBjYIxz7Nhuwi6BcC5A8ZS7EJCO4WlubBQxq5gtiBgN22miZsePfKJZIcDtpLSazPz3hUJFT_YUg5dyxo5Pob6pUKfVWhawRGrxMGdnCCULOXx35pay6D18QciCQoeDHDAaz-7ndrbCsA5euHU7sNaFIHewA2IQmNKmnHyUSfozZZw_he1ERTpS97HiV7bu5p-JClUPkNeLNLQdDAemXHadupzuSbcZttkUjx7F-1dDSB8ci69IWAiGgxSc5-CGH7KVtKGts52O7w',
-        description: 'Invisible film HD lace frontal, ear to ear. Pre-plucked baby hairs.' },
-      { name: 'Signature Silk Serum',          price: 28,  category: 'Care',     in_stock: true,  featured: false,
-        image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB79wd18no-0YUtYprOsVvZIO6iGvx6CdKe7zmDDT1kNnxZJQh_f-j-fxrYQbMfYP8PmaziHEYG1k2yNESLGXq_-D6LagCXBEriKrlBMIbUSTb5h0q3jhCP4jrDR4lyycagvPM6YlBLL4-waBNIlDSu-1L0P8aRQs82WLl3bXvfv0FFuLXLgL-7BU8phXWF3ADGn7KimEmiMoyB7CfJRiuuu6NdZ8YNIRy6oBBDcIo5qa83ZjUeyRb0_O2evC6jobdkC8dnYER9Qw',
-        description: 'Nourish and protect your hair investment. Lightweight, anti-frizz formula.' },
-      { name: 'Peruvian Silk Straight',        price: 175, category: 'Bundles',  in_stock: false, featured: false,
-        image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuD1AFjTua3D9DtI66qS0iNH0MNGooSA-7fp5UNKNgTxQrea-D0AeuqZFeHqd55-1JMf0mdqT3bfaIRPQmMAau-lMfowV2FKRIwQ44P1PuZ4t0IlSyTv_1oKah4e53WYUIDxQofv_uzavuFacOy5sSlvQYpZHp-RTbEgVHxJUPBjkuSlPZsOt5XlZILhkTssn9jGlhkvuwhjZyQvcMNUL3osyjqbbFk4264MGlD-2jS_4LElcgy4KHgwhz9gsPrCVAXdn_bh2hHpsQ',
-        description: 'Double drawn, bone straight. Currently restocking from our supplier.' },
-    ]);
-    console.log('  ✅ Sample products seeded.');
-  }
-}
+const supabase = createClient(
+  process.env.SUPABASE_URL        || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+);
 
 // ============================================================
 //  STRIPE
@@ -207,17 +31,76 @@ let stripe;
 if (hasStripe) stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // ============================================================
+//  HELPERS
+// ============================================================
+function clean(str) { return String(str || '').replace(/[<>]/g, '').trim(); }
+function valid(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) { res.status(400).json({ error: errors.array()[0].msg }); return false; }
+  return true;
+}
+
+// ============================================================
+//  SEED / DEFAULTS  (runs once per cold start; idempotent)
+// ============================================================
+let _defaultsRun = false;
+async function ensureDefaults() {
+  if (_defaultsRun) return;
+  _defaultsRun = true;
+  try {
+    // Create admin account if none exists
+    const { count: adminCount } = await supabase
+      .from('admins').select('*', { count: 'exact', head: true });
+    if (adminCount === 0) {
+      const hash = await bcrypt.hash('eetasha2024', 12);
+      await supabase.from('admins').insert({ username: 'admin', password_hash: hash });
+      console.log('  ✅ Admin created  →  username: admin  password: eetasha2024  (change this!)');
+    }
+
+    // Seed sample products if none exist
+    const { count: productCount } = await supabase
+      .from('products').select('*', { count: 'exact', head: true });
+    if (productCount === 0) {
+      await supabase.from('products').insert([
+        { name: 'Luxury HD Lace Frontal Wig',  price: 285, category: 'Wigs',     in_stock: true,  featured: true,
+          image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBT_acbnNJllCa-myvQXbTiAfGG1Ng-QqFbGAkiQs-N2gTLamTG-VBCqWdJxYoLxkEHflEoVFQEO1dNJ7tDEsxeMaI-fo6TsDC2elJ8qLlmjTXj_jIOcxcRzSNC0kF2ZsgbKen96SmIlF-3tdv4-rUDhn5AuTOyqyLkIA5DYLTlTyV68_uJmM-kaukOSoiFnar8gf2jS663m_7sqDHdtlHRRh97ebJC7ktW1AmDgPtNkxRfvLnB4XtTUF6AN4IujIMcVb-dpYiJgg',
+          description: '100% Virgin Human Hair, 180% Density, pre-plucked hairline. HD Swiss Lace.' },
+        { name: 'Brazilian Body Wave Bundle',   price: 148, category: 'Bundles',  in_stock: true,  featured: true,
+          image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCtFlFGnIJDEScExko8LZfFdetzllUe281nGmyY-_5mvrSwbeNkgPiogL9PDYqoUtYpx5L5S0HJL4veqzYtae3i1_10ziTvrN8pF-Ve4OBKpc97oPc_A_bZxSTAcPY7t_-hTRCktKceWAcVrNgCTsZistyHHHYdd7KBuCFBG76GwV7raWzJ2WLo0hO2ltxV3pEgy-KUGOCbcIO1PCB_icgqMJmBKNGuzYVPvDShIiXHqIDJO3Fvn6nZxQUoPzuqOommSKJKAm9Y-A',
+          description: 'Premium Brazilian body wave, double drawn, natural colour. 12-30 inches.' },
+        { name: 'Raw Indian Deep Curl',          price: 165, category: 'Bundles',  in_stock: true,  featured: true,
+          image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCXS7g1NieJeyr80RdjUm0BGQe6WnTY1Dx98Az0nawtHWwKH6JbViftriQhDH99-yLvdGwXPMddit-PO2rQbPUvy5mdRcneQIpje-tWqQJHSvTaXb4EI-ESQc8cEsuRjAUoQVshPtYz67j72oYe5akSCQXOCJSrINxy2JQtc-Q1X8DF3hpVk9qDYChMz8VcD995q1KWQaYp4sK7qup7Mnw8p0CtnpIs1bS4OPzumNiFLyaAfUU9XBFczNct9xDqZfbebcGdchIk4A',
+          description: 'Single donor, unprocessed deep curl. Maintains pattern after wash.' },
+        { name: 'HD Lace Frontal 13×6',          price: 95,  category: 'Frontals', in_stock: true,  featured: false,
+          image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBjYIxz7Nhuwi6BcC5A8ZS7EJCO4WlubBQxq5gtiBgN22miZsePfKJZIcDtpLSazPz3hUJFT_YUg5dyxo5Pob6pUKfVWhawRGrxMGdnCCULOXx35pay6D18QciCQoeDHDAaz-7ndrbCsA5euHU7sNaFIHewA2IQmNKmnHyUSfozZZw_he1ERTpS97HiV7bu5p-JClUPkNeLNLQdDAemXHadupzuSbcZttkUjx7F-1dDSB8ci69IWAiGgxSc5-CGH7KVtKGts52O7w',
+          description: 'Invisible film HD lace frontal, ear to ear. Pre-plucked baby hairs.' },
+        { name: 'Signature Silk Serum',          price: 28,  category: 'Care',     in_stock: true,  featured: false,
+          image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB79wd18no-0YUtYprOsVvZIO6iGvx6CdKe7zmDDT1kNnxZJQh_f-j-fxrYQbMfYP8PmaziHEYG1k2yNESLGXq_-D6LagCXBEriKrlBMIbUSTb5h0q3jhCP4jrDR4lyycagvPM6YlBLL4-waBNIlDSu-1L0P8aRQs82WLl3bXvfv0FFuLXLgL-7BU8phXWF3ADGn7KimEmiMoyB7CfJRiuuu6NdZ8YNIRy6oBBDcIo5qa83ZjUeyRb0_O2evC6jobdkC8dnYER9Qw',
+          description: 'Nourish and protect your hair investment. Lightweight, anti-frizz formula.' },
+        { name: 'Peruvian Silk Straight',        price: 175, category: 'Bundles',  in_stock: false, featured: false,
+          image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuD1AFjTua3D9DtI66qS0iNH0MNGooSA-7fp5UNKNgTxQrea-D0AeuqZFeHqd55-1JMf0mdqT3bfaIRPQmMAau-1MfowV2FKRIwQ44P1PuZ4t0IlSyTv_1oKah4e53WYUIDxQofv_uzavuFacOy5sSlvQYpZHp-RTbEgVHxJUPBjkuSlPZsOt5XlZILhkTssn9jGlhkvuwhjZyQvcMNUL3osyjqbbFk4264MGlD-2jS_4LElcgy4KHgwhz9gsPrCVAXdn_bh2hHpsQ',
+          description: 'Double drawn, bone straight. Currently restocking from our supplier.' },
+      ]);
+      console.log('  ✅ Sample products seeded.');
+    }
+  } catch (err) {
+    console.error('ensureDefaults error:', err.message);
+    _defaultsRun = false; // allow retry on next request
+  }
+}
+
+// ============================================================
 //  SECURITY MIDDLEWARE
 // ============================================================
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc:  ["'self'"],
-      scriptSrc:   ["'self'", "'unsafe-inline'", 'https://js.stripe.com'],
+      scriptSrc:   ["'self'", "'unsafe-inline'", 'https://js.stripe.com', 'https://cdn.jsdelivr.net'],
       styleSrc:    ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc:     ["'self'", 'https://fonts.gstatic.com', 'https://fonts.googleapis.com'],
       imgSrc:      ["'self'", 'data:', 'https:', 'blob:'],
-      connectSrc:  ["'self'", 'https://api.stripe.com'],
+      connectSrc:  ["'self'", 'https://api.stripe.com', 'https://*.supabase.co'],
       frameSrc:    ['https://js.stripe.com', 'https://hooks.stripe.com'],
       objectSrc:   ["'none'"],
     },
@@ -229,7 +112,9 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '500kb' }));
 app.use(express.urlencoded({ extended: true, limit: '500kb' }));
 
-// ---- Sessions: custom signed-cookie middleware (no on-headers, works on Vercel) ----
+// ============================================================
+//  ADMIN SESSION  (signed cookie — kept for admin only)
+// ============================================================
 const _sessSecret = process.env.SESSION_SECRET || 'et-fallback-secret';
 function _sessSign(payload) {
   return payload + '.' + crypto.createHmac('sha256', _sessSecret).update(payload).digest('base64url');
@@ -237,7 +122,7 @@ function _sessSign(payload) {
 function _sessUnsign(token) {
   const i = token.lastIndexOf('.');
   if (i < 0) return null;
-  const payload = token.slice(0, i);
+  const payload  = token.slice(0, i);
   const expected = _sessSign(payload);
   if (token.length !== expected.length) return null;
   let diff = 0;
@@ -245,7 +130,6 @@ function _sessUnsign(token) {
   return diff === 0 ? payload : null;
 }
 app.use(function sessionMiddleware(req, res, next) {
-  // Parse session from signed cookie
   const cookies = {};
   (req.headers.cookie || '').split(';').forEach(c => {
     const eq = c.indexOf('='); if (eq > 0) cookies[c.slice(0, eq).trim()] = c.slice(eq + 1).trim();
@@ -256,17 +140,16 @@ app.use(function sessionMiddleware(req, res, next) {
     const payload = _sessUnsign(token);
     if (payload) { try { Object.assign(req.session, JSON.parse(Buffer.from(payload, 'base64url').toString())); } catch {} }
   }
-  // Write session cookie on every response by patching res.end directly
   const origEnd = res.end.bind(res);
   res.end = function(...args) {
     if (!res.headersSent) {
-      const sess = req.session;
+      const sess   = req.session;
       const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
       if (sess === null) {
         res.setHeader('Set-Cookie', 'et_sess=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
       } else if (Object.keys(sess).length > 0) {
-        const payload = Buffer.from(JSON.stringify(sess)).toString('base64url');
-        res.setHeader('Set-Cookie', `et_sess=${_sessSign(payload)}; Path=/; Max-Age=${7*24*3600}; HttpOnly; SameSite=Lax${secure}`);
+        const p = Buffer.from(JSON.stringify(sess)).toString('base64url');
+        res.setHeader('Set-Cookie', `et_sess=${_sessSign(p)}; Path=/; Max-Age=${7*24*3600}; HttpOnly; SameSite=Lax${secure}`);
       }
     }
     return origEnd.apply(this, args);
@@ -274,143 +157,48 @@ app.use(function sessionMiddleware(req, res, next) {
   next();
 });
 
-// ---- Ensure DB is connected before API routes ----
-app.use('/api/', async (req, res, next) => {
-  try { await ensureDB(); next(); }
-  catch (err) {
-    console.error('DB unavailable:', err.message);
-    res.status(503).json({ error: 'Database temporarily unavailable. Please try again.' });
-  }
-});
-
-// ---- Rate limiters ----
-const authLimiter    = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true, message: { error: 'Too many attempts — please try again in 15 minutes.' } });
-const generalLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
-app.use('/api/', generalLimiter);
-
-// Static files (used locally; Vercel serves these directly in production)
-app.use(express.static(path.join(__dirname)));
-
+// Run ensureDefaults on first API request (Vercel cold-start safe)
+app.use('/api/', (req, res, next) => { ensureDefaults(); next(); });
 
 // ============================================================
-//  VALIDATION HELPER
-function valid(req, res) {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) { res.status(400).json({ error: errors.array()[0].msg }); return false; }
-  return true;
-}
+//  RATE LIMITERS
+// ============================================================
+const authLimiter    = rateLimit({ windowMs: 15*60*1000, max: 10, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true, message: { error: 'Too many attempts — please try again in 15 minutes.' } });
+const generalLimiter = rateLimit({ windowMs: 60*1000,    max: 200, standardHeaders: true, legacyHeaders: false });
+app.use('/api/', generalLimiter);
+
+// Static files (local dev only — Vercel serves these directly in production)
+app.use(express.static(path.join(__dirname)));
 
 // ============================================================
 //  ROUTE GUARDS
 // ============================================================
-function requireAuth(req, res, next) {
-  if (!req.session?.userId) return res.status(401).json({ error: 'Please log in to continue.' });
+
+// Customer: validates Supabase JWT from Authorization header
+async function requireUser(req, res, next) {
+  const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
+  if (!token) return res.status(401).json({ error: 'Please log in to continue.' });
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error || !user) return res.status(401).json({ error: 'Invalid or expired session.' });
+  req.userId = user.id;
   next();
 }
+
+// Optionally attach userId if JWT present (guest checkout still works without it)
+async function optionalUser(req, res, next) {
+  const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
+  if (token) {
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (user) req.userId = user.id;
+  }
+  next();
+}
+
+// Admin: uses signed-cookie session (unchanged)
 function requireAdmin(req, res, next) {
   if (!req.session?.adminId) return res.status(403).json({ error: 'Admin access required.' });
   next();
 }
-
-// ============================================================
-//  CUSTOMER AUTH
-// ============================================================
-app.post('/api/auth/register', authLimiter, [
-  body('name').trim().notEmpty().withMessage('Full name is required').isLength({ max: 100 }),
-  body('email').isEmail().withMessage('Please enter a valid email address').normalizeEmail(),
-  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
-], async (req, res) => {
-  if (!valid(req, res)) return;
-  try {
-    const { name, email, password } = req.body;
-    if (await User.findOne({ email })) {
-      return res.status(400).json({ error: 'An account with this email already exists.' });
-    }
-    const hash = await bcrypt.hash(password, 12);
-    // Create unverified user (verified: false until OTP confirmed)
-    const user = await User.create({ name: clean(name), email, password_hash: hash, verified: !emailEnabled });
-
-    if (emailEnabled) {
-      // Send OTP
-      const code = generateOTP();
-      await OTP.deleteMany({ email }); // clear any old codes
-      await OTP.create({ email, code, expiresAt: new Date(Date.now() + 15 * 60 * 1000) });
-      await sendOTPEmail(email, code);
-      return res.json({ needsVerification: true, email });
-    }
-
-    // Email not configured — log in directly
-    req.session.userId = user._id.toString();
-    const safe = user.toJSON();
-    delete safe.password_hash;
-    res.json({ user: safe });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Registration failed. Please try again.' });
-  }
-});
-
-app.post('/api/auth/verify-otp', authLimiter, [
-  body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
-  body('code').isLength({ min: 6, max: 6 }).withMessage('Invalid code'),
-], async (req, res) => {
-  if (!valid(req, res)) return;
-  try {
-    const { email, code } = req.body;
-    const record = await OTP.findOne({ email, code, expiresAt: { $gt: new Date() } });
-    if (!record) return res.status(400).json({ error: 'Invalid or expired code. Please try again.' });
-    await OTP.deleteMany({ email });
-    const user = await User.findOneAndUpdate({ email }, { verified: true }, { new: true });
-    if (!user) return res.status(400).json({ error: 'Account not found.' });
-    req.session.userId = user._id.toString();
-    const safe = user.toJSON();
-    delete safe.password_hash;
-    res.json({ user: safe });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Verification failed. Please try again.' });
-  }
-});
-
-app.post('/api/auth/login', authLimiter, [
-  body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
-  body('password').notEmpty().withMessage('Password is required'),
-], async (req, res) => {
-  if (!valid(req, res)) return;
-  try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email });
-    if (!user) return res.status(401).json({ error: 'No account found with that email.' });
-    const ok = await bcrypt.compare(password, user.password_hash);
-    if (!ok) return res.status(401).json({ error: 'Incorrect password.' });
-    if (emailEnabled && !user.verified) return res.status(401).json({ error: 'Please verify your email before logging in.', needsVerification: true, email: user.email });
-    req.session.userId = user._id.toString();
-    const safe = user.toJSON();
-    delete safe.password_hash;
-    res.json({ user: safe });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Login failed. Please try again.' });
-  }
-});
-
-app.post('/api/auth/logout', (req, res) => {
-  req.session = null;
-  res.json({ ok: true });
-});
-
-app.get('/api/auth/me', async (req, res) => {
-  if (!req.session?.userId) return res.json({ user: null });
-  try {
-    const user = await User.findById(req.session.userId);
-    if (!user) return res.json({ user: null });
-    const safe = user.toJSON();
-    delete safe.password_hash;
-    res.json({ user: safe });
-  } catch {
-    res.json({ user: null });
-  }
-});
 
 // ============================================================
 //  ADMIN AUTH
@@ -420,11 +208,11 @@ app.post('/api/admin/login', authLimiter, [
 ], async (req, res) => {
   if (!valid(req, res)) return;
   try {
-    const admin = await Admin.findOne({ username: 'admin' });
+    const { data: admin } = await supabase.from('admins').select('*').eq('username', 'admin').single();
     if (!admin) return res.status(401).json({ error: 'Invalid credentials.' });
     const ok = await bcrypt.compare(req.body.password, admin.password_hash);
     if (!ok) return res.status(401).json({ error: 'Incorrect admin password.' });
-    req.session.adminId = admin._id.toString();
+    req.session.adminId = admin.id;
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -432,7 +220,7 @@ app.post('/api/admin/login', authLimiter, [
   }
 });
 
-app.post('/api/admin/logout', async (req, res) => {
+app.post('/api/admin/logout', (req, res) => {
   delete req.session.adminId;
   res.json({ ok: true });
 });
@@ -441,7 +229,7 @@ app.get('/api/admin/me', (req, res) => {
   res.json({ isAdmin: !!req.session?.adminId });
 });
 
-app.post('/api/admin/change-password', requireAdmin, [
+app.post('/api/admin/change-password', requireAdmin, authLimiter, [
   body('currentPassword').notEmpty().withMessage('Current password is required'),
   body('newPassword').isLength({ min: 8 }).withMessage('New password must be at least 8 characters'),
   body('confirmPassword').notEmpty().withMessage('Please confirm your new password'),
@@ -450,11 +238,12 @@ app.post('/api/admin/change-password', requireAdmin, [
   const { currentPassword, newPassword, confirmPassword } = req.body;
   if (newPassword !== confirmPassword) return res.status(400).json({ error: 'Passwords do not match.' });
   try {
-    const admin = await Admin.findById(req.session.adminId);
-    const ok    = await bcrypt.compare(currentPassword, admin.password_hash);
+    const { data: admin } = await supabase.from('admins').select('*').eq('id', req.session.adminId).single();
+    if (!admin) return res.status(404).json({ error: 'Admin not found.' });
+    const ok = await bcrypt.compare(currentPassword, admin.password_hash);
     if (!ok) return res.status(401).json({ error: 'Incorrect current password.' });
-    admin.password_hash = await bcrypt.hash(newPassword, 12);
-    await admin.save();
+    const hash = await bcrypt.hash(newPassword, 12);
+    await supabase.from('admins').update({ password_hash: hash }).eq('id', req.session.adminId);
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: 'Failed to change password.' });
@@ -463,14 +252,21 @@ app.post('/api/admin/change-password', requireAdmin, [
 
 app.get('/api/admin/stats', requireAdmin, async (req, res) => {
   try {
-    const [productCount, customerCount, orders] = await Promise.all([
-      Product.countDocuments(),
-      User.countDocuments(),
-      Order.find({}, 'total order_status').lean(),
+    const [
+      { count: productCount },
+      { count: orderCount },
+      { data: orders },
+      { data: authData },
+    ] = await Promise.all([
+      supabase.from('products').select('*', { count: 'exact', head: true }),
+      supabase.from('orders').select('*', { count: 'exact', head: true }),
+      supabase.from('orders').select('total, order_status'),
+      supabase.auth.admin.listUsers({ perPage: 1000 }),
     ]);
-    const revenue = orders.filter(o => o.order_status !== 'cancelled').reduce((s, o) => s + (o.total || 0), 0);
-    const pending = orders.filter(o => o.order_status === 'pending').length;
-    res.json({ products: productCount, orders: orders.length, revenue, pending, customers: customerCount });
+    const revenue  = (orders || []).filter(o => o.order_status !== 'cancelled').reduce((s, o) => s + (parseFloat(o.total) || 0), 0);
+    const pending  = (orders || []).filter(o => o.order_status === 'pending').length;
+    const customers = authData?.users?.length || 0;
+    res.json({ products: productCount || 0, orders: orderCount || 0, revenue, pending, customers });
   } catch {
     res.status(500).json({ error: 'Failed to load stats.' });
   }
@@ -481,8 +277,9 @@ app.get('/api/admin/stats', requireAdmin, async (req, res) => {
 // ============================================================
 app.get('/api/products', async (req, res) => {
   try {
-    const products = await Product.find().sort({ createdAt: -1 });
-    res.json(products.map(p => p.toJSON()));
+    const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data);
   } catch {
     res.status(500).json({ error: 'Failed to load products.' });
   }
@@ -490,9 +287,9 @@ app.get('/api/products', async (req, res) => {
 
 app.get('/api/products/:id', async (req, res) => {
   try {
-    const p = await Product.findById(req.params.id);
-    if (!p) return res.status(404).json({ error: 'Product not found.' });
-    res.json(p.toJSON());
+    const { data, error } = await supabase.from('products').select('*').eq('id', req.params.id).single();
+    if (error || !data) return res.status(404).json({ error: 'Product not found.' });
+    res.json(data);
   } catch {
     res.status(404).json({ error: 'Product not found.' });
   }
@@ -508,12 +305,13 @@ app.post('/api/products', requireAdmin, [
   if (!valid(req, res)) return;
   try {
     const { name, price, category, image_url, description, in_stock, featured } = req.body;
-    const product = await Product.create({
+    const { data, error } = await supabase.from('products').insert({
       name: clean(name), price: parseFloat(price), category: clean(category),
       image_url: clean(image_url || ''), description: clean(description || ''),
       in_stock: !!in_stock, featured: !!featured,
-    });
-    res.status(201).json(product.toJSON());
+    }).select().single();
+    if (error) throw error;
+    res.status(201).json(data);
   } catch {
     res.status(500).json({ error: 'Failed to create product.' });
   }
@@ -529,13 +327,13 @@ app.put('/api/products/:id', requireAdmin, [
   if (!valid(req, res)) return;
   try {
     const { name, price, category, image_url, description, in_stock, featured } = req.body;
-    const product = await Product.findByIdAndUpdate(req.params.id, {
+    const { data, error } = await supabase.from('products').update({
       name: clean(name), price: parseFloat(price), category: clean(category),
       image_url: clean(image_url || ''), description: clean(description || ''),
       in_stock: !!in_stock, featured: !!featured,
-    }, { new: true });
-    if (!product) return res.status(404).json({ error: 'Product not found.' });
-    res.json(product.toJSON());
+    }).eq('id', req.params.id).select().single();
+    if (error || !data) return res.status(404).json({ error: 'Product not found.' });
+    res.json(data);
   } catch {
     res.status(404).json({ error: 'Product not found.' });
   }
@@ -543,8 +341,8 @@ app.put('/api/products/:id', requireAdmin, [
 
 app.delete('/api/products/:id', requireAdmin, async (req, res) => {
   try {
-    const result = await Product.findByIdAndDelete(req.params.id);
-    if (!result) return res.status(404).json({ error: 'Product not found.' });
+    const { error } = await supabase.from('products').delete().eq('id', req.params.id);
+    if (error) return res.status(404).json({ error: 'Product not found.' });
     res.json({ ok: true });
   } catch {
     res.status(404).json({ error: 'Product not found.' });
@@ -554,7 +352,7 @@ app.delete('/api/products/:id', requireAdmin, async (req, res) => {
 // ============================================================
 //  ORDERS
 // ============================================================
-app.post('/api/orders', [
+app.post('/api/orders', optionalUser, [
   body('customerName').trim().notEmpty().withMessage('Full name is required').isLength({ max: 100 }),
   body('customerEmail').isEmail().withMessage('Valid email is required').normalizeEmail(),
   body('customerPhone').trim().notEmpty().withMessage('Phone number is required').isLength({ max: 30 }),
@@ -567,29 +365,32 @@ app.post('/api/orders', [
   if (!valid(req, res)) return;
   try {
     const { customerName, customerEmail, customerPhone, deliveryAddress, items, paymentMethod } = req.body;
-    const settings    = await getSettings();
-    const deliveryFee = parseFloat(settings.deliveryFee) || 5.99;
+
+    // Get delivery fee from settings
+    const { data: settings } = await supabase.from('settings').select('delivery_fee').eq('id', 1).single();
+    const deliveryFee = parseFloat(settings?.delivery_fee) || 5.99;
 
     // Compute prices from DB — NEVER trust client-sent prices
-    let subtotal = 0;
+    let subtotal   = 0;
     const orderItems = [];
     for (const item of items) {
-      let product = null;
-      try { product = await Product.findById(item.productId); } catch { /* invalid id format */ }
+      const { data: product } = await supabase.from('products').select('*').eq('id', item.productId).single();
       if (!product) return res.status(400).json({ error: 'One or more products were not found.' });
       if (!product.in_stock) return res.status(400).json({ error: `"${product.name}" is currently out of stock.` });
       const qty = parseInt(item.qty);
       subtotal += product.price * qty;
-      orderItems.push({ product_id: product._id.toString(), product_name: product.name, price: product.price, quantity: qty });
+      orderItems.push({ product_id: product.id, product_name: product.name, price: product.price, quantity: qty });
     }
 
-    const total       = Math.round((subtotal + deliveryFee) * 100) / 100;
-    const count       = await Order.countDocuments();
-    const orderNumber = 'ORD-' + String(count + 1001).padStart(5, '0');
+    const total = Math.round((subtotal + deliveryFee) * 100) / 100;
 
-    const order = await Order.create({
+    // Generate order number
+    const { count } = await supabase.from('orders').select('*', { count: 'exact', head: true });
+    const orderNumber = 'ORD-' + String((count || 0) + 1001).padStart(5, '0');
+
+    const { data: order, error } = await supabase.from('orders').insert({
       order_number:     orderNumber,
-      user_id:          req.session?.userId || null,
+      user_id:          req.userId || null,
       customer_name:    clean(customerName),
       customer_email:   customerEmail,
       customer_phone:   clean(customerPhone),
@@ -599,19 +400,21 @@ app.post('/api/orders', [
       total,
       payment_method:   paymentMethod,
       items:            orderItems,
-    });
+    }).select().single();
 
-    res.status(201).json({ order: order.toJSON() });
+    if (error) throw error;
+    res.status(201).json({ order });
   } catch (err) {
     console.error('Order error:', err);
     res.status(500).json({ error: 'Failed to create order. Please try again.' });
   }
 });
 
-app.get('/api/orders/mine', requireAuth, async (req, res) => {
+app.get('/api/orders/mine', requireUser, async (req, res) => {
   try {
-    const orders = await Order.find({ user_id: req.session.userId }).sort({ createdAt: -1 });
-    res.json(orders.map(o => o.toJSON()));
+    const { data, error } = await supabase.from('orders').select('*').eq('user_id', req.userId).order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data);
   } catch {
     res.status(500).json({ error: 'Failed to load orders.' });
   }
@@ -619,8 +422,9 @@ app.get('/api/orders/mine', requireAuth, async (req, res) => {
 
 app.get('/api/orders', requireAdmin, async (req, res) => {
   try {
-    const orders = await Order.find().sort({ createdAt: -1 });
-    res.json(orders.map(o => o.toJSON()));
+    const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data);
   } catch {
     res.status(500).json({ error: 'Failed to load orders.' });
   }
@@ -631,8 +435,8 @@ app.put('/api/orders/:id/status', requireAdmin, [
 ], async (req, res) => {
   if (!valid(req, res)) return;
   try {
-    const order = await Order.findByIdAndUpdate(req.params.id, { order_status: req.body.status });
-    if (!order) return res.status(404).json({ error: 'Order not found.' });
+    const { error } = await supabase.from('orders').update({ order_status: req.body.status }).eq('id', req.params.id);
+    if (error) return res.status(404).json({ error: 'Order not found.' });
     res.json({ ok: true });
   } catch {
     res.status(404).json({ error: 'Order not found.' });
@@ -644,10 +448,19 @@ app.put('/api/orders/:id/status', requireAdmin, [
 // ============================================================
 app.get('/api/settings', async (req, res) => {
   try {
-    const s   = await getSettings();
-    const obj = s.toObject();
-    delete obj._id; delete obj.__v; delete obj._key;
-    res.json(obj);
+    const { data } = await supabase.from('settings').select('*').eq('id', 1).single();
+    if (!data) return res.json({});
+    // Map snake_case DB fields → camelCase for the client (same shape as before)
+    res.json({
+      whatsapp:      data.whatsapp,
+      instagram:     data.instagram,
+      bankName:      data.bank_name,
+      sortCode:      data.sort_code,
+      accountNumber: data.account_number,
+      accountName:   data.account_name,
+      currency:      data.currency,
+      deliveryFee:   data.delivery_fee,
+    });
   } catch {
     res.status(500).json({ error: 'Failed to load settings.' });
   }
@@ -658,12 +471,22 @@ app.put('/api/settings', requireAdmin, [
 ], async (req, res) => {
   if (!valid(req, res)) return;
   try {
-    const allowed = ['whatsapp', 'instagram', 'bankName', 'sortCode', 'accountNumber', 'accountName', 'currency', 'deliveryFee'];
+    // Map camelCase from client → snake_case for DB
+    const allowed = {
+      whatsapp:      'whatsapp',
+      instagram:     'instagram',
+      bankName:      'bank_name',
+      sortCode:      'sort_code',
+      accountNumber: 'account_number',
+      accountName:   'account_name',
+      currency:      'currency',
+      deliveryFee:   'delivery_fee',
+    };
     const updates = {};
-    for (const key of allowed) {
-      if (req.body[key] !== undefined) updates[key] = String(req.body[key]);
+    for (const [clientKey, dbKey] of Object.entries(allowed)) {
+      if (req.body[clientKey] !== undefined) updates[dbKey] = String(req.body[clientKey]);
     }
-    await Settings.findOneAndUpdate({ _key: 'global' }, updates, { upsert: true });
+    await supabase.from('settings').update(updates).eq('id', 1);
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: 'Failed to save settings.' });
@@ -671,18 +494,26 @@ app.put('/api/settings', requireAdmin, [
 });
 
 // ============================================================
-//  STRIPE
+//  CONFIG  (public keys for client-side SDKs)
 // ============================================================
 app.get('/api/config', (req, res) => {
-  res.json({ stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '', stripeEnabled: hasStripe });
+  res.json({
+    stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
+    stripeEnabled:        hasStripe,
+    supabaseUrl:          process.env.SUPABASE_URL       || '',
+    supabaseAnonKey:      process.env.SUPABASE_ANON_KEY  || '',
+  });
 });
 
+// ============================================================
+//  STRIPE
+// ============================================================
 app.post('/api/create-checkout-session', async (req, res) => {
-  if (!hasStripe) return res.status(400).json({ error: 'Stripe is not configured. Add your keys to .env file.' });
+  if (!hasStripe) return res.status(400).json({ error: 'Stripe is not configured.' });
   try {
     const { orderId } = req.body;
     if (!orderId) return res.status(400).json({ error: 'Order ID required.' });
-    const order = await Order.findById(orderId);
+    const { data: order } = await supabase.from('orders').select('*').eq('id', orderId).single();
     if (!order) return res.status(404).json({ error: 'Order not found.' });
 
     const lineItems = (order.items || []).map(i => ({
@@ -698,16 +529,15 @@ app.post('/api/create-checkout-session', async (req, res) => {
 
     const sess = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
-      line_items: lineItems,
-      mode: 'payment',
-      success_url: `${req.headers.origin}/checkout-success.html?session_id={CHECKOUT_SESSION_ID}&order_id=${order._id}`,
+      line_items:           lineItems,
+      mode:                 'payment',
+      success_url: `${req.headers.origin}/checkout-success.html?session_id={CHECKOUT_SESSION_ID}&order_id=${order.id}`,
       cancel_url:  `${req.headers.origin}/checkout.html`,
       customer_email: order.customer_email,
-      metadata: { orderId: order._id.toString(), orderNumber: order.order_number },
+      metadata: { orderId: order.id, orderNumber: order.order_number },
     });
 
-    order.stripe_session_id = sess.id;
-    await order.save();
+    await supabase.from('orders').update({ stripe_session_id: sess.id }).eq('id', orderId);
     res.json({ url: sess.url });
   } catch (err) {
     console.error('Stripe error:', err.message);
@@ -720,10 +550,9 @@ app.get('/api/verify-payment/:sessionId', async (req, res) => {
   try {
     const sess = await stripe.checkout.sessions.retrieve(req.params.sessionId);
     if (sess.payment_status === 'paid') {
-      await Order.findOneAndUpdate(
-        { stripe_session_id: req.params.sessionId },
-        { payment_status: 'paid', order_status: 'confirmed' }
-      );
+      await supabase.from('orders')
+        .update({ payment_status: 'paid', order_status: 'confirmed' })
+        .eq('stripe_session_id', req.params.sessionId);
     }
     res.json({ paid: sess.payment_status === 'paid', orderId: sess.metadata?.orderId, orderNumber: sess.metadata?.orderNumber });
   } catch (err) {
@@ -745,12 +574,11 @@ app.use((err, req, res, next) => {   // eslint-disable-line no-unused-vars
 module.exports = app;
 
 if (require.main === module) {
-  // Running directly with `node server.js` (local dev)
-  ensureDB()
-    .then(() => app.listen(PORT, () => {
+  ensureDefaults().then(() => {
+    app.listen(PORT, () => {
       console.log(`\n  ✨ ee_tasha hairs  →  http://localhost:${PORT}\n`);
       if (!hasStripe) console.log('  ⚠  Stripe NOT configured — add STRIPE_SECRET_KEY to .env\n');
       else            console.log('  ✅ Stripe connected.\n');
-    }))
-    .catch(err => { console.error('  ❌ Startup failed:', err.message); process.exit(1); });
+    });
+  }).catch(err => { console.error('  ❌ Startup failed:', err.message); process.exit(1); });
 }
