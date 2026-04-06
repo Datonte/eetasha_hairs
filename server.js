@@ -40,7 +40,6 @@ function clean(str) { return String(str || '').replace(/[<>]/g, '').trim(); }
 const DEFAULT_DELIVERY_OPTIONS = [
   { id:'evri',          carrier:'Evri',       service:'Standard',   prices:{ uk:3.20,  europe:9.99,  world:13.99 }, days:{ uk:'2-4 days', europe:'5-8 days', world:'8-14 days'  }, minDays:{ uk:2, europe:5, world:8  }, active:true },
   { id:'royal-mail-48', carrier:'Royal Mail', service:'Tracked 48', prices:{ uk:3.40,  europe:12.99, world:16.99 }, days:{ uk:'2-3 days', europe:'5-7 days', world:'7-14 days'  }, minDays:{ uk:2, europe:5, world:7  }, active:true },
-  { id:'parcel2go',     carrier:'Parcel2Go',  service:'Standard',   prices:{ uk:3.99,  europe:11.99, world:14.99 }, days:{ uk:'2-4 days', europe:'5-8 days', world:'7-14 days'  }, minDays:{ uk:2, europe:5, world:7  }, active:true },
   { id:'royal-mail-24', carrier:'Royal Mail', service:'Tracked 24', prices:{ uk:4.19,  europe:14.99, world:18.99 }, days:{ uk:'1-2 days', europe:'5-7 days', world:'7-10 days'  }, minDays:{ uk:1, europe:5, world:7  }, active:true },
   { id:'dpd',           carrier:'DPD',        service:'Next Day',   prices:{ uk:7.99,  europe:15.99, world:24.99 }, days:{ uk:'Next day', europe:'3-5 days', world:'5-8 days'   }, minDays:{ uk:1, europe:3, world:5  }, active:true },
   { id:'dhl',           carrier:'DHL',        service:'Express',    prices:{ uk:9.99,  europe:19.99, world:29.99 }, days:{ uk:'1-2 days', europe:'2-3 days', world:'3-5 days'   }, minDays:{ uk:1, europe:2, world:3  }, active:true },
