@@ -36,6 +36,15 @@ if (hasStripe) stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 //  HELPERS
 // ============================================================
 function clean(str) { return String(str || '').replace(/[<>]/g, '').trim(); }
+
+const DEFAULT_DELIVERY_OPTIONS = [
+  { id:'royal-mail', carrier:'Royal Mail', service:'Tracked',  prices:{ uk:3.49,  europe:11.99, world:16.99 }, days:{ uk:'2-3 days', europe:'5-7 days',  world:'7-14 days'  }, active:true },
+  { id:'evri',       carrier:'Evri',       service:'Standard', prices:{ uk:2.99,  europe:10.99, world:14.99 }, days:{ uk:'2-4 days', europe:'5-8 days',  world:'8-15 days'  }, active:true },
+  { id:'dpd',        carrier:'DPD',        service:'Next Day', prices:{ uk:5.99,  europe:14.99, world:22.99 }, days:{ uk:'1-2 days', europe:'3-5 days',  world:'5-10 days'  }, active:true },
+  { id:'parcel2go',  carrier:'Parcel2Go',  service:'Standard', prices:{ uk:3.99,  europe:12.99, world:18.99 }, days:{ uk:'2-3 days', europe:'5-7 days',  world:'7-14 days'  }, active:true },
+  { id:'ups',        carrier:'UPS',        service:'Express',  prices:{ uk:6.99,  europe:17.99, world:25.99 }, days:{ uk:'1-2 days', europe:'2-4 days',  world:'4-7 days'   }, active:true },
+  { id:'dhl',        carrier:'DHL',        service:'Express',  prices:{ uk:7.99,  europe:18.99, world:27.99 }, days:{ uk:'1-2 days', europe:'2-4 days',  world:'4-7 days'   }, active:true },
+];
 function valid(req, res) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) { res.status(400).json({ error: errors.array()[0].msg }); return false; }
@@ -50,6 +59,13 @@ async function ensureDefaults() {
   if (_defaultsRun) return;
   _defaultsRun = true;
   try {
+    // Seed delivery options if not set
+    const { data: settData } = await supabase.from('settings').select('delivery_options').eq('id', 1).single();
+    if (!settData?.delivery_options || settData.delivery_options.length === 0) {
+      await supabase.from('settings').update({ delivery_options: DEFAULT_DELIVERY_OPTIONS }).eq('id', 1);
+      console.log('  ✅ Default delivery options seeded.');
+    }
+
     // Create product-images storage bucket if it doesn't exist
     const { data: buckets } = await supabase.storage.listBuckets();
     if (!buckets?.find(b => b.name === 'product-images')) {
@@ -391,11 +407,21 @@ app.post('/api/orders', optionalUser, [
 ], async (req, res) => {
   if (!valid(req, res)) return;
   try {
-    const { customerName, customerEmail, customerPhone, deliveryAddress, items, paymentMethod } = req.body;
+    const { customerName, customerEmail, customerPhone, deliveryAddress, items, paymentMethod, deliveryCarrierId, deliveryRegion } = req.body;
 
-    // Get delivery fee from settings
-    const { data: settings } = await supabase.from('settings').select('delivery_fee').eq('id', 1).single();
-    const deliveryFee = parseFloat(settings?.delivery_fee) || 5.99;
+    // Get delivery fee — use selected carrier if provided, else fall back to flat fee
+    const { data: settings } = await supabase.from('settings').select('delivery_fee, delivery_options').eq('id', 1).single();
+    let deliveryFee     = parseFloat(settings?.delivery_fee) || 5.99;
+    let deliveryCarrier = '';
+    if (deliveryCarrierId && deliveryRegion) {
+      const opts    = settings?.delivery_options || [];
+      const region  = ['uk','europe','world'].includes(deliveryRegion) ? deliveryRegion : 'uk';
+      const carrier = opts.find(o => o.id === deliveryCarrierId && o.active);
+      if (carrier && carrier.prices?.[region] !== undefined) {
+        deliveryFee     = carrier.prices[region];
+        deliveryCarrier = `${carrier.carrier} ${carrier.service} (${region.toUpperCase()})`;
+      }
+    }
 
     // Compute prices from DB — NEVER trust client-sent prices
     let subtotal   = 0;
@@ -424,6 +450,7 @@ app.post('/api/orders', optionalUser, [
       delivery_address: clean(deliveryAddress),
       subtotal:         Math.round(subtotal * 100) / 100,
       delivery_fee:     deliveryFee,
+      delivery_carrier: deliveryCarrier,
       total,
       payment_method:   paymentMethod,
       items:            orderItems,
@@ -479,14 +506,15 @@ app.get('/api/settings', async (req, res) => {
     if (!data) return res.json({});
     // Map snake_case DB fields → camelCase for the client (same shape as before)
     res.json({
-      whatsapp:      data.whatsapp,
-      instagram:     data.instagram,
-      bankName:      data.bank_name,
-      sortCode:      data.sort_code,
-      accountNumber: data.account_number,
-      accountName:   data.account_name,
-      currency:      data.currency,
-      deliveryFee:   data.delivery_fee,
+      whatsapp:        data.whatsapp,
+      instagram:       data.instagram,
+      bankName:        data.bank_name,
+      sortCode:        data.sort_code,
+      accountNumber:   data.account_number,
+      accountName:     data.account_name,
+      currency:        data.currency,
+      deliveryFee:     data.delivery_fee,
+      deliveryOptions: data.delivery_options || [],
     });
   } catch {
     res.status(500).json({ error: 'Failed to load settings.' });
@@ -513,6 +541,7 @@ app.put('/api/settings', requireAdmin, [
     for (const [clientKey, dbKey] of Object.entries(allowed)) {
       if (req.body[clientKey] !== undefined) updates[dbKey] = String(req.body[clientKey]);
     }
+    if (req.body.deliveryOptions !== undefined) updates['delivery_options'] = req.body.deliveryOptions;
     await supabase.from('settings').update(updates).eq('id', 1);
     res.json({ ok: true });
   } catch {

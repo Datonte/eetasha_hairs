@@ -271,7 +271,7 @@ function renderNav(activePage = '', opts = {}) {
           <span class="cart-total-label">Total</span>
           <span class="cart-total-amount serif" id="cartTotal">£0.00</span>
         </div>
-        <a href="checkout.html" class="btn btn-primary btn-full" onclick="closeCart()">Checkout</a>
+        <a href="delivery.html" class="btn btn-primary btn-full" onclick="closeCart()">Checkout</a>
       </div>
     </div>`;
   updateCartCount();

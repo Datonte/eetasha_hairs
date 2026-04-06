@@ -79,10 +79,11 @@
                 <span style="font-size:0.85rem;color:var(--gray-500);">Subtotal</span>
                 <span id="coSubtotal" class="serif">£0.00</span>
               </div>
-              <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                 <span style="font-size:0.85rem;color:var(--gray-500);">Delivery</span>
                 <span id="coDelivery" class="serif">£0.00</span>
               </div>
+              <div id="coCarrierLabel" style="font-size:0.72rem;color:var(--gray-400);margin-bottom:8px;text-align:right;"></div>
               <div style="display:flex;justify-content:space-between;border-top:1px solid var(--gray-200);padding-top:12px;margin-top:12px;">
                 <span style="font-weight:700;text-transform:uppercase;font-size:0.75rem;letter-spacing:0.1em;">Total</span>
                 <span id="coTotal" class="serif" style="font-size:1.3rem;color:var(--gold-dark);font-weight:700;">£0.00</span>
@@ -125,6 +126,8 @@
   <div id="siteFooter"></div>
   <script src="js/app.js"></script>
   <script>
+    let _selectedDelivery = null;
+
     function renderCheckout() {
       const cart     = Store.getCart();
       const settings = Store.getSettings();
@@ -132,6 +135,14 @@
       if (cart.length === 0) {
         document.getElementById('checkoutContent').classList.add('hidden');
         document.getElementById('checkoutEmpty').classList.remove('hidden');
+        return;
+      }
+
+      // Read delivery selection from previous page
+      try { _selectedDelivery = JSON.parse(sessionStorage.getItem('et_delivery') || 'null'); } catch {}
+      if (!_selectedDelivery) {
+        // No delivery selected — send back
+        window.location.href = 'delivery.html';
         return;
       }
 
@@ -157,12 +168,13 @@
       }).join('');
 
       const subtotal = Store.getCartTotal();
-      const delivery = settings.deliveryFee || 0;
+      const delivery = _selectedDelivery.price || 0;
       const total    = subtotal + delivery;
 
-      document.getElementById('coSubtotal').textContent = formatCurrency(subtotal);
-      document.getElementById('coDelivery').textContent = delivery > 0 ? formatCurrency(delivery) : 'Free';
-      document.getElementById('coTotal').textContent    = formatCurrency(total);
+      document.getElementById('coSubtotal').textContent    = formatCurrency(subtotal);
+      document.getElementById('coDelivery').textContent    = delivery > 0 ? formatCurrency(delivery) : 'Free';
+      document.getElementById('coCarrierLabel').textContent = `${_selectedDelivery.carrier} ${_selectedDelivery.service} · ${_selectedDelivery.regionLabel} · ${_selectedDelivery.days}`;
+      document.getElementById('coTotal').textContent        = formatCurrency(total);
     }
 
     async function placeOrder() {
@@ -185,13 +197,16 @@
       try {
         // Create order on server — server calculates prices from DB (not from us)
         const { order } = await API.post('/api/orders', {
-          customerName:    name,
-          customerEmail:   email,
-          customerPhone:   phone,
-          deliveryAddress: address,
-          items: cart.map(i => ({ productId: i.productId, qty: i.qty })),
-          paymentMethod:   method,
+          customerName:      name,
+          customerEmail:     email,
+          customerPhone:     phone,
+          deliveryAddress:   address,
+          items:             cart.map(i => ({ productId: i.productId, qty: i.qty })),
+          paymentMethod:     method,
+          deliveryCarrierId: _selectedDelivery?.carrierId || '',
+          deliveryRegion:    _selectedDelivery?.region    || 'uk',
         });
+        sessionStorage.removeItem('et_delivery');
 
         Store.clearCart();
 

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delivery Options | ee_tasha hairs</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .region-grid { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:4px; }
+    .region-label { flex:1; min-width:130px; cursor:pointer; }
+    .region-label input { display:none; }
+    .region-card {
+      padding:14px 18px; border:2px solid var(--gray-200); border-radius:var(--radius);
+      text-align:center; font-size:0.9rem; font-weight:600; transition:all var(--transition);
+      background:#fff;
+    }
+    .region-label input:checked + .region-card {
+      border-color:var(--gold-dark); background:var(--gold-bg); color:var(--gold-dark);
+    }
+    .carrier-option { cursor:pointer; display:block; }
+    .carrier-option input { display:none; }
+    .carrier-card {
+      display:flex; align-items:center; gap:16px; padding:16px;
+      border:2px solid var(--gray-200); border-radius:var(--radius); margin-bottom:10px;
+      transition:all var(--transition); background:#fff;
+    }
+    .carrier-card:hover { border-color:var(--gold-light); }
+    .carrier-option input:checked + .carrier-card {
+      border-color:var(--gold-dark); background:var(--gold-bg);
+    }
+    .carrier-logo { font-size:1.8rem; width:40px; text-align:center; flex-shrink:0; }
+    .carrier-info { flex:1; }
+    .carrier-name { font-weight:700; font-size:0.95rem; }
+    .carrier-service { font-size:0.75rem; color:var(--gray-500); }
+    .carrier-days { font-size:0.75rem; color:var(--gray-400); margin-top:2px; }
+    .carrier-price { font-family:var(--font-head); font-size:1.1rem; color:var(--gold-dark); font-weight:700; }
+    .step-badge {
+      display:inline-block; background:var(--gold-dark); color:#fff;
+      border-radius:50%; width:24px; height:24px; line-height:24px;
+      text-align:center; font-size:0.75rem; font-weight:700; margin-right:8px;
+    }
+  </style>
+</head>
+<body data-page="delivery" class="page-enter">
+  <div id="siteNav"></div>
+
+  <section class="section page-top">
+    <div class="container" style="max-width:680px;">
+      <span class="section-subtitle">Checkout — Step 1 of 2</span>
+      <h1 class="serif mb-3">Choose Delivery</h1>
+
+      <div id="deliveryEmpty" class="hidden text-center" style="padding:60px 20px;">
+        <span class="material-symbols-outlined" style="font-size:48px;opacity:0.3;margin-bottom:12px;color:var(--gray-400);">shopping_bag</span>
+        <p style="color:var(--gray-400);margin-bottom:20px;">Your cart is empty.</p>
+        <a href="shop.html" class="btn btn-primary">Browse Products</a>
+      </div>
+
+      <div id="deliveryContent">
+        <!-- Region -->
+        <div class="admin-card mb-3">
+          <h3 class="serif mb-2"><span class="step-badge">1</span>Where are we delivering to?</h3>
+          <div class="region-grid">
+            <label class="region-label">
+              <input type="radio" name="region" value="uk" checked onchange="renderCarriers()">
+              <div class="region-card">🇬🇧 United Kingdom</div>
+            </label>
+            <label class="region-label">
+              <input type="radio" name="region" value="europe" onchange="renderCarriers()">
+              <div class="region-card">🇪🇺 Europe</div>
+            </label>
+            <label class="region-label">
+              <input type="radio" name="region" value="world" onchange="renderCarriers()">
+              <div class="region-card">🌍 Rest of World</div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Carriers -->
+        <div class="admin-card mb-3">
+          <h3 class="serif mb-2"><span class="step-badge">2</span>Select a carrier</h3>
+          <div id="carrierList"></div>
+        </div>
+
+        <button class="btn btn-primary btn-full" id="continueBtn" onclick="continueToCheckout()">
+          Continue to Checkout →
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <div id="siteFooter"></div>
+  <script src="js/app.js"></script>
+  <script>
+    const CARRIER_LOGOS = {
+      'royal-mail': '📮',
+      'evri':       '📦',
+      'dpd':        '🚚',
+      'parcel2go':  '📬',
+      'ups':        '🟤',
+      'dhl':        '🟡',
+    };
+
+    function getRegion() {
+      return document.querySelector('input[name="region"]:checked')?.value || 'uk';
+    }
+
+    function getRegionLabel(r) {
+      return r === 'uk' ? 'UK' : r === 'europe' ? 'Europe' : 'Rest of World';
+    }
+
+    function renderCarriers() {
+      const region  = getRegion();
+      const options = (Store.getSettings().deliveryOptions || []).filter(o => o.active);
+      const { currency } = Store.getSettings();
+      const list    = document.getElementById('carrierList');
+
+      if (!options.length) {
+        list.innerHTML = '<p style="color:var(--gray-400);text-align:center;padding:20px;">No delivery options available.</p>';
+        return;
+      }
+
+      list.innerHTML = options.map((o, i) => `
+        <label class="carrier-option">
+          <input type="radio" name="carrier" value="${o.id}" ${i === 0 ? 'checked' : ''}>
+          <div class="carrier-card">
+            <div class="carrier-logo">${CARRIER_LOGOS[o.id] || '📦'}</div>
+            <div class="carrier-info">
+              <div class="carrier-name">${escHtml(o.carrier)}</div>
+              <div class="carrier-service">${escHtml(o.service)}</div>
+              <div class="carrier-days">⏱ ${escHtml(o.days?.[region] || '')}</div>
+            </div>
+            <div class="carrier-price">${currency}${Number(o.prices?.[region] || 0).toFixed(2)}</div>
+          </div>
+        </label>`).join('');
+    }
+
+    function continueToCheckout() {
+      const region     = getRegion();
+      const carrierId  = document.querySelector('input[name="carrier"]:checked')?.value;
+      if (!carrierId) { Toast.show('Please select a carrier.', 'error'); return; }
+
+      const options  = Store.getSettings().deliveryOptions || [];
+      const carrier  = options.find(o => o.id === carrierId);
+      if (!carrier) { Toast.show('Invalid carrier selected.', 'error'); return; }
+
+      sessionStorage.setItem('et_delivery', JSON.stringify({
+        carrierId,
+        carrier:  carrier.carrier,
+        service:  carrier.service,
+        region,
+        regionLabel: getRegionLabel(region),
+        price:    carrier.prices?.[region] || 0,
+        days:     carrier.days?.[region]   || '',
+      }));
+
+      window.location.href = 'checkout.html';
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await initApp();
+      renderNav('');
+      renderFooter();
+      updateCartCount();
+
+      const cart = Store.getCart();
+      if (cart.length === 0) {
+        document.getElementById('deliveryContent').classList.add('hidden');
+        document.getElementById('deliveryEmpty').classList.remove('hidden');
+        return;
+      }
+      renderCarriers();
+    });
+  </script>
+</body>
+</html>

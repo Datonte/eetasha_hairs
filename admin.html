@@ -53,6 +53,9 @@
       <button class="admin-nav-item" onclick="switchTab('settings', this)">
         <span class="material-symbols-outlined">settings</span> Settings
       </button>
+      <button class="admin-nav-item" onclick="switchTab('delivery', this)">
+        <span class="material-symbols-outlined">local_shipping</span> Delivery
+      </button>
       <button class="admin-nav-item" onclick="adminLogout()" style="margin-top:auto;">
         <span class="material-symbols-outlined">logout</span> Log Out
       </button>
@@ -150,6 +153,31 @@
             <button type="submit" class="btn btn-primary mt-2">Update Password</button>
           </form>
         </div>
+      <!-- Delivery Tab -->
+      <div class="admin-tab-content" id="tabDelivery">
+        <div class="admin-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+            <h2 class="serif" style="margin:0;">Delivery Options</h2>
+            <button class="btn btn-primary btn-sm" onclick="saveDeliveryOptions()">Save Changes</button>
+          </div>
+          <p style="color:var(--gray-500);font-size:0.85rem;margin-bottom:20px;">Set prices per carrier and region. Toggle carriers on/off. Customers choose at checkout.</p>
+          <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+              <thead>
+                <tr style="border-bottom:2px solid var(--gray-200);">
+                  <th style="text-align:left;padding:10px 8px;color:var(--gray-500);font-weight:600;">Carrier</th>
+                  <th style="text-align:left;padding:10px 8px;color:var(--gray-500);font-weight:600;">Service</th>
+                  <th style="text-align:center;padding:10px 8px;color:var(--gray-500);font-weight:600;">🇬🇧 UK (£)</th>
+                  <th style="text-align:center;padding:10px 8px;color:var(--gray-500);font-weight:600;">🇪🇺 Europe (£)</th>
+                  <th style="text-align:center;padding:10px 8px;color:var(--gray-500);font-weight:600;">🌍 World (£)</th>
+                  <th style="text-align:center;padding:10px 8px;color:var(--gray-500);font-weight:600;">Active</th>
+                </tr>
+              </thead>
+              <tbody id="deliveryOptionsTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
       </div>
     </main>
   </div>
@@ -254,7 +282,7 @@
       document.getElementById('adminLogin').classList.add('hidden');
       document.getElementById('adminDash').classList.remove('hidden');
       document.getElementById('adminHeaderLogout').classList.remove('hidden');
-      await Promise.all([loadAdminStats(), loadAdminProducts(), loadAdminOrders(), loadSettings()]);
+      await Promise.all([loadAdminStats(), loadAdminProducts(), loadAdminOrders(), loadSettings(), loadDeliveryOptions()]);
     }
 
     // =================== TAB ===================
@@ -511,6 +539,54 @@
           deliveryFee:   parseFloat(document.getElementById('setDeliveryFee').value) || 0,
         });
         Toast.show('Settings saved!', 'success');
+      } catch (err) { Toast.show(err.message, 'error'); }
+    }
+
+    // =================== DELIVERY OPTIONS ===================
+    let _deliveryOptions = [];
+
+    async function loadDeliveryOptions() {
+      try {
+        const s = await API.get('/api/settings');
+        _deliveryOptions = s.deliveryOptions || [];
+        renderDeliveryTable();
+      } catch {}
+    }
+
+    function renderDeliveryTable() {
+      const tbody = document.getElementById('deliveryOptionsTable');
+      if (!tbody) return;
+      tbody.innerHTML = _deliveryOptions.map((o, i) => `
+        <tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:10px 8px;font-weight:600;">${escHtml(o.carrier)}</td>
+          <td style="padding:10px 8px;color:var(--gray-500);">${escHtml(o.service)}</td>
+          <td style="padding:8px;text-align:center;">
+            <input type="number" class="form-input" value="${o.prices?.uk ?? 0}" step="0.01" min="0"
+              style="width:80px;text-align:center;padding:6px 8px;"
+              onchange="_deliveryOptions[${i}].prices.uk=parseFloat(this.value)||0">
+          </td>
+          <td style="padding:8px;text-align:center;">
+            <input type="number" class="form-input" value="${o.prices?.europe ?? 0}" step="0.01" min="0"
+              style="width:80px;text-align:center;padding:6px 8px;"
+              onchange="_deliveryOptions[${i}].prices.europe=parseFloat(this.value)||0">
+          </td>
+          <td style="padding:8px;text-align:center;">
+            <input type="number" class="form-input" value="${o.prices?.world ?? 0}" step="0.01" min="0"
+              style="width:80px;text-align:center;padding:6px 8px;"
+              onchange="_deliveryOptions[${i}].prices.world=parseFloat(this.value)||0">
+          </td>
+          <td style="padding:8px;text-align:center;">
+            <input type="checkbox" ${o.active ? 'checked' : ''}
+              style="width:18px;height:18px;accent-color:var(--gold-dark);cursor:pointer;"
+              onchange="_deliveryOptions[${i}].active=this.checked">
+          </td>
+        </tr>`).join('');
+    }
+
+    async function saveDeliveryOptions() {
+      try {
+        await API.put('/api/settings', { deliveryOptions: _deliveryOptions });
+        Toast.show('Delivery options saved!', 'success');
       } catch (err) { Toast.show(err.message, 'error'); }
     }
 
