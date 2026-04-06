@@ -152,12 +152,12 @@ function renderCartSidebar() {
           <div class="cart-item-name">${escHtml(p.name)}</div>
           <div class="cart-item-price">${currency}${p.price.toFixed(2)}</div>
           <div class="cart-item-qty">
-            <button onclick="Store.updateCartQty(${p.id}, ${item.qty - 1}); renderCartSidebar();">−</button>
+            <button onclick="Store.updateCartQty('${p.id}', ${item.qty - 1}); renderCartSidebar();">−</button>
             <span>${item.qty}</span>
-            <button onclick="Store.updateCartQty(${p.id}, ${item.qty + 1}); renderCartSidebar();">+</button>
+            <button onclick="Store.updateCartQty('${p.id}', ${item.qty + 1}); renderCartSidebar();">+</button>
           </div>
         </div>
-        <button class="cart-item-remove" onclick="Store.removeFromCart(${p.id}); renderCartSidebar();">
+        <button class="cart-item-remove" onclick="Store.removeFromCart('${p.id}'); renderCartSidebar();">
           <span class="material-symbols-outlined" style="font-size:18px">close</span>
         </button>
       </div>`;
