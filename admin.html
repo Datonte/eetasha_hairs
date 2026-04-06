@@ -180,8 +180,15 @@
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Image URL</label>
-          <input type="url" class="form-input" id="pmImage" placeholder="Paste an image link here">
+          <label class="form-label">Product Image</label>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+            <input type="file" id="pmImageFile" accept="image/*" style="display:none;" onchange="uploadProductImage(this)">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('pmImageFile').click()">
+              📁 Upload from laptop
+            </button>
+            <span id="pmUploadStatus" style="font-size:0.8rem;color:var(--gray-500);"></span>
+          </div>
+          <input type="url" class="form-input" id="pmImage" placeholder="Or paste an image link here">
           <img id="pmPreview" class="img-preview hidden" alt="Preview">
         </div>
         <div class="form-group">
@@ -390,6 +397,28 @@
       } finally {
         btn.disabled = false; btn.textContent = 'Save Product';
       }
+    }
+
+    async function uploadProductImage(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const status = document.getElementById('pmUploadStatus');
+      status.textContent = 'Uploading…';
+      try {
+        const formData = new FormData();
+        formData.append('image', file);
+        const res  = await fetch('/api/admin/upload-image', { method: 'POST', body: formData });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Upload failed');
+        document.getElementById('pmImage').value = json.url;
+        updateImagePreview();
+        status.style.color = 'green';
+        status.textContent = '✓ Uploaded';
+      } catch (err) {
+        status.style.color = 'red';
+        status.textContent = err.message;
+      }
+      input.value = '';
     }
 
     function updateImagePreview() {

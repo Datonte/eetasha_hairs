@@ -10,6 +10,8 @@ const bcrypt    = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
 const path      = require('path');
 const { createClient } = require('@supabase/supabase-js');
+const multer  = require('multer');
+const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -48,6 +50,13 @@ async function ensureDefaults() {
   if (_defaultsRun) return;
   _defaultsRun = true;
   try {
+    // Create product-images storage bucket if it doesn't exist
+    const { data: buckets } = await supabase.storage.listBuckets();
+    if (!buckets?.find(b => b.name === 'product-images')) {
+      await supabase.storage.createBucket('product-images', { public: true });
+      console.log('  ✅ Storage bucket "product-images" created.');
+    }
+
     // Create admin account if none exists
     const { count: adminCount } = await supabase
       .from('admins').select('*', { count: 'exact', head: true });
@@ -247,6 +256,24 @@ app.post('/api/admin/change-password', requireAdmin, authLimiter, [
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: 'Failed to change password.' });
+  }
+});
+
+app.post('/api/admin/upload-image', requireAdmin, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file provided.' });
+    const ext      = req.file.originalname.split('.').pop().toLowerCase();
+    const allowed  = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+    if (!allowed.includes(ext)) return res.status(400).json({ error: 'Only jpg, png, webp or gif allowed.' });
+    const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage
+      .from('product-images')
+      .upload(filename, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
+    if (error) throw new Error(error.message);
+    const { data: { publicUrl } } = supabase.storage.from('product-images').getPublicUrl(filename);
+    res.json({ url: publicUrl });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
