@@ -355,9 +355,13 @@ function renderFooter() {
 // ============================================================
 function productCardHTML(p) {
   const { currency } = State.settings;
+  const desc = escHtml(p.description || '');
   return `
-    <div class="product-card">
-      <img class="product-card-img" src="${escHtml(p.image_url || '')}" alt="${escHtml(p.name)}" onerror="this.style.background='var(--gray-200)'" loading="lazy">
+    <div class="product-card" ontouchstart="this.classList.toggle('desc-open')">
+      <div class="product-card-img-wrap">
+        <img class="product-card-img" src="${escHtml(p.image_url || '')}" alt="${escHtml(p.name)}" onerror="this.style.background='var(--gray-200)'" loading="lazy">
+        ${desc ? `<div class="product-card-overlay"><p class="product-card-overlay-text">${desc}</p></div>` : ''}
+      </div>
       <div class="product-card-body">
         <div class="product-card-category">${escHtml(p.category || 'Hair')}</div>
         <div class="product-card-name">${escHtml(p.name)}</div>
