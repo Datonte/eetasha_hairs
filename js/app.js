@@ -51,6 +51,8 @@ function initApp() {
   if (!_initPromise) _initPromise = _doInit();
   return _initPromise;
 }
+// Safety net — if page-ready was never added (e.g. JS error), reveal after 1.5s
+setTimeout(() => document.body.classList.add('page-ready'), 1500);
 async function _doInit() {
   try {
     // Step 1: fetch config and initialise Supabase client

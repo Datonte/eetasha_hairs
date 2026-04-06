@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="page-enter">
+<body>
   <div id="siteNav"></div>
   <div class="auth-page">
     <div class="auth-card text-center">
@@ -53,6 +53,7 @@
         // Bank transfer order
         document.getElementById('orderId').textContent = `Order: ${orderId}`;
       }
+      document.body.classList.add('page-ready');
     });
   </script>
 </body>

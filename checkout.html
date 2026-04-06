@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Checkout | ee_tasha hairs</title>
   <link rel="stylesheet" href="css/style.css">
+  <script>if (!sessionStorage.getItem('et_delivery')) { window.location.replace('delivery.html'); }</script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body data-page="checkout" class="page-enter">
+<body data-page="checkout">
   <div id="siteNav"></div>
 
   <section class="section page-top">
@@ -253,6 +254,7 @@
       renderFooter();
       updateCartCount();
       renderCheckout();
+      document.body.classList.add('page-ready');
     });
   </script>
 </body>

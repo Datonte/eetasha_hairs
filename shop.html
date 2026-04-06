@@ -20,7 +20,7 @@
     }
   </style>
 </head>
-<body data-page="shop" class="page-enter">
+<body data-page="shop">
   <div id="siteNav"></div>
 
   <section class="section page-top">
@@ -83,6 +83,7 @@
       updateCartCount();
       renderFilters();
       renderShop();
+      document.body.classList.add('page-ready');
     });
   </script>
 </body>

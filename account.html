@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body data-page="account" class="page-enter">
+<body data-page="account">
   <div id="siteNav"></div>
 
   <!-- LOGIN / SIGNUP -->
@@ -360,6 +360,7 @@
 
       if (Store.getSession()) await showDashboard();
       else document.getElementById('authSection').classList.remove('hidden');
+      document.body.classList.add('page-ready');
     });
   </script>
 </body>

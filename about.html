@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body data-page="about" class="page-enter">
+<body data-page="about">
   <div id="siteNav"></div>
 
   <!-- Hero -->
@@ -105,6 +105,7 @@
       const ig = (s.instagram || '').replace('@', '');
       document.getElementById('whatsappLink').href  = wa ? `https://wa.me/${wa}` : '#';
       document.getElementById('instagramLink').href = ig ? `https://instagram.com/${ig}` : '#';
+      document.body.classList.add('page-ready');
     });
   </script>
 </body>
