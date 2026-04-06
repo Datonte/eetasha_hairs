@@ -129,14 +129,11 @@ async function getSettings() {
 // ============================================================
 //  EMAIL / OTP
 // ============================================================
-const emailEnabled = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
-let transporter;
+const emailEnabled = !!process.env.RESEND_API_KEY;
+let resendClient;
 if (emailEnabled) {
-  const nodemailer = require('nodemailer');
-  transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-  });
+  const { Resend } = require('resend');
+  resendClient = new Resend(process.env.RESEND_API_KEY);
 }
 
 function generateOTP() {
@@ -144,9 +141,9 @@ function generateOTP() {
 }
 
 async function sendOTPEmail(email, code) {
-  if (!emailEnabled) return; // skip in dev if no email configured
-  await transporter.sendMail({
-    from:    `"ee_tasha hairs" <${process.env.EMAIL_USER}>`,
+  if (!emailEnabled) return;
+  await resendClient.emails.send({
+    from:    process.env.RESEND_FROM || 'ee_tasha hairs <onboarding@resend.dev>',
     to:      email,
     subject: 'Your verification code — ee_tasha hairs',
     html:    `<div style="font-family:sans-serif;max-width:480px;margin:auto;">
