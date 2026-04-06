@@ -32,6 +32,32 @@
           <input type="password" class="form-input" id="loginPassword" placeholder="Your password" required autocomplete="current-password">
         </div>
         <button type="submit" class="btn btn-primary btn-full" id="loginBtn">Sign In</button>
+        <p style="text-align:center;margin-top:12px;font-size:0.85rem;">
+          <button type="button" onclick="showTab('forgot')" style="color:var(--gold-dark);text-decoration:underline;background:none;border:none;cursor:pointer;font-size:inherit;">Forgot password?</button>
+        </p>
+      </form>
+
+      <!-- Forgot Password Form -->
+      <form id="forgotForm" class="hidden" onsubmit="handleForgotPassword(event)">
+        <p style="text-align:center;color:var(--gray-600);margin-bottom:20px;">Enter your email and we'll send you a reset link.</p>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" class="form-input" id="forgotEmail" placeholder="you@email.com" required autocomplete="email">
+        </div>
+        <button type="submit" class="btn btn-primary btn-full" id="forgotBtn">Send Reset Link</button>
+        <p style="text-align:center;margin-top:12px;font-size:0.85rem;">
+          <button type="button" onclick="showTab('login')" style="color:var(--gold-dark);text-decoration:underline;background:none;border:none;cursor:pointer;font-size:inherit;">Back to sign in</button>
+        </p>
+      </form>
+
+      <!-- Reset Password Form (shown after clicking email link) -->
+      <form id="resetForm" class="hidden" onsubmit="handleResetPassword(event)">
+        <p style="text-align:center;color:var(--gray-600);margin-bottom:20px;">Enter your new password below.</p>
+        <div class="form-group">
+          <label class="form-label">New Password</label>
+          <input type="password" class="form-input" id="resetPassword" placeholder="At least 8 characters" minlength="8" required autocomplete="new-password">
+        </div>
+        <button type="submit" class="btn btn-primary btn-full" id="resetBtn">Set New Password</button>
       </form>
 
       <!-- Signup Form -->
@@ -102,6 +128,21 @@
         </div>
       </div>
 
+      <!-- Change Password -->
+      <div style="margin-bottom:32px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <h2 class="serif" style="margin:0;">Security</h2>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('changePasswordForm').classList.toggle('hidden')">Change Password</button>
+        </div>
+        <form id="changePasswordForm" class="hidden" onsubmit="handleChangePassword(event)" style="max-width:360px;">
+          <div class="form-group">
+            <label class="form-label">New Password</label>
+            <input type="password" class="form-input" id="changePasswordInput" placeholder="At least 8 characters" minlength="8" required autocomplete="new-password">
+          </div>
+          <button type="submit" class="btn btn-primary" id="changePasswordBtn">Update Password</button>
+        </form>
+      </div>
+
       <!-- Orders -->
       <h2 class="serif mb-2">Order History</h2>
       <div id="ordersList"></div>
@@ -118,8 +159,11 @@
     function showTab(tab) {
       document.getElementById('loginForm').classList.toggle('hidden', tab !== 'login');
       document.getElementById('signupForm').classList.toggle('hidden', tab !== 'signup');
+      document.getElementById('forgotForm').classList.toggle('hidden', tab !== 'forgot');
+      document.getElementById('resetForm').classList.toggle('hidden', tab !== 'reset');
       document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
       document.getElementById('tabSignup').classList.toggle('active', tab === 'signup');
+      document.querySelector('.auth-toggle').classList.toggle('hidden', tab === 'forgot' || tab === 'reset');
     }
 
     function _setSessionFromSupaUser(user) {
@@ -205,6 +249,62 @@
       }
     }
 
+    async function handleForgotPassword(e) {
+      e.preventDefault();
+      const btn = document.getElementById('forgotBtn');
+      btn.disabled = true; btn.textContent = 'Sending…';
+      try {
+        const email = document.getElementById('forgotEmail').value;
+        const { error } = await window._supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin + '/account.html',
+        });
+        if (error) throw new Error(error.message);
+        Toast.show('Reset link sent! Check your email.', 'success');
+        document.getElementById('forgotEmail').value = '';
+        showTab('login');
+      } catch (err) {
+        Toast.show(err.message, 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Send Reset Link';
+      }
+    }
+
+    async function handleResetPassword(e) {
+      e.preventDefault();
+      const btn = document.getElementById('resetBtn');
+      btn.disabled = true; btn.textContent = 'Updating…';
+      try {
+        const password = document.getElementById('resetPassword').value;
+        const { error } = await window._supabase.auth.updateUser({ password });
+        if (error) throw new Error(error.message);
+        Toast.show('Password updated! You are now signed in.', 'success');
+        renderNav('account');
+        await showDashboard();
+      } catch (err) {
+        Toast.show(err.message, 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Set New Password';
+      }
+    }
+
+    async function handleChangePassword(e) {
+      e.preventDefault();
+      const btn = document.getElementById('changePasswordBtn');
+      btn.disabled = true; btn.textContent = 'Updating…';
+      try {
+        const password = document.getElementById('changePasswordInput').value;
+        const { error } = await window._supabase.auth.updateUser({ password });
+        if (error) throw new Error(error.message);
+        Toast.show('Password changed successfully.', 'success');
+        document.getElementById('changePasswordForm').classList.add('hidden');
+        document.getElementById('changePasswordInput').value = '';
+      } catch (err) {
+        Toast.show(err.message, 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Update Password';
+      }
+    }
+
     async function handleLogout() {
       if (window._supabase) await window._supabase.auth.signOut().catch(() => {});
       State.session = null;
@@ -264,6 +364,18 @@
       renderNav('account');
       renderFooter();
       updateCartCount();
+
+      // Listen for password recovery event (user clicked reset link in email)
+      if (window._supabase) {
+        window._supabase.auth.onAuthStateChange((event) => {
+          if (event === 'PASSWORD_RECOVERY') {
+            document.getElementById('authSection').classList.remove('hidden');
+            document.getElementById('accountSection').classList.add('hidden');
+            showTab('reset');
+          }
+        });
+      }
+
       if (Store.getSession()) await showDashboard();
       else document.getElementById('authSection').classList.remove('hidden');
     });
