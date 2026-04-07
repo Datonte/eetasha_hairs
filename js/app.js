@@ -435,57 +435,98 @@ function openVariantModal(productId) {
   if (!p || !p.variants?.enabled) return;
   const v = p.variants;
   const { currency } = State.settings;
+  const vtype = v.variant_type || 'bundle'; // bundle | wig | big-wig | closure | frontal
 
-  let selInches = null, selBundles = null, selColour = null;
+  // ── Shared state ──────────────────────────────────────────────
+  let selInches = null, selBundles = null, selColour = null, selLace = null;
 
-  function bundleOptions(inches) {
-    return inches >= 30 ? [3,4,5] : [3,4];
+  const laceSizes   = v.lace_sizes || [];
+  const inchList    = (v.inches || []).slice().sort((a,b) => a-b);
+  const colourList  = v.colours || [];
+
+  function bundleOpts(i) { return i >= 30 ? [3,4,5] : [3,4]; }
+
+  // ── Key + label builders per type ────────────────────────────
+  function buildKey() {
+    if (vtype === 'bundle')  return (selInches && selBundles && selColour) ? `${selInches}-${selBundles}-${selColour}` : null;
+    if (vtype === 'wig' || vtype === 'big-wig') return (selInches && selLace) ? `${selInches}-${selLace}` : null;
+    if (vtype === 'closure' || vtype === 'frontal') return (selLace && selInches) ? `${selLace}-${selInches}` : null;
+    return null;
   }
-
-  function variantKey(i, b, c) { return `${i}-${b}-${c}`; }
-
+  function buildLabel() {
+    if (vtype === 'bundle')  return `${selInches}" · ${selBundles} Bundle${selBundles>1?'s':''} · ${selColour}`;
+    if (vtype === 'wig' || vtype === 'big-wig') return `${selInches}" · ${selLace} HD Lace`;
+    if (vtype === 'closure' || vtype === 'frontal') return `${selLace} · ${selInches}" Hair`;
+    return '';
+  }
   function currentPrice() {
-    if (!selInches || !selBundles || !selColour) return null;
-    return v.prices?.[variantKey(selInches, selBundles, selColour)] ?? null;
+    const k = buildKey();
+    return k !== null ? (v.prices?.[k] ?? null) : null;
   }
 
+  // ── Render ────────────────────────────────────────────────────
   function render() {
-    const inches  = (v.inches || []).slice().sort((a,b) => a-b);
-    const colours = v.colours || [];
-    const price   = currentPrice();
+    const price = currentPrice();
 
-    modal.querySelector('#vmInches').innerHTML = inches.map(i =>
-      `<button class="variant-opt-btn${selInches===i?' selected':''}" onclick="_vmSelectInch(${i})">${i}"</button>`
-    ).join('');
-
-    const bundleWrap = modal.querySelector('#vmBundlesWrap');
-    if (selInches) {
-      bundleWrap.style.display = '';
-      modal.querySelector('#vmBundles').innerHTML = bundleOptions(selInches).map(b =>
-        `<button class="variant-opt-btn${selBundles===b?' selected':''}" onclick="_vmSelectBundle(${b})">${b} Bundles</button>`
+    // Step 1 — always inches (bundle/wig/big-wig) OR lace size (closure/frontal)
+    if (vtype === 'closure' || vtype === 'frontal') {
+      modal.querySelector('#vmStep1Btns').innerHTML = laceSizes.map(ls =>
+        `<button class="variant-opt-btn${selLace===ls?' selected':''}" onclick="_vmSel1('${ls}')">${ls}</button>`
       ).join('');
-    } else { bundleWrap.style.display = 'none'; }
+      const s2 = modal.querySelector('#vmStep2Wrap');
+      if (selLace) {
+        s2.style.display = '';
+        modal.querySelector('#vmStep2Btns').innerHTML = inchList.map(i =>
+          `<button class="variant-opt-btn${selInches===i?' selected':''}" onclick="_vmSel2(${i})">${i}"</button>`
+        ).join('');
+      } else { s2.style.display = 'none'; }
+    } else {
+      // inches first
+      modal.querySelector('#vmStep1Btns').innerHTML = inchList.map(i =>
+        `<button class="variant-opt-btn${selInches===i?' selected':''}" onclick="_vmSel1(${i})">${i}"</button>`
+      ).join('');
 
-    const colourWrap = modal.querySelector('#vmColoursWrap');
-    if (selBundles) {
-      colourWrap.style.display = '';
-      modal.querySelector('#vmColours').innerHTML = colours.map(c =>
-        `<button class="variant-opt-btn${selColour===c?' selected':''}" onclick="_vmSelectColour('${c.replace(/'/g,"\\'")}')">
-           ${c === 'Natural' ? '🖤' : c === 'Burgundy' ? '🟥' : c === 'Blonde' ? '🌕' : '🟠'} ${escHtml(c)}
+      const s2 = modal.querySelector('#vmStep2Wrap');
+      if (selInches) {
+        s2.style.display = '';
+        if (vtype === 'bundle') {
+          modal.querySelector('#vmStep2Btns').innerHTML = bundleOpts(selInches).map(b =>
+            `<button class="variant-opt-btn${selBundles===b?' selected':''}" onclick="_vmSel2(${b})">${b} Bundles</button>`
+          ).join('');
+        } else {
+          // wig / big-wig → lace sizes
+          modal.querySelector('#vmStep2Btns').innerHTML = laceSizes.map(ls =>
+            `<button class="variant-opt-btn${selLace===ls?' selected':''}" onclick="_vmSel2('${ls}')">${ls}</button>`
+          ).join('');
+        }
+      } else { s2.style.display = 'none'; }
+    }
+
+    // Step 3 — colour (bundles only)
+    const s3 = modal.querySelector('#vmStep3Wrap');
+    if (vtype === 'bundle' && selBundles) {
+      s3.style.display = '';
+      modal.querySelector('#vmStep3Btns').innerHTML = colourList.map(c =>
+        `<button class="variant-opt-btn${selColour===c?' selected':''}" onclick="_vmSel3('${c.replace(/'/g,"\\'")}')">
+           ${escHtml(c)}
          </button>`
       ).join('');
-    } else { colourWrap.style.display = 'none'; }
+    } else { s3.style.display = 'none'; }
 
-    const priceEl = modal.querySelector('#vmPrice');
-    priceEl.textContent = price !== null ? `${currency}${price.toFixed(2)}` : '—';
-
-    const addBtn = modal.querySelector('#vmAddBtn');
-    addBtn.disabled = price === null;
+    modal.querySelector('#vmPrice').textContent = price !== null ? `${currency}${price.toFixed(2)}` : '—';
+    modal.querySelector('#vmAddBtn').disabled = price === null;
   }
 
-  // Remove any existing modal
-  document.getElementById('_variantModal')?.remove();
+  // ── Step labels per type ──────────────────────────────────────
+  const isClosureFrontal = vtype === 'closure' || vtype === 'frontal';
+  const step1Label = isClosureFrontal ? '1. Choose Lace Size' : '1. Choose Inches';
+  const step2Label = vtype === 'bundle' ? '2. Choose Bundles'
+                   : isClosureFrontal   ? '2. Choose Hair Length'
+                   :                     '2. Choose Lace Size';
+  const step3Label = '3. Choose Colour';
 
+  // ── Build modal HTML ──────────────────────────────────────────
+  document.getElementById('_variantModal')?.remove();
   const modal = document.createElement('div');
   modal.id = '_variantModal';
   modal.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.55);display:flex;align-items:flex-end;justify-content:center;padding:0;';
@@ -501,18 +542,18 @@ function openVariantModal(productId) {
       </div>
 
       <div style="margin-bottom:18px;">
-        <div class="variant-step-label">1. Choose Inches</div>
-        <div id="vmInches" class="variant-opts-row"></div>
+        <div class="variant-step-label">${step1Label}</div>
+        <div id="vmStep1Btns" class="variant-opts-row"></div>
       </div>
 
-      <div id="vmBundlesWrap" style="margin-bottom:18px;display:none;">
-        <div class="variant-step-label">2. Choose Bundles</div>
-        <div id="vmBundles" class="variant-opts-row"></div>
+      <div id="vmStep2Wrap" style="margin-bottom:18px;display:none;">
+        <div class="variant-step-label">${step2Label}</div>
+        <div id="vmStep2Btns" class="variant-opts-row"></div>
       </div>
 
-      <div id="vmColoursWrap" style="margin-bottom:20px;display:none;">
-        <div class="variant-step-label">3. Choose Colour</div>
-        <div id="vmColours" class="variant-opts-row"></div>
+      <div id="vmStep3Wrap" style="margin-bottom:20px;display:none;">
+        <div class="variant-step-label">${step3Label}</div>
+        <div id="vmStep3Btns" class="variant-opts-row"></div>
       </div>
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
@@ -526,15 +567,27 @@ function openVariantModal(productId) {
   document.body.appendChild(modal);
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 
-  // Exposed to onclick handlers
-  window._vmSelectInch   = (i) => { selInches = i; selBundles = null; selColour = null; render(); };
-  window._vmSelectBundle = (b) => { selBundles = b; selColour = null; render(); };
-  window._vmSelectColour = (c) => { selColour = c; render(); };
-  window._vmAddToCart    = (pid) => {
+  // Selection handlers — step 1
+  window._vmSel1 = (val) => {
+    if (isClosureFrontal) { selLace = val; selInches = null; }
+    else                  { selInches = (typeof val === 'number') ? val : parseInt(val); selBundles = null; selColour = null; selLace = null; }
+    render();
+  };
+  // Selection handlers — step 2
+  window._vmSel2 = (val) => {
+    if (vtype === 'bundle')          { selBundles = (typeof val === 'number') ? val : parseInt(val); selColour = null; }
+    else if (isClosureFrontal)       { selInches  = (typeof val === 'number') ? val : parseInt(val); }
+    else                             { selLace = val; } // wig/big-wig
+    render();
+  };
+  // Selection handlers — step 3 (colour, bundles only)
+  window._vmSel3 = (c) => { selColour = c; render(); };
+
+  window._vmAddToCart = (pid) => {
     const price = currentPrice();
-    if (price === null) return;
-    const label = `${selInches}" · ${selBundles} Bundle${selBundles>1?'s':''} · ${selColour}`;
-    Store.addToCart(pid, 1, { key: variantKey(selInches, selBundles, selColour), label, price });
+    const key   = buildKey();
+    if (price === null || !key) return;
+    Store.addToCart(pid, 1, { key, label: buildLabel(), price });
     modal.remove();
     openCart();
   };

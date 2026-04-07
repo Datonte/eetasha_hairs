@@ -261,17 +261,35 @@
             <span style="font-size:0.78rem;color:var(--gray-400);">(inches / bundles / colour pricing)</span>
           </div>
           <div id="pmVariantsConfig" style="display:none;margin-top:16px;">
+            <!-- Product Type -->
             <div class="form-group">
-              <label class="form-label" style="margin-bottom:8px;">Available Inches</label>
+              <label class="form-label" style="margin-bottom:8px;">Variant Type</label>
+              <select id="pmVariantType" class="form-input" style="max-width:220px;" onchange="onVariantTypeChange()">
+                <option value="bundle">Bundles (inches × bundles × colour)</option>
+                <option value="wig">Wig — HD Lace (inches × lace size)</option>
+                <option value="big-wig">Big Wig 32–40" (inches × lace size)</option>
+                <option value="closure">Closure (lace size × inches)</option>
+                <option value="frontal">Frontal (lace size × inches)</option>
+              </select>
+            </div>
+            <!-- Inches grid (hidden for closure/frontal step1) -->
+            <div class="form-group" style="margin-top:14px;" id="pmInchesSection">
+              <label class="form-label" id="pmInchesLabel" style="margin-bottom:8px;">Available Inches</label>
               <div id="pmInchesGrid" style="display:flex;flex-wrap:wrap;gap:7px;"></div>
             </div>
-            <div class="form-group" style="margin-top:14px;">
+            <!-- Lace sizes grid (hidden for bundle) -->
+            <div class="form-group" style="margin-top:14px;display:none;" id="pmLaceSizesSection">
+              <label class="form-label" style="margin-bottom:8px;">Available Lace Sizes</label>
+              <div id="pmLaceSizesGrid" style="display:flex;flex-wrap:wrap;gap:7px;"></div>
+            </div>
+            <!-- Colours grid (bundle only) -->
+            <div class="form-group" style="margin-top:14px;" id="pmColoursSection">
               <label class="form-label" style="margin-bottom:8px;">Available Colours</label>
               <div id="pmColoursGrid" style="display:flex;flex-wrap:wrap;gap:7px;"></div>
             </div>
             <div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
               <button type="button" class="btn btn-secondary btn-sm" onclick="buildVariantPriceTable()">Build Price Table</button>
-              <span style="font-size:0.78rem;color:var(--gray-400);">Select inches &amp; colours first, then build to enter prices.</span>
+              <span style="font-size:0.78rem;color:var(--gray-400);" id="pmBuildHint">Select options first, then build to enter prices.</span>
             </div>
             <div id="pmPriceTableWrap" style="display:none;margin-top:16px;overflow-x:auto;border:1px solid var(--gray-200);border-radius:8px;">
               <table id="pmPriceTable" style="border-collapse:collapse;font-size:0.82rem;width:100%;"></table>
@@ -651,46 +669,55 @@
     }
 
     // =================== VARIANTS ===================
-    const VARIANT_INCHES  = [12,14,16,18,20,22,24,26,28,30,32,34,36,38,40];
-    const VARIANT_COLOURS = ['Natural','Burgundy','Blonde','Ginger'];
+    const VARIANT_INCHES      = [12,14,16,18,20,22,24,26,28,30,32,34,36,38,40];
+    const VARIANT_COLOURS     = ['Natural (1B)', 'Colours 1-6#', 'Other Colours'];
+    const VARIANT_LACE_SIZES  = ['2x6','4x4','5x5','6x6','7x7','9x6','13x4','13x6'];
+
+    function _getVariantType() {
+      return document.getElementById('pmVariantType')?.value || 'bundle';
+    }
+
+    function onVariantTypeChange() {
+      const vt = _getVariantType();
+      const isBundle  = vt === 'bundle';
+      const isClosure = vt === 'closure' || vt === 'frontal';
+      document.getElementById('pmColoursSection').style.display    = isBundle  ? '' : 'none';
+      document.getElementById('pmLaceSizesSection').style.display  = isBundle  ? 'none' : '';
+      document.getElementById('pmInchesSection').style.display     = '';
+      // re-populate grids if empty
+      if (!document.getElementById('pmInchesGrid').children.length)    renderInchCheckboxes([]);
+      if (!document.getElementById('pmLaceSizesGrid').children.length) renderLaceCheckboxes([]);
+      if (!document.getElementById('pmColoursGrid').children.length)   renderColourCheckboxes([]);
+      document.getElementById('pmPriceTableWrap').style.display = 'none';
+      document.getElementById('pmPriceTable').innerHTML = '';
+    }
 
     function toggleVariantsUI() {
       const enabled = document.getElementById('pmVariantsEnabled').checked;
-      const config  = document.getElementById('pmVariantsConfig');
-      config.style.display = enabled ? 'block' : 'none';
-      if (enabled && !document.getElementById('pmInchesGrid').children.length) {
-        renderInchCheckboxes([]);
-        renderColourCheckboxes([]);
+      document.getElementById('pmVariantsConfig').style.display = enabled ? 'block' : 'none';
+      if (enabled) {
+        onVariantTypeChange();
       }
     }
 
-    function renderInchCheckboxes(selected) {
-      document.getElementById('pmInchesGrid').innerHTML = VARIANT_INCHES.map(n => {
+    function _checkboxGrid(items, dataAttr, selected) {
+      return items.map(n => {
         const on = selected.includes(n);
-        return `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:5px 10px;border-radius:6px;border:1.5px solid ${on ? 'var(--gold-dark)' : 'var(--gray-200)'};background:${on ? '#fff8e1' : '#fff'};font-size:0.82rem;font-weight:600;user-select:none;">
-          <input type="checkbox" data-inch="${n}" ${on ? 'checked' : ''} style="display:none;" onchange="this.closest('label').style.borderColor=this.checked?'var(--gold-dark)':'var(--gray-200)';this.closest('label').style.background=this.checked?'#fff8e1':'#fff'">
-          ${n}"
+        return `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:5px 10px;border-radius:6px;border:1.5px solid ${on?'var(--gold-dark)':'var(--gray-200)'};background:${on?'#fff8e1':'#fff'};font-size:0.82rem;font-weight:600;user-select:none;">
+          <input type="checkbox" data-${dataAttr}="${n}" ${on?'checked':''} style="display:none;"
+            onchange="this.closest('label').style.borderColor=this.checked?'var(--gold-dark)':'var(--gray-200)';this.closest('label').style.background=this.checked?'#fff8e1':'#fff'">
+          ${n}${dataAttr==='inch'?'"':''}
         </label>`;
       }).join('');
     }
 
-    function renderColourCheckboxes(selected) {
-      document.getElementById('pmColoursGrid').innerHTML = VARIANT_COLOURS.map(c => {
-        const on = selected.includes(c);
-        return `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:5px 12px;border-radius:6px;border:1.5px solid ${on ? 'var(--gold-dark)' : 'var(--gray-200)'};background:${on ? '#fff8e1' : '#fff'};font-size:0.82rem;font-weight:600;user-select:none;">
-          <input type="checkbox" data-colour="${c}" ${on ? 'checked' : ''} style="display:none;" onchange="this.closest('label').style.borderColor=this.checked?'var(--gold-dark)':'var(--gray-200)';this.closest('label').style.background=this.checked?'#fff8e1':'#fff'">
-          ${escHtml(c)}
-        </label>`;
-      }).join('');
-    }
+    function renderInchCheckboxes(selected)  { document.getElementById('pmInchesGrid').innerHTML    = _checkboxGrid(VARIANT_INCHES, 'inch', selected); }
+    function renderLaceCheckboxes(selected)  { document.getElementById('pmLaceSizesGrid').innerHTML  = _checkboxGrid(VARIANT_LACE_SIZES, 'lace', selected); }
+    function renderColourCheckboxes(selected){ document.getElementById('pmColoursGrid').innerHTML    = _checkboxGrid(VARIANT_COLOURS, 'colour', selected); }
 
-    function getSelectedInches() {
-      return [...document.querySelectorAll('#pmInchesGrid input[data-inch]:checked')].map(el => parseInt(el.dataset.inch));
-    }
-
-    function getSelectedColours() {
-      return [...document.querySelectorAll('#pmColoursGrid input[data-colour]:checked')].map(el => el.dataset.colour);
-    }
+    function getSelectedInches()  { return [...document.querySelectorAll('#pmInchesGrid input[data-inch]:checked')].map(el => parseInt(el.dataset.inch)); }
+    function getSelectedLaces()   { return [...document.querySelectorAll('#pmLaceSizesGrid input[data-lace]:checked')].map(el => el.dataset.lace); }
+    function getSelectedColours() { return [...document.querySelectorAll('#pmColoursGrid input[data-colour]:checked')].map(el => el.dataset.colour); }
 
     function _readCurrentPriceInputs() {
       const out = {};
@@ -700,51 +727,95 @@
       return out;
     }
 
-    function _renderPriceTable(inches, colours, prices) {
-      const wrap  = document.getElementById('pmPriceTableWrap');
-      const table = document.getElementById('pmPriceTable');
+    function _priceInput(key, prices) {
+      const val = (prices[key] !== undefined && prices[key] !== '') ? prices[key] : '';
+      return `<td style="padding:5px 6px;text-align:center;">
+        <input type="number" class="form-input" data-vkey="${escHtml(key)}" value="${val}"
+          placeholder="0.00" step="0.01" min="0"
+          style="width:78px;text-align:center;padding:5px 4px;font-size:0.82rem;">
+      </td>`;
+    }
+
+    function _renderPriceTableBundle(inches, colours, prices) {
       let html = `<thead><tr>
-        <th style="text-align:left;padding:9px 12px;background:var(--gray-100);white-space:nowrap;font-size:0.78rem;color:var(--gray-500);font-weight:700;">Size &amp; Bundles</th>
-        ${colours.map(c => `<th style="text-align:center;padding:9px 12px;background:var(--gray-100);font-size:0.78rem;color:var(--gray-500);font-weight:700;">${escHtml(c)}</th>`).join('')}
+        <th style="text-align:left;padding:9px 12px;background:var(--gray-100);white-space:nowrap;font-size:0.78rem;color:var(--gray-500);font-weight:700;">Inches &times; Bundles</th>
+        ${colours.map(c=>`<th style="text-align:center;padding:9px 12px;background:var(--gray-100);font-size:0.78rem;color:var(--gray-500);font-weight:700;">${escHtml(c)}</th>`).join('')}
       </tr></thead><tbody>`;
       for (const inch of inches) {
-        const bundles = inch >= 30 ? [3,4,5] : [3,4];
-        for (const bun of bundles) {
+        for (const bun of (inch >= 30 ? [3,4,5] : [3,4])) {
           html += `<tr style="border-bottom:1px solid var(--gray-100);">
             <td style="padding:7px 12px;font-weight:600;white-space:nowrap;font-size:0.82rem;">${inch}&quot; &times; ${bun} bun</td>
-            ${colours.map(c => {
-              const key = `${inch}-${bun}-${c}`;
-              const val = (prices[key] !== undefined && prices[key] !== '') ? prices[key] : '';
-              return `<td style="padding:5px 6px;text-align:center;">
-                <input type="number" class="form-input" data-vkey="${escHtml(key)}" value="${val}"
-                  placeholder="0.00" step="0.01" min="0"
-                  style="width:74px;text-align:center;padding:5px 4px;font-size:0.82rem;">
-              </td>`;
-            }).join('')}
+            ${colours.map(c => _priceInput(`${inch}-${bun}-${c}`, prices)).join('')}
           </tr>`;
         }
       }
-      html += '</tbody>';
-      table.innerHTML = html;
-      wrap.style.display = 'block';
+      return html + '</tbody>';
+    }
+
+    function _renderPriceTableWigOrBigWig(inches, laceSizes, prices) {
+      let html = `<thead><tr>
+        <th style="text-align:left;padding:9px 12px;background:var(--gray-100);white-space:nowrap;font-size:0.78rem;color:var(--gray-500);font-weight:700;">Inches</th>
+        ${laceSizes.map(ls=>`<th style="text-align:center;padding:9px 12px;background:var(--gray-100);font-size:0.78rem;color:var(--gray-500);font-weight:700;">${escHtml(ls)}</th>`).join('')}
+      </tr></thead><tbody>`;
+      for (const inch of inches) {
+        html += `<tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:7px 12px;font-weight:600;white-space:nowrap;font-size:0.82rem;">${inch}&quot;</td>
+          ${laceSizes.map(ls => _priceInput(`${inch}-${ls}`, prices)).join('')}
+        </tr>`;
+      }
+      return html + '</tbody>';
+    }
+
+    function _renderPriceTableClosureOrFrontal(laceSizes, inches, prices) {
+      let html = `<thead><tr>
+        <th style="text-align:left;padding:9px 12px;background:var(--gray-100);white-space:nowrap;font-size:0.78rem;color:var(--gray-500);font-weight:700;">Lace Size</th>
+        ${inches.map(i=>`<th style="text-align:center;padding:9px 12px;background:var(--gray-100);font-size:0.78rem;color:var(--gray-500);font-weight:700;">${i}&quot;</th>`).join('')}
+      </tr></thead><tbody>`;
+      for (const ls of laceSizes) {
+        html += `<tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:7px 12px;font-weight:600;white-space:nowrap;font-size:0.82rem;">${escHtml(ls)}</td>
+          ${inches.map(i => _priceInput(`${ls}-${i}`, prices)).join('')}
+        </tr>`;
+      }
+      return html + '</tbody>';
     }
 
     function buildVariantPriceTable() {
+      const vt      = _getVariantType();
       const inches  = getSelectedInches();
+      const laces   = getSelectedLaces();
       const colours = getSelectedColours();
-      if (!inches.length)  { Toast.show('Select at least one inch size first.', 'error');  return; }
-      if (!colours.length) { Toast.show('Select at least one colour first.', 'error'); return; }
-      const existing = _readCurrentPriceInputs(); // preserve already-entered prices
-      _renderPriceTable(inches, colours, existing);
+      const prices  = _readCurrentPriceInputs();
+      const wrap    = document.getElementById('pmPriceTableWrap');
+      const table   = document.getElementById('pmPriceTable');
+
+      if (vt === 'bundle') {
+        if (!inches.length)  { Toast.show('Select at least one inch size.', 'error'); return; }
+        if (!colours.length) { Toast.show('Select at least one colour.', 'error'); return; }
+        table.innerHTML = _renderPriceTableBundle(inches, colours, prices);
+      } else if (vt === 'wig' || vt === 'big-wig') {
+        if (!inches.length) { Toast.show('Select at least one inch size.', 'error'); return; }
+        if (!laces.length)  { Toast.show('Select at least one lace size.', 'error'); return; }
+        table.innerHTML = _renderPriceTableWigOrBigWig(inches, laces, prices);
+      } else { // closure / frontal
+        if (!laces.length)  { Toast.show('Select at least one lace size.', 'error'); return; }
+        if (!inches.length) { Toast.show('Select at least one inch size.', 'error'); return; }
+        table.innerHTML = _renderPriceTableClosureOrFrontal(laces, inches, prices);
+      }
+      wrap.style.display = 'block';
     }
 
     function getVariantsFromModal() {
       if (!document.getElementById('pmVariantsEnabled').checked) return null;
+      const vt      = _getVariantType();
       const inches  = getSelectedInches();
+      const laces   = getSelectedLaces();
       const colours = getSelectedColours();
-      if (!inches.length || !colours.length) return null;
-      const prices = _readCurrentPriceInputs();
-      return { enabled: true, inches, colours, prices, unavailable: [] };
+      const prices  = _readCurrentPriceInputs();
+      const base    = { enabled: true, variant_type: vt, prices, unavailable: [] };
+      if (vt === 'bundle')              return { ...base, inches, colours };
+      if (vt === 'wig' || vt === 'big-wig') return { ...base, inches, lace_sizes: laces };
+      return { ...base, lace_sizes: laces, inches }; // closure / frontal
     }
 
     function loadVariantsIntoModal(variants) {
@@ -753,17 +824,33 @@
         el.checked = false;
         document.getElementById('pmVariantsConfig').style.display = 'none';
         document.getElementById('pmPriceTableWrap').style.display = 'none';
-        document.getElementById('pmInchesGrid').innerHTML  = '';
-        document.getElementById('pmColoursGrid').innerHTML = '';
-        document.getElementById('pmPriceTable').innerHTML  = '';
+        ['pmInchesGrid','pmColoursGrid','pmLaceSizesGrid','pmPriceTable'].forEach(id => {
+          const el = document.getElementById(id); if (el) el.innerHTML = '';
+        });
         return;
       }
       el.checked = true;
       document.getElementById('pmVariantsConfig').style.display = 'block';
-      renderInchCheckboxes(variants.inches   || []);
-      renderColourCheckboxes(variants.colours || []);
-      if ((variants.inches || []).length && (variants.colours || []).length) {
-        _renderPriceTable(variants.inches, variants.colours, variants.prices || {});
+      const vt = variants.variant_type || 'bundle';
+      const typeEl = document.getElementById('pmVariantType');
+      if (typeEl) typeEl.value = vt;
+      onVariantTypeChange();
+      renderInchCheckboxes(variants.inches      || []);
+      renderLaceCheckboxes(variants.lace_sizes  || []);
+      renderColourCheckboxes(variants.colours   || []);
+      const prices = variants.prices || {};
+      const inches = variants.inches || [];
+      const laces  = variants.lace_sizes || [];
+      const cols   = variants.colours || [];
+      if (vt === 'bundle' && inches.length && cols.length) {
+        document.getElementById('pmPriceTable').innerHTML = _renderPriceTableBundle(inches, cols, prices);
+        document.getElementById('pmPriceTableWrap').style.display = 'block';
+      } else if ((vt === 'wig' || vt === 'big-wig') && inches.length && laces.length) {
+        document.getElementById('pmPriceTable').innerHTML = _renderPriceTableWigOrBigWig(inches, laces, prices);
+        document.getElementById('pmPriceTableWrap').style.display = 'block';
+      } else if ((vt === 'closure' || vt === 'frontal') && laces.length && inches.length) {
+        document.getElementById('pmPriceTable').innerHTML = _renderPriceTableClosureOrFrontal(laces, inches, prices);
+        document.getElementById('pmPriceTableWrap').style.display = 'block';
       }
     }
 
