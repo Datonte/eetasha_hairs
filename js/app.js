@@ -386,19 +386,22 @@ function productCardHTML(p) {
         <div class="product-card-name">${escHtml(p.name)}</div>
         <div class="product-card-price">${currency}${Number(p.price).toFixed(2)}</div>
         ${p.in_stock
-          ? `<button class="btn btn-primary btn-sm btn-full" onclick="addToCartOrLogin('${p.id}')">Add to Bag</button>`
+          ? (Store.getSession()
+              ? `<button class="btn btn-primary btn-sm btn-full" onclick="addToCartOrLogin('${p.id}')">Add to Bag</button>`
+              : `<button class="btn btn-secondary btn-sm btn-full" onclick="promptLogin()">Sign in to Buy</button>`)
           : `<span class="product-card-stock stock-out">Out of Stock</span>`}
       </div>
     </div>`;
 }
 
 function addToCartOrLogin(productId) {
-  if (!Store.getSession()) {
-    window.location.href = 'account.html';
-    return;
-  }
   Store.addToCart(productId);
   openCart();
+}
+
+function promptLogin() {
+  Toast.show('Please sign in to add items to your bag.', 'info');
+  setTimeout(() => { window.location.href = 'account.html'; }, 1200);
 }
 
 // ============================================================
