@@ -569,3 +569,38 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 /* Body stays invisible until JS marks it ready — prevents flash of wrong content */
 body { opacity: 0; }
 body.page-ready { opacity: 1; transition: opacity 0.22s ease; }
+
+/* ============= Carrier Badges ============= */
+.badge-cheap, .badge-fast {
+  display: inline-block; font-size: 0.7rem; font-weight: 700;
+  padding: 2px 7px; border-radius: 10px; margin-right: 4px; white-space: nowrap;
+}
+.badge-cheap { background: #fff8e1; color: #b8860b; border: 1px solid #f0d060; }
+.badge-fast  { background: #1a1a1a; color: #fff;    border: 1px solid #333; }
+
+/* ============= Variant Selection Modal (customer-facing) ============= */
+.variant-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 1100;
+  display: flex; align-items: flex-end; justify-content: center;
+  animation: fadeIn 0.15s ease;
+}
+.variant-modal {
+  background: #fff; border-radius: 18px 18px 0 0; padding: 24px 20px 32px;
+  width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto;
+  animation: slideUp 0.22s ease;
+}
+@keyframes slideUp { from { transform: translateY(60px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.variant-modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.variant-modal-title  { font-family: var(--font-head); font-size: 1.1rem; }
+.variant-step-label   { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray-500); margin: 14px 0 8px; }
+.variant-opts-row     { display: flex; flex-wrap: wrap; gap: 8px; }
+.variant-opt-btn {
+  padding: 8px 14px; border-radius: 8px; border: 1.5px solid var(--gray-200);
+  background: #fff; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.variant-opt-btn:hover   { border-color: var(--gold-dark); }
+.variant-opt-btn.selected { border-color: var(--gold-dark); background: var(--gold-dark); color: #fff; }
+.variant-opt-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.variant-price-display      { font-family: var(--font-head); font-size: 1.5rem; margin: 16px 0 4px; color: var(--gold-dark); }
+.variant-price-placeholder  { font-size: 0.85rem; color: var(--gray-400); margin: 16px 0 4px; }

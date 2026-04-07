@@ -348,11 +348,12 @@ app.post('/api/products', requireAdmin, [
 ], async (req, res) => {
   if (!valid(req, res)) return;
   try {
-    const { name, price, category, image_url, description, in_stock, featured } = req.body;
+    const { name, price, category, image_url, description, in_stock, featured, variants } = req.body;
     const { data, error } = await supabase.from('products').insert({
       name: clean(name), price: parseFloat(price), category: clean(category),
       image_url: clean(image_url || ''), description: clean(description || ''),
       in_stock: !!in_stock, featured: !!featured,
+      variants: variants && typeof variants === 'object' ? variants : null,
     }).select().single();
     if (error) throw error;
     res.status(201).json(data);
@@ -370,11 +371,12 @@ app.put('/api/products/:id', requireAdmin, [
 ], async (req, res) => {
   if (!valid(req, res)) return;
   try {
-    const { name, price, category, image_url, description, in_stock, featured } = req.body;
+    const { name, price, category, image_url, description, in_stock, featured, variants } = req.body;
     const { data, error } = await supabase.from('products').update({
       name: clean(name), price: parseFloat(price), category: clean(category),
       image_url: clean(image_url || ''), description: clean(description || ''),
       in_stock: !!in_stock, featured: !!featured,
+      variants: variants && typeof variants === 'object' ? variants : null,
     }).eq('id', req.params.id).select().single();
     if (error || !data) return res.status(404).json({ error: 'Product not found.' });
     res.json(data);
@@ -432,8 +434,24 @@ app.post('/api/orders', optionalUser, [
       if (!product) return res.status(400).json({ error: 'One or more products were not found.' });
       if (!product.in_stock) return res.status(400).json({ error: `"${product.name}" is currently out of stock.` });
       const qty = parseInt(item.qty);
-      subtotal += product.price * qty;
-      orderItems.push({ product_id: product.id, product_name: product.name, price: product.price, quantity: qty });
+
+      // Variant price validation
+      let unitPrice;
+      if (product.variants?.enabled) {
+        if (!item.variantKey) return res.status(400).json({ error: `Please select options for "${product.name}".` });
+        unitPrice = product.variants.prices?.[item.variantKey];
+        if (unitPrice === undefined) return res.status(400).json({ error: `Invalid option selected for "${product.name}".` });
+        if (product.variants.unavailable?.includes(item.variantKey)) return res.status(400).json({ error: `Selected option for "${product.name}" is unavailable.` });
+      } else {
+        unitPrice = product.price;
+      }
+
+      subtotal += unitPrice * qty;
+      orderItems.push({
+        product_id: product.id, product_name: product.name,
+        price: unitPrice, quantity: qty,
+        variant: item.variantKey || null, variant_label: item.variantLabel || null,
+      });
     }
 
     const total = Math.round((subtotal + deliveryFee) * 100) / 100;

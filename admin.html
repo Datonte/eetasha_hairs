@@ -248,6 +248,37 @@
             <span style="font-size:0.85rem;font-weight:600;">⭐ Featured on Homepage</span>
           </div>
         </div>
+
+        <!-- Variants Section -->
+        <div style="margin-top:20px;border-top:1px solid var(--gray-200);padding-top:18px;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;flex-wrap:wrap;">
+            <label class="toggle">
+              <input type="checkbox" id="pmVariantsEnabled" onchange="toggleVariantsUI()">
+              <span class="toggle-track"></span>
+              <span class="toggle-thumb"></span>
+            </label>
+            <span style="font-size:0.85rem;font-weight:600;">Enable Variants</span>
+            <span style="font-size:0.78rem;color:var(--gray-400);">(inches / bundles / colour pricing)</span>
+          </div>
+          <div id="pmVariantsConfig" style="display:none;margin-top:16px;">
+            <div class="form-group">
+              <label class="form-label" style="margin-bottom:8px;">Available Inches</label>
+              <div id="pmInchesGrid" style="display:flex;flex-wrap:wrap;gap:7px;"></div>
+            </div>
+            <div class="form-group" style="margin-top:14px;">
+              <label class="form-label" style="margin-bottom:8px;">Available Colours</label>
+              <div id="pmColoursGrid" style="display:flex;flex-wrap:wrap;gap:7px;"></div>
+            </div>
+            <div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="buildVariantPriceTable()">Build Price Table</button>
+              <span style="font-size:0.78rem;color:var(--gray-400);">Select inches &amp; colours first, then build to enter prices.</span>
+            </div>
+            <div id="pmPriceTableWrap" style="display:none;margin-top:16px;overflow-x:auto;border:1px solid var(--gray-200);border-radius:8px;">
+              <table id="pmPriceTable" style="border-collapse:collapse;font-size:0.82rem;width:100%;"></table>
+            </div>
+          </div>
+        </div>
+
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary btn-sm" onclick="closeProductModal()">Cancel</button>
@@ -392,6 +423,7 @@
       document.getElementById('pmDesc').value     = product?.description || '';
       document.getElementById('pmInStock').checked  = product ? !!product.in_stock : true;
       document.getElementById('pmFeatured').checked = product ? !!product.featured  : false;
+      loadVariantsIntoModal(product?.variants || null);
       updateImagePreview();
       document.getElementById('productModal').classList.add('open');
     }
@@ -413,6 +445,7 @@
         description: document.getElementById('pmDesc').value.trim(),
         in_stock:    document.getElementById('pmInStock').checked,
         featured:    document.getElementById('pmFeatured').checked,
+        variants:    getVariantsFromModal(),
       };
       if (!data.name || !data.price) { Toast.show('Name and price are required.', 'error'); return; }
 
@@ -615,6 +648,123 @@
         document.getElementById('pwdNew').value     = '';
         document.getElementById('pwdConfirm').value = '';
       } catch (err) { Toast.show(err.message, 'error'); }
+    }
+
+    // =================== VARIANTS ===================
+    const VARIANT_INCHES  = [12,14,16,18,20,22,24,26,28,30,32,34,36,38,40];
+    const VARIANT_COLOURS = ['Natural','Burgundy','Blonde','Ginger'];
+
+    function toggleVariantsUI() {
+      const enabled = document.getElementById('pmVariantsEnabled').checked;
+      const config  = document.getElementById('pmVariantsConfig');
+      config.style.display = enabled ? 'block' : 'none';
+      if (enabled && !document.getElementById('pmInchesGrid').children.length) {
+        renderInchCheckboxes([]);
+        renderColourCheckboxes([]);
+      }
+    }
+
+    function renderInchCheckboxes(selected) {
+      document.getElementById('pmInchesGrid').innerHTML = VARIANT_INCHES.map(n => {
+        const on = selected.includes(n);
+        return `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:5px 10px;border-radius:6px;border:1.5px solid ${on ? 'var(--gold-dark)' : 'var(--gray-200)'};background:${on ? '#fff8e1' : '#fff'};font-size:0.82rem;font-weight:600;user-select:none;">
+          <input type="checkbox" data-inch="${n}" ${on ? 'checked' : ''} style="display:none;" onchange="this.closest('label').style.borderColor=this.checked?'var(--gold-dark)':'var(--gray-200)';this.closest('label').style.background=this.checked?'#fff8e1':'#fff'">
+          ${n}"
+        </label>`;
+      }).join('');
+    }
+
+    function renderColourCheckboxes(selected) {
+      document.getElementById('pmColoursGrid').innerHTML = VARIANT_COLOURS.map(c => {
+        const on = selected.includes(c);
+        return `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:5px 12px;border-radius:6px;border:1.5px solid ${on ? 'var(--gold-dark)' : 'var(--gray-200)'};background:${on ? '#fff8e1' : '#fff'};font-size:0.82rem;font-weight:600;user-select:none;">
+          <input type="checkbox" data-colour="${c}" ${on ? 'checked' : ''} style="display:none;" onchange="this.closest('label').style.borderColor=this.checked?'var(--gold-dark)':'var(--gray-200)';this.closest('label').style.background=this.checked?'#fff8e1':'#fff'">
+          ${escHtml(c)}
+        </label>`;
+      }).join('');
+    }
+
+    function getSelectedInches() {
+      return [...document.querySelectorAll('#pmInchesGrid input[data-inch]:checked')].map(el => parseInt(el.dataset.inch));
+    }
+
+    function getSelectedColours() {
+      return [...document.querySelectorAll('#pmColoursGrid input[data-colour]:checked')].map(el => el.dataset.colour);
+    }
+
+    function _readCurrentPriceInputs() {
+      const out = {};
+      document.querySelectorAll('#pmPriceTable input[data-vkey]').forEach(el => {
+        if (el.value !== '') out[el.dataset.vkey] = parseFloat(el.value);
+      });
+      return out;
+    }
+
+    function _renderPriceTable(inches, colours, prices) {
+      const wrap  = document.getElementById('pmPriceTableWrap');
+      const table = document.getElementById('pmPriceTable');
+      let html = `<thead><tr>
+        <th style="text-align:left;padding:9px 12px;background:var(--gray-100);white-space:nowrap;font-size:0.78rem;color:var(--gray-500);font-weight:700;">Size &amp; Bundles</th>
+        ${colours.map(c => `<th style="text-align:center;padding:9px 12px;background:var(--gray-100);font-size:0.78rem;color:var(--gray-500);font-weight:700;">${escHtml(c)}</th>`).join('')}
+      </tr></thead><tbody>`;
+      for (const inch of inches) {
+        const bundles = inch >= 30 ? [3,4,5] : [3,4];
+        for (const bun of bundles) {
+          html += `<tr style="border-bottom:1px solid var(--gray-100);">
+            <td style="padding:7px 12px;font-weight:600;white-space:nowrap;font-size:0.82rem;">${inch}&quot; &times; ${bun} bun</td>
+            ${colours.map(c => {
+              const key = `${inch}-${bun}-${c}`;
+              const val = (prices[key] !== undefined && prices[key] !== '') ? prices[key] : '';
+              return `<td style="padding:5px 6px;text-align:center;">
+                <input type="number" class="form-input" data-vkey="${escHtml(key)}" value="${val}"
+                  placeholder="0.00" step="0.01" min="0"
+                  style="width:74px;text-align:center;padding:5px 4px;font-size:0.82rem;">
+              </td>`;
+            }).join('')}
+          </tr>`;
+        }
+      }
+      html += '</tbody>';
+      table.innerHTML = html;
+      wrap.style.display = 'block';
+    }
+
+    function buildVariantPriceTable() {
+      const inches  = getSelectedInches();
+      const colours = getSelectedColours();
+      if (!inches.length)  { Toast.show('Select at least one inch size first.', 'error');  return; }
+      if (!colours.length) { Toast.show('Select at least one colour first.', 'error'); return; }
+      const existing = _readCurrentPriceInputs(); // preserve already-entered prices
+      _renderPriceTable(inches, colours, existing);
+    }
+
+    function getVariantsFromModal() {
+      if (!document.getElementById('pmVariantsEnabled').checked) return null;
+      const inches  = getSelectedInches();
+      const colours = getSelectedColours();
+      if (!inches.length || !colours.length) return null;
+      const prices = _readCurrentPriceInputs();
+      return { enabled: true, inches, colours, prices, unavailable: [] };
+    }
+
+    function loadVariantsIntoModal(variants) {
+      const el = document.getElementById('pmVariantsEnabled');
+      if (!variants?.enabled) {
+        el.checked = false;
+        document.getElementById('pmVariantsConfig').style.display = 'none';
+        document.getElementById('pmPriceTableWrap').style.display = 'none';
+        document.getElementById('pmInchesGrid').innerHTML  = '';
+        document.getElementById('pmColoursGrid').innerHTML = '';
+        document.getElementById('pmPriceTable').innerHTML  = '';
+        return;
+      }
+      el.checked = true;
+      document.getElementById('pmVariantsConfig').style.display = 'block';
+      renderInchCheckboxes(variants.inches   || []);
+      renderColourCheckboxes(variants.colours || []);
+      if ((variants.inches || []).length && (variants.colours || []).length) {
+        _renderPriceTable(variants.inches, variants.colours, variants.prices || {});
+      }
     }
 
     // =================== INIT ===================

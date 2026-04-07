@@ -202,7 +202,7 @@
           customerEmail:     email,
           customerPhone:     phone,
           deliveryAddress:   address,
-          items:             cart.map(i => ({ productId: i.productId, qty: i.qty })),
+          items:             cart.map(i => ({ productId: i.productId, qty: i.qty, variantKey: i.variantKey || null, variantLabel: i.variantLabel || null })),
           paymentMethod:     method,
           deliveryCarrierId: _selectedDelivery?.carrierId || '',
           deliveryRegion:    _selectedDelivery?.region    || 'uk',

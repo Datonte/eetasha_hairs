@@ -119,33 +119,38 @@ const Store = {
 
   // ---- Cart (localStorage — no sensitive data) ----
   getCart()      { return _getRawCart(); },
-  addToCart(productId, qty = 1) {
-    const id   = String(productId);
+  addToCart(productId, qty = 1, variant = null) {
+    const id  = String(productId);
+    const vk  = variant?.key || null;
     const cart = _getRawCart();
-    const item = cart.find(i => i.productId === id);
-    if (item) item.qty += qty; else cart.push({ productId: id, qty });
+    const item = cart.find(i => i.productId === id && i.variantKey === vk);
+    if (item) { item.qty += qty; }
+    else { cart.push({ productId: id, variantKey: vk, variantLabel: variant?.label || null, variantPrice: variant?.price ?? null, qty }); }
     _saveRawCart(cart);
     updateCartCount();
     Toast.show('Added to bag', 'success');
   },
-  updateCartQty(productId, qty) {
+  updateCartQty(productId, qty, variantKey = null) {
     const id = String(productId);
-    let cart  = _getRawCart();
-    if (qty <= 0) cart = cart.filter(i => i.productId !== id);
-    else          cart = cart.map(i => i.productId === id ? { ...i, qty } : i);
+    const vk = variantKey || null;
+    let cart = _getRawCart();
+    if (qty <= 0) cart = cart.filter(i => !(i.productId === id && i.variantKey === vk));
+    else          cart = cart.map(i => (i.productId === id && i.variantKey === vk) ? { ...i, qty } : i);
     _saveRawCart(cart);
     updateCartCount();
   },
-  removeFromCart(productId) {
+  removeFromCart(productId, variantKey = null) {
     const id = String(productId);
-    _saveRawCart(_getRawCart().filter(i => i.productId !== id));
+    const vk = variantKey || null;
+    _saveRawCart(_getRawCart().filter(i => !(i.productId === id && i.variantKey === vk)));
     updateCartCount();
   },
   clearCart() { _saveRawCart([]); updateCartCount(); },
   getCartTotal() {
     return _getRawCart().reduce((sum, item) => {
       const p = this.getProduct(item.productId);
-      return sum + (p ? p.price * item.qty : 0);
+      const price = item.variantPrice ?? (p ? p.price : 0);
+      return sum + (price * item.qty);
     }, 0);
   },
 };
@@ -180,19 +185,22 @@ function renderCartSidebar() {
   container.innerHTML = cart.map(item => {
     const p = Store.getProduct(item.productId);
     if (!p) return '';
+    const unitPrice = item.variantPrice ?? p.price;
+    const vk = item.variantKey ? JSON.stringify(item.variantKey) : 'null';
     return `
       <div class="cart-item">
         <img class="cart-item-img" src="${escHtml(p.image_url || '')}" alt="${escHtml(p.name)}" onerror="this.style.background='var(--gray-200)'">
         <div class="cart-item-info">
           <div class="cart-item-name">${escHtml(p.name)}</div>
-          <div class="cart-item-price">${currency}${p.price.toFixed(2)}</div>
+          ${item.variantLabel ? `<div style="font-size:0.72rem;color:var(--gray-500);margin-bottom:2px;">${escHtml(item.variantLabel)}</div>` : ''}
+          <div class="cart-item-price">${currency}${unitPrice.toFixed(2)}</div>
           <div class="cart-item-qty">
-            <button onclick="Store.updateCartQty('${p.id}', ${item.qty - 1}); renderCartSidebar();">−</button>
+            <button onclick="Store.updateCartQty('${p.id}', ${item.qty - 1}, ${vk}); renderCartSidebar();">−</button>
             <span>${item.qty}</span>
-            <button onclick="Store.updateCartQty('${p.id}', ${item.qty + 1}); renderCartSidebar();">+</button>
+            <button onclick="Store.updateCartQty('${p.id}', ${item.qty + 1}, ${vk}); renderCartSidebar();">+</button>
           </div>
         </div>
-        <button class="cart-item-remove" onclick="Store.removeFromCart('${p.id}'); renderCartSidebar();">
+        <button class="cart-item-remove" onclick="Store.removeFromCart('${p.id}', ${vk}); renderCartSidebar();">
           <span class="material-symbols-outlined" style="font-size:18px">close</span>
         </button>
       </div>`;
@@ -375,6 +383,25 @@ function renderFooter() {
 function productCardHTML(p) {
   const { currency } = State.settings;
   const desc = escHtml(p.description || '');
+  const hasVariants = p.variants?.enabled && p.variants?.prices && Object.keys(p.variants.prices).length > 0;
+  const minPrice = hasVariants
+    ? Math.min(...Object.values(p.variants.prices))
+    : p.price;
+  const priceDisplay = hasVariants
+    ? `<span style="font-size:0.7rem;font-weight:500;color:var(--gray-400);">from </span>${currency}${minPrice.toFixed(2)}`
+    : `${currency}${Number(p.price).toFixed(2)}`;
+
+  let btn = '';
+  if (!p.in_stock) {
+    btn = `<span class="product-card-stock stock-out">Out of Stock</span>`;
+  } else if (!Store.getSession()) {
+    btn = `<button class="btn btn-secondary btn-sm btn-full" onclick="promptLogin()">Sign in to Buy</button>`;
+  } else if (hasVariants) {
+    btn = `<button class="btn btn-primary btn-sm btn-full" onclick="openVariantModal('${p.id}')">Select Options</button>`;
+  } else {
+    btn = `<button class="btn btn-primary btn-sm btn-full" onclick="addToCartOrLogin('${p.id}')">Add to Bag</button>`;
+  }
+
   return `
     <div class="product-card" ontouchstart="this.classList.toggle('desc-open')">
       <div class="product-card-img-wrap">
@@ -384,12 +411,8 @@ function productCardHTML(p) {
       <div class="product-card-body">
         <div class="product-card-category">${escHtml(p.category || 'Hair')}</div>
         <div class="product-card-name">${escHtml(p.name)}</div>
-        <div class="product-card-price">${currency}${Number(p.price).toFixed(2)}</div>
-        ${p.in_stock
-          ? (Store.getSession()
-              ? `<button class="btn btn-primary btn-sm btn-full" onclick="addToCartOrLogin('${p.id}')">Add to Bag</button>`
-              : `<button class="btn btn-secondary btn-sm btn-full" onclick="promptLogin()">Sign in to Buy</button>`)
-          : `<span class="product-card-stock stock-out">Out of Stock</span>`}
+        <div class="product-card-price">${priceDisplay}</div>
+        ${btn}
       </div>
     </div>`;
 }
@@ -402,6 +425,121 @@ function addToCartOrLogin(productId) {
 function promptLogin() {
   Toast.show('Please sign in to add items to your bag.', 'info');
   setTimeout(() => { window.location.href = 'account.html'; }, 1200);
+}
+
+// ============================================================
+//  VARIANT SELECTION MODAL
+// ============================================================
+function openVariantModal(productId) {
+  const p = Store.getProduct(productId);
+  if (!p || !p.variants?.enabled) return;
+  const v = p.variants;
+  const { currency } = State.settings;
+
+  let selInches = null, selBundles = null, selColour = null;
+
+  function bundleOptions(inches) {
+    return inches >= 30 ? [3,4,5] : [3,4];
+  }
+
+  function variantKey(i, b, c) { return `${i}-${b}-${c}`; }
+
+  function currentPrice() {
+    if (!selInches || !selBundles || !selColour) return null;
+    return v.prices?.[variantKey(selInches, selBundles, selColour)] ?? null;
+  }
+
+  function render() {
+    const inches  = (v.inches || []).slice().sort((a,b) => a-b);
+    const colours = v.colours || [];
+    const price   = currentPrice();
+
+    modal.querySelector('#vmInches').innerHTML = inches.map(i =>
+      `<button class="variant-opt-btn${selInches===i?' selected':''}" onclick="_vmSelectInch(${i})">${i}"</button>`
+    ).join('');
+
+    const bundleWrap = modal.querySelector('#vmBundlesWrap');
+    if (selInches) {
+      bundleWrap.style.display = '';
+      modal.querySelector('#vmBundles').innerHTML = bundleOptions(selInches).map(b =>
+        `<button class="variant-opt-btn${selBundles===b?' selected':''}" onclick="_vmSelectBundle(${b})">${b} Bundles</button>`
+      ).join('');
+    } else { bundleWrap.style.display = 'none'; }
+
+    const colourWrap = modal.querySelector('#vmColoursWrap');
+    if (selBundles) {
+      colourWrap.style.display = '';
+      modal.querySelector('#vmColours').innerHTML = colours.map(c =>
+        `<button class="variant-opt-btn${selColour===c?' selected':''}" onclick="_vmSelectColour('${c.replace(/'/g,"\\'")}')">
+           ${c === 'Natural' ? '🖤' : c === 'Burgundy' ? '🟥' : c === 'Blonde' ? '🌕' : '🟠'} ${escHtml(c)}
+         </button>`
+      ).join('');
+    } else { colourWrap.style.display = 'none'; }
+
+    const priceEl = modal.querySelector('#vmPrice');
+    priceEl.textContent = price !== null ? `${currency}${price.toFixed(2)}` : '—';
+
+    const addBtn = modal.querySelector('#vmAddBtn');
+    addBtn.disabled = price === null;
+  }
+
+  // Remove any existing modal
+  document.getElementById('_variantModal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = '_variantModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.55);display:flex;align-items:flex-end;justify-content:center;padding:0;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:92vh;overflow-y:auto;padding:24px 20px 32px;">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+        <img src="${escHtml(p.image_url||'')}" alt="" style="width:56px;height:64px;object-fit:cover;border-radius:8px;background:var(--gray-100);" onerror="this.style.background='var(--gray-200)'">
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:1rem;">${escHtml(p.name)}</div>
+          <div style="font-size:0.8rem;color:var(--gray-400);">${escHtml(p.category||'')}</div>
+        </div>
+        <button onclick="document.getElementById('_variantModal').remove()" style="background:none;border:none;cursor:pointer;font-size:22px;color:var(--gray-400);padding:4px;">✕</button>
+      </div>
+
+      <div style="margin-bottom:18px;">
+        <div class="variant-step-label">1. Choose Inches</div>
+        <div id="vmInches" class="variant-opts-row"></div>
+      </div>
+
+      <div id="vmBundlesWrap" style="margin-bottom:18px;display:none;">
+        <div class="variant-step-label">2. Choose Bundles</div>
+        <div id="vmBundles" class="variant-opts-row"></div>
+      </div>
+
+      <div id="vmColoursWrap" style="margin-bottom:20px;display:none;">
+        <div class="variant-step-label">3. Choose Colour</div>
+        <div id="vmColours" class="variant-opts-row"></div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <span style="font-size:0.85rem;color:var(--gray-500);">Price</span>
+        <span id="vmPrice" style="font-family:var(--font-head);font-size:1.3rem;color:var(--gold-dark);font-weight:700;">—</span>
+      </div>
+
+      <button id="vmAddBtn" disabled class="btn btn-primary btn-full" onclick="_vmAddToCart('${productId}')">Add to Bag</button>
+    </div>`;
+
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+  // Exposed to onclick handlers
+  window._vmSelectInch   = (i) => { selInches = i; selBundles = null; selColour = null; render(); };
+  window._vmSelectBundle = (b) => { selBundles = b; selColour = null; render(); };
+  window._vmSelectColour = (c) => { selColour = c; render(); };
+  window._vmAddToCart    = (pid) => {
+    const price = currentPrice();
+    if (price === null) return;
+    const label = `${selInches}" · ${selBundles} Bundle${selBundles>1?'s':''} · ${selColour}`;
+    Store.addToCart(pid, 1, { key: variantKey(selInches, selBundles, selColour), label, price });
+    modal.remove();
+    openCart();
+  };
+
+  render();
 }
 
 // ============================================================
