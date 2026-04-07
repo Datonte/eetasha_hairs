@@ -394,10 +394,10 @@ function productCardHTML(p) {
   let btn = '';
   if (!p.in_stock) {
     btn = `<span class="product-card-stock stock-out">Out of Stock</span>`;
-  } else if (!Store.getSession()) {
-    btn = `<button class="btn btn-secondary btn-sm btn-full" onclick="promptLogin()">Sign in to Buy</button>`;
   } else if (hasVariants) {
     btn = `<button class="btn btn-primary btn-sm btn-full" onclick="openVariantModal('${p.id}')">Select Options</button>`;
+  } else if (!Store.getSession()) {
+    btn = `<button class="btn btn-secondary btn-sm btn-full" onclick="promptLogin()">Sign in to Buy</button>`;
   } else {
     btn = `<button class="btn btn-primary btn-sm btn-full" onclick="addToCartOrLogin('${p.id}')">Add to Bag</button>`;
   }
@@ -587,6 +587,7 @@ function openVariantModal(productId) {
     const price = currentPrice();
     const key   = buildKey();
     if (price === null || !key) return;
+    if (!Store.getSession()) { modal.remove(); promptLogin(); return; }
     Store.addToCart(pid, 1, { key, label: buildLabel(), price });
     modal.remove();
     openCart();
