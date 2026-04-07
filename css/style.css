@@ -378,15 +378,32 @@ textarea.form-input { resize: vertical; min-height: 80px; }
   .admin-sidebar {
     position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
     display: flex; padding: 0; border-right: none; border-top: 1px solid var(--gray-200);
-    overflow-x: auto;
+    overflow-x: auto; -webkit-overflow-scrolling: touch; background:#fff;
   }
   .admin-nav-item {
-    flex-direction: column; gap: 4px; padding: 10px 16px;
+    flex-direction: column; gap: 4px; padding: 8px 14px;
     font-size: 0.6rem; flex-shrink: 0;
   }
   .admin-nav-item .material-symbols-outlined { font-size: 20px; }
   .admin-nav-item.active { border-right: none; border-top: 3px solid var(--gold-dark); }
-  .admin-main { padding: 16px; padding-bottom: 80px; }
+  .admin-main { padding: 14px; padding-bottom: 90px; }
+  .admin-card { padding: 14px; }
+  .admin-stat { padding: 14px 10px; }
+  .admin-stat-value { font-size: 1.5rem; }
+  /* keep stats in 2 columns even on small phones */
+  .admin-main .grid-4 { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  /* product row stacks nicely */
+  .admin-product-row { gap: 10px; }
+  .admin-product-actions { margin-left: auto; }
+  /* delivery table: allow horizontal scroll with touch */
+  .admin-card [style*="overflow-x:auto"] { -webkit-overflow-scrolling: touch; }
+  /* modal: tighter on mobile */
+  .modal { max-width: 100%; }
+  .modal-header { padding: 14px 16px; }
+  .modal-body { padding: 14px 16px; }
+  .modal-footer { padding: 12px 16px; flex-wrap: wrap; }
+  /* order cards */
+  .order-card { padding: 12px; }
 }
 
 /* ============= Login Card ============= */
