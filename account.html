@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Account | ee_tasha hairs</title>
+  <title>My Account | eetashacollection</title>
   <link rel="stylesheet" href="css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -200,7 +200,7 @@
         } else if (data.session) {
           // Email confirmation disabled — logged in immediately
           _setSessionFromSupaUser(data.user);
-          Toast.show('Account created! Welcome to ee_tasha hairs.', 'success');
+          Toast.show('Account created! Welcome to eetashacollection.', 'success');
           renderNav('account');
           await showDashboard();
         }
@@ -221,7 +221,7 @@
         const { data, error } = await window._supabase.auth.verifyOtp({ email, token, type: 'signup' });
         if (error) throw new Error(error.message);
         _setSessionFromSupaUser(data.user);
-        Toast.show('Email verified! Welcome to ee_tasha hairs.', 'success');
+        Toast.show('Email verified! Welcome to eetashacollection.', 'success');
         renderNav('account');
         await showDashboard();
       } catch (err) {

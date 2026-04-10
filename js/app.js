@@ -1,5 +1,5 @@
 /* ============================================================
-   ee_tasha hairs — Core Application Logic
+   eetashacollection — Core Application Logic
    All data comes from the server API (no localStorage for data).
    Cart is the only thing stored locally (no sensitive data).
    ============================================================ */
@@ -11,9 +11,9 @@ const State = {
   products: [],
   session:  null,   // logged-in customer { id, name, email, ... }
   settings: {
-    whatsapp: '+447951828832', instagram: '@ee_tasha.hairs',
+    whatsapp: '+447951828832', instagram: '@eetashacollection',
     currency: '£',  deliveryFee: 5.99,
-    bankName: '', sortCode: '', accountNumber: '', accountName: 'ee_tasha hairs',
+    bankName: '', sortCode: '', accountNumber: '', accountName: 'eetashacollection',
   },
 };
 
@@ -248,7 +248,7 @@ function renderNav(activePage = '', opts = {}) {
   nav.innerHTML = `
     <nav class="nav">
       <div class="nav-inner">
-        <a href="index.html" class="nav-brand">ee_tasha hairs</a>
+        <a href="index.html" class="nav-brand">eetashacollection</a>
         <div class="nav-links" id="navLinks">
           <a href="index.html" class="${activePage === 'home'    ? 'active' : ''}">Home</a>
           <a href="shop.html"  class="${activePage === 'shop'    ? 'active' : ''}">Shop</a>
@@ -353,7 +353,7 @@ function renderFooter() {
       <div class="container">
         <div class="footer-inner">
           <div>
-            <div class="footer-brand">ee_tasha hairs</div>
+            <div class="footer-brand">eetashacollection</div>
             <p class="footer-desc">Premium luxury hair for the modern woman. Quality that speaks for itself.</p>
             <div class="social-links">
               ${s.instagram ? `<a href="https://instagram.com/${escHtml(s.instagram.replace('@',''))}" target="_blank" rel="noopener" title="Instagram"><span class="material-symbols-outlined" style="font-size:18px">photo_camera</span></a>` : ''}
@@ -372,7 +372,7 @@ function renderFooter() {
             ${s.whatsapp ? `<a href="https://wa.me/${s.whatsapp.replace(/[^0-9]/g,'')}" target="_blank" rel="noopener">WhatsApp Support</a>` : ''}
           </div>
         </div>
-        <div class="footer-bottom">© ${new Date().getFullYear()} ee_tasha hairs. All rights reserved.</div>
+        <div class="footer-bottom">© ${new Date().getFullYear()} eetashacollection. All rights reserved.</div>
       </div>
     </footer>`;
 }

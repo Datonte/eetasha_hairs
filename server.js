@@ -651,7 +651,7 @@ module.exports = app;
 if (require.main === module) {
   ensureDefaults().then(() => {
     app.listen(PORT, () => {
-      console.log(`\n  ✨ ee_tasha hairs  →  http://localhost:${PORT}\n`);
+      console.log(`\n  ✨ eetashacollection  →  http://localhost:${PORT}\n`);
       if (!hasStripe) console.log('  ⚠  Stripe NOT configured — add STRIPE_SECRET_KEY to .env\n');
       else            console.log('  ✅ Stripe connected.\n');
     });
