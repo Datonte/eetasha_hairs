@@ -248,12 +248,12 @@ function renderNav(activePage = '', opts = {}) {
   nav.innerHTML = `
     <nav class="nav">
       <div class="nav-inner">
-        <a href="index.html" class="nav-brand">eetashacollection</a>
+        <a href="/" class="nav-brand">eetashacollection</a>
         <div class="nav-links" id="navLinks">
-          <a href="index.html" class="${activePage === 'home'    ? 'active' : ''}">Home</a>
-          <a href="shop.html"  class="${activePage === 'shop'    ? 'active' : ''}">Shop</a>
-          <a href="about.html" class="${activePage === 'about'   ? 'active' : ''}">About</a>
-          <a href="account.html" class="${activePage === 'account' ? 'active' : ''}">${sess ? 'My Account' : 'Login'}</a>
+          <a href="/" class="${activePage === 'home'    ? 'active' : ''}">Home</a>
+          <a href="/shop"  class="${activePage === 'shop'    ? 'active' : ''}">Shop</a>
+          <a href="/about" class="${activePage === 'about'   ? 'active' : ''}">About</a>
+          <a href="/account" class="${activePage === 'account' ? 'active' : ''}">${sess ? 'My Account' : 'Login'}</a>
         </div>
         <div class="nav-actions">
           ${!adminMode && sess ? `
@@ -281,7 +281,7 @@ function renderNav(activePage = '', opts = {}) {
           <span class="cart-total-label">Total</span>
           <span class="cart-total-amount serif" id="cartTotal">£0.00</span>
         </div>
-        <a href="delivery.html" class="btn btn-primary btn-full" onclick="closeCart()">Checkout</a>
+        <a href="/delivery" class="btn btn-primary btn-full" onclick="closeCart()">Checkout</a>
       </div>
     </div>`;
   updateCartCount();
@@ -294,7 +294,7 @@ async function navLogout() {
   if (window._supabase) await window._supabase.auth.signOut().catch(() => {});
   State.session = null;
   Toast.show('Signed out.', 'info');
-  setTimeout(() => { window.location.href = 'index.html'; }, 800);
+  setTimeout(() => { window.location.href = '/'; }, 800);
 }
 
 function openChangePasswordModal() {
@@ -362,13 +362,13 @@ function renderFooter() {
           </div>
           <div>
             <h4>Quick Links</h4>
-            <a href="shop.html">Shop All</a>
-            <a href="about.html">About Us</a>
-            <a href="account.html">My Account</a>
+            <a href="/shop">Shop All</a>
+            <a href="/about">About Us</a>
+            <a href="/account">My Account</a>
           </div>
           <div>
             <h4>Customer Care</h4>
-            <a href="about.html#contact">Contact Us</a>
+            <a href="/about#contact">Contact Us</a>
             ${s.whatsapp ? `<a href="https://wa.me/${s.whatsapp.replace(/[^0-9]/g,'')}" target="_blank" rel="noopener">WhatsApp Support</a>` : ''}
           </div>
         </div>
@@ -424,7 +424,7 @@ function addToCartOrLogin(productId) {
 
 function promptLogin() {
   Toast.show('Please sign in to add items to your bag.', 'info');
-  setTimeout(() => { window.location.href = 'account.html'; }, 1200);
+  setTimeout(() => { window.location.href = '/account'; }, 1200);
 }
 
 // ============================================================

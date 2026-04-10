@@ -194,7 +194,7 @@ const generalLimiter = rateLimit({ windowMs: 60*60*1000, max: 500, standardHeade
 app.use('/api/', generalLimiter);
 
 // Static files (local dev only — Vercel serves these directly in production)
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname), { extensions: ['html'] }));
 
 // ============================================================
 //  ROUTE GUARDS
@@ -606,8 +606,8 @@ app.post('/api/create-checkout-session', async (req, res) => {
       payment_method_types: ['card'],
       line_items:           lineItems,
       mode:                 'payment',
-      success_url: `${req.headers.origin}/checkout-success.html?session_id={CHECKOUT_SESSION_ID}&order_id=${order.id}`,
-      cancel_url:  `${req.headers.origin}/checkout.html`,
+      success_url: `${req.headers.origin}/checkout-success?session_id={CHECKOUT_SESSION_ID}&order_id=${order.id}`,
+      cancel_url:  `${req.headers.origin}/checkout`,
       customer_email: order.customer_email,
       metadata: { orderId: order.id, orderNumber: order.order_number },
     });
