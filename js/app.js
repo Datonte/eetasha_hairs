@@ -428,6 +428,72 @@ function promptLogin() {
 }
 
 // ============================================================
+//  COLOUR CATALOGUE  (50 colours from the colour chart)
+// ============================================================
+const COLOUR_CATALOGUE = [
+  // ── Natural ──────────────────────────────────────────────
+  { code: '1B',      bg: '#0d0d0d',                                        tier: 'Natural (1B)'  },
+  // ── Colours 1-6# ─────────────────────────────────────────
+  { code: '1',       bg: '#050505',                                        tier: 'Colours 1-6#'  },
+  { code: '2',       bg: '#180800',                                        tier: 'Colours 1-6#'  },
+  { code: '4',       bg: '#3a1a08',                                        tier: 'Colours 1-6#'  },
+  { code: '6',       bg: '#6b3820',                                        tier: 'Colours 1-6#'  },
+  // ── Other Colours — solid tones ──────────────────────────
+  { code: '8',       bg: '#8b5e3c',                                        tier: 'Other Colours' },
+  { code: '10',      bg: '#a67c52',                                        tier: 'Other Colours' },
+  { code: '12',      bg: '#c49a6c',                                        tier: 'Other Colours' },
+  { code: '14',      bg: '#d4a96a',                                        tier: 'Other Colours' },
+  { code: '16',      bg: '#e8c49a',                                        tier: 'Other Colours' },
+  { code: '18',      bg: '#d4c4a0',                                        tier: 'Other Colours' },
+  { code: '22',      bg: '#e8d5b0',                                        tier: 'Other Colours' },
+  { code: '24',      bg: '#e8c878',                                        tier: 'Other Colours' },
+  { code: '27',      bg: '#c49632',                                        tier: 'Other Colours' },
+  { code: '30',      bg: '#8b3a08',                                        tier: 'Other Colours' },
+  { code: '33',      bg: '#6b1a08',                                        tier: 'Other Colours' },
+  { code: '34',      bg: '#8b2808',                                        tier: 'Other Colours' },
+  { code: '44',      bg: '#4a0818',                                        tier: 'Other Colours' },
+  { code: '51',      bg: '#9a9aaa',                                        tier: 'Other Colours' },
+  { code: '99J',     bg: '#6b0828',                                        tier: 'Other Colours' },
+  { code: '144',     bg: '#e0c820',                                        tier: 'Other Colours' },
+  { code: '280',     bg: '#8b7820',                                        tier: 'Other Colours' },
+  { code: '350',     bg: '#c04020',                                        tier: 'Other Colours' },
+  { code: '613',     bg: '#f0e8c0',                                        tier: 'Other Colours' },
+  { code: '1010',    bg: '#7a6858',                                        tier: 'Other Colours' },
+  { code: 'BUG',     bg: '#3a0818',                                        tier: 'Other Colours' },
+  { code: 'RED',     bg: '#cc0000',                                        tier: 'Other Colours' },
+  { code: 'H-RED',   bg: '#ee1111',                                        tier: 'Other Colours' },
+  { code: 'PURPLE',  bg: '#6600cc',                                        tier: 'Other Colours' },
+  { code: 'BLUE',    bg: '#0033cc',                                        tier: 'Other Colours' },
+  { code: 'P66',     bg: '#9a4a8a',                                        tier: 'Other Colours' },
+  // ── Other Colours — ombre / blends (gradients) ───────────
+  { code: '3T1B-350', bg: 'linear-gradient(135deg,#0d0d0d 33%,#c04020)',  tier: 'Other Colours' },
+  { code: '3T4-27',   bg: 'linear-gradient(135deg,#3a1a08 33%,#c49632)',  tier: 'Other Colours' },
+  { code: '3T4-30',   bg: 'linear-gradient(135deg,#3a1a08 33%,#8b3a08)',  tier: 'Other Colours' },
+  { code: 'F1B30',    bg: 'linear-gradient(135deg,#0d0d0d 50%,#8b3a08)',  tier: 'Other Colours' },
+  { code: 'F1B-350',  bg: 'linear-gradient(135deg,#0d0d0d 50%,#c04020)',  tier: 'Other Colours' },
+  { code: 'F4-27',    bg: 'linear-gradient(135deg,#3a1a08 50%,#c49632)',  tier: 'Other Colours' },
+  { code: 'F4-30',    bg: 'linear-gradient(135deg,#3a1a08 50%,#8b3a08)',  tier: 'Other Colours' },
+  { code: 'F4-273',   bg: 'linear-gradient(135deg,#3a1a08 50%,#8b5e3c)',  tier: 'Other Colours' },
+  { code: 'F4-33',    bg: 'linear-gradient(135deg,#3a1a08 50%,#6b1a08)',  tier: 'Other Colours' },
+  { code: 'F6-613',   bg: 'linear-gradient(135deg,#6b3820 50%,#f0e8c0)',  tier: 'Other Colours' },
+  { code: 'F18-22',   bg: 'linear-gradient(135deg,#d4c4a0 50%,#e8d5b0)',  tier: 'Other Colours' },
+  { code: 'F27-613',  bg: 'linear-gradient(135deg,#c49632 50%,#f0e8c0)',  tier: 'Other Colours' },
+  { code: 'F3044',    bg: 'linear-gradient(135deg,#8b3a08 50%,#c49a6c)',  tier: 'Other Colours' },
+  { code: 'F3304',    bg: 'linear-gradient(135deg,#8b3a08 50%,#c49632)',  tier: 'Other Colours' },
+  { code: 'T1B-27',   bg: 'linear-gradient(180deg,#0d0d0d 50%,#c49632)',  tier: 'Other Colours' },
+  { code: 'T1B30',    bg: 'linear-gradient(180deg,#0d0d0d 50%,#8b3a08)',  tier: 'Other Colours' },
+  { code: 'T1B33',    bg: 'linear-gradient(180deg,#0d0d0d 50%,#6b1a08)',  tier: 'Other Colours' },
+  { code: 'T1B99J',   bg: 'linear-gradient(180deg,#0d0d0d 50%,#6b0828)',  tier: 'Other Colours' },
+  { code: 'TIB-BUG',  bg: 'linear-gradient(180deg,#0d0d0d 50%,#3a0818)',  tier: 'Other Colours' },
+];
+
+// Maps a colour code to its pricing tier
+function colourTier(code) {
+  const c = COLOUR_CATALOGUE.find(x => x.code === code);
+  return c ? c.tier : 'Other Colours';
+}
+
+// ============================================================
 //  VARIANT SELECTION MODAL
 // ============================================================
 function openVariantModal(productId) {
@@ -448,7 +514,8 @@ function openVariantModal(productId) {
 
   // ── Key + label builders per type ────────────────────────────
   function buildKey() {
-    if (vtype === 'bundle')  return (selInches && selBundles && selColour) ? `${selInches}-${selBundles}-${selColour}` : null;
+    // For bundles, price is stored by tier — map the chosen colour to its tier for lookup
+    if (vtype === 'bundle')  return (selInches && selBundles && selColour) ? `${selInches}-${selBundles}-${colourTier(selColour)}` : null;
     if (vtype === 'wig' || vtype === 'big-wig') return (selInches && selLace) ? `${selInches}-${selLace}` : null;
     if (vtype === 'closure' || vtype === 'frontal') return (selLace && selInches) ? `${selLace}-${selInches}` : null;
     return null;
@@ -502,14 +569,16 @@ function openVariantModal(productId) {
       } else { s2.style.display = 'none'; }
     }
 
-    // Step 3 — colour (bundles only)
+    // Step 3 — colour swatches (bundles only)
     const s3 = modal.querySelector('#vmStep3Wrap');
     if (vtype === 'bundle' && selBundles) {
       s3.style.display = '';
-      modal.querySelector('#vmStep3Btns').innerHTML = colourList.map(c =>
-        `<button class="variant-opt-btn${selColour===c?' selected':''}" onclick="_vmSel3('${c.replace(/'/g,"\\'")}')">
-           ${escHtml(c)}
-         </button>`
+      const availableCols = COLOUR_CATALOGUE.filter(c => colourList.includes(c.tier));
+      modal.querySelector('#vmStep3Btns').innerHTML = availableCols.map(c =>
+        `<span class="colour-swatch-wrap" onclick="_vmSel3('${c.code.replace(/'/g,"\\'")}')">
+           <span class="colour-swatch-chip${selColour===c.code?' selected':''}" style="background:${c.bg};"></span>
+           <span class="colour-swatch-label">${escHtml(c.code)}</span>
+         </span>`
       ).join('');
     } else { s3.style.display = 'none'; }
 
@@ -553,7 +622,7 @@ function openVariantModal(productId) {
 
       <div id="vmStep3Wrap" style="margin-bottom:20px;display:none;">
         <div class="variant-step-label">${step3Label}</div>
-        <div id="vmStep3Btns" class="variant-opts-row"></div>
+        <div id="vmStep3Btns" class="colour-swatch-grid"></div>
       </div>
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
