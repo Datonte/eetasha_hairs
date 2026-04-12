@@ -284,7 +284,13 @@
             </div>
             <!-- Colours grid (bundle only) -->
             <div class="form-group" style="margin-top:14px;" id="pmColoursSection">
-              <label class="form-label" style="margin-bottom:8px;">Available Colours</label>
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+                <label class="form-label" style="margin:0;">Available Colours</label>
+                <div style="display:flex;gap:6px;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAllColours(true)">Select All</button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAllColours(false)">Clear All</button>
+                </div>
+              </div>
               <div id="pmColoursGrid" style="display:flex;flex-wrap:wrap;gap:7px;"></div>
             </div>
             <div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -834,6 +840,14 @@
           <span style="font-size:0.52rem;color:var(--gray-600);font-weight:600;text-align:center;word-break:break-all;line-height:1.1;max-width:46px;">${escHtml(c.code)}</span>
         </label>`;
       }).join('');
+    }
+
+    function toggleAllColours(selectAll) {
+      document.querySelectorAll('#pmColoursGrid input[data-colour]').forEach(cb => {
+        cb.checked = selectAll;
+        cb.closest('label').querySelector('.adm-sw').style.outline =
+          selectAll ? '2.5px solid var(--gold-dark)' : '2.5px solid transparent';
+      });
     }
 
     function getSelectedInches()  { return [...document.querySelectorAll('#pmInchesGrid input[data-inch]:checked')].map(el => parseInt(el.dataset.inch)); }
