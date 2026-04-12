@@ -446,7 +446,7 @@
       document.getElementById('productModal').classList.add('open');
     }
 
-    function closeProductModal() { document.getElementById('productModal').classList.remove('open'); }
+    function closeProductModal() { document.getElementById('productModal').classList.remove('open'); clearModalState(); }
 
     function editProduct(id) {
       const p = State.products.find(x => String(x.id) === String(id));
@@ -854,8 +854,58 @@
       }
     }
 
+    // =================== MODAL STATE PERSISTENCE ===================
+    // Saves form state to sessionStorage so switching tabs / apps doesn't wipe work in progress.
+
+    const _MODAL_KEY = 'adminProductModalState';
+
+    function saveModalState() {
+      if (!document.getElementById('productModal').classList.contains('open')) return;
+      try {
+        sessionStorage.setItem(_MODAL_KEY, JSON.stringify({
+          id:       document.getElementById('pmId').value,
+          name:     document.getElementById('pmName').value,
+          price:    document.getElementById('pmPrice').value,
+          category: document.getElementById('pmCategory').value,
+          image:    document.getElementById('pmImage').value,
+          desc:     document.getElementById('pmDesc').value,
+          inStock:  document.getElementById('pmInStock').checked,
+          featured: document.getElementById('pmFeatured').checked,
+          variants: getVariantsFromModal(),
+        }));
+      } catch {}
+    }
+
+    function clearModalState() {
+      try { sessionStorage.removeItem(_MODAL_KEY); } catch {}
+    }
+
+    function restoreModalState() {
+      try {
+        const raw = sessionStorage.getItem(_MODAL_KEY);
+        if (!raw) return;
+        const s = JSON.parse(raw);
+        document.getElementById('pmId').value       = s.id       || '';
+        document.getElementById('pmName').value     = s.name     || '';
+        document.getElementById('pmPrice').value    = s.price    || '';
+        document.getElementById('pmCategory').value = s.category || '';
+        document.getElementById('pmImage').value    = s.image    || '';
+        document.getElementById('pmDesc').value     = s.desc     || '';
+        document.getElementById('pmInStock').checked  = s.inStock  ?? true;
+        document.getElementById('pmFeatured').checked = s.featured ?? false;
+        document.getElementById('productModalTitle').textContent = s.id ? 'Edit Product' : 'Add Product';
+        loadVariantsIntoModal(s.variants || null);
+        updateImagePreview();
+        document.getElementById('productModal').classList.add('open');
+      } catch {}
+    }
+
     // =================== INIT ===================
     document.getElementById('pmImage')?.addEventListener('input', updateImagePreview);
+
+    // Autosave on any change inside the modal (event delegation)
+    document.getElementById('productModal').addEventListener('input',  saveModalState);
+    document.getElementById('productModal').addEventListener('change', saveModalState);
 
     document.addEventListener('DOMContentLoaded', async () => {
       await initApp();
@@ -863,7 +913,10 @@
       // Check if already logged in as admin (server-side session)
       try {
         const { isAdmin } = await API.get('/api/admin/me');
-        if (isAdmin) showAdminDash();
+        if (isAdmin) {
+          showAdminDash();
+          restoreModalState(); // re-open any unsaved work after tab switch / page reload
+        }
       } catch {}
       document.body.classList.add('page-ready');
     });
