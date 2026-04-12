@@ -522,7 +522,7 @@ function openVariantModal(productId) {
   }
   function buildLabel() {
     if (vtype === 'bundle')  return `${selInches}" · ${selBundles} Bundle${selBundles>1?'s':''} · ${selColour}`;
-    if (vtype === 'wig' || vtype === 'big-wig') return `${selInches}" · ${selLace} HD Lace`;
+    if (vtype === 'wig' || vtype === 'big-wig') return `${selInches}" · ${selLace} HD Lace · ${selColour}`;
     if (vtype === 'closure' || vtype === 'frontal') return `${selLace} · ${selInches}" Hair`;
     return '';
   }
@@ -569,11 +569,15 @@ function openVariantModal(productId) {
       } else { s2.style.display = 'none'; }
     }
 
-    // Step 3 — colour swatches (bundles only)
+    // Step 3 — colour swatches (bundles: after bundle count; wigs/big-wigs: after lace size)
     const s3 = modal.querySelector('#vmStep3Wrap');
-    if (vtype === 'bundle' && selBundles) {
+    const showColour = (vtype === 'bundle' && selBundles) || ((vtype === 'wig' || vtype === 'big-wig') && selLace);
+    if (showColour) {
       s3.style.display = '';
-      const availableCols = COLOUR_CATALOGUE.filter(c => colourList.includes(c.tier));
+      // Bundles: filter to enabled tiers. Wigs: show all 50 colours.
+      const availableCols = (vtype === 'bundle')
+        ? COLOUR_CATALOGUE.filter(c => colourList.includes(c.tier))
+        : COLOUR_CATALOGUE;
       modal.querySelector('#vmStep3Btns').innerHTML = availableCols.map(c =>
         `<span class="colour-swatch-wrap" onclick="_vmSel3('${c.code.replace(/'/g,"\\'")}')">
            <span class="colour-swatch-chip${selColour===c.code?' selected':''}" style="background:${c.bg};"></span>
@@ -583,7 +587,8 @@ function openVariantModal(productId) {
     } else { s3.style.display = 'none'; }
 
     modal.querySelector('#vmPrice').textContent = price !== null ? `${currency}${price.toFixed(2)}` : '—';
-    modal.querySelector('#vmAddBtn').disabled = price === null;
+    const needsColour = vtype === 'bundle' || vtype === 'wig' || vtype === 'big-wig';
+    modal.querySelector('#vmAddBtn').disabled = price === null || (needsColour && !selColour);
   }
 
   // ── Step labels per type ──────────────────────────────────────
@@ -646,7 +651,7 @@ function openVariantModal(productId) {
   window._vmSel2 = (val) => {
     if (vtype === 'bundle')          { selBundles = (typeof val === 'number') ? val : parseInt(val); selColour = null; }
     else if (isClosureFrontal)       { selInches  = (typeof val === 'number') ? val : parseInt(val); }
-    else                             { selLace = val; } // wig/big-wig
+    else                             { selLace = val; selColour = null; } // wig/big-wig — reset colour when lace changes
     render();
   };
   // Selection handlers — step 3 (colour, bundles only)
