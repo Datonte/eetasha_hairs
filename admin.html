@@ -713,7 +713,71 @@
 
     // =================== VARIANTS ===================
     const VARIANT_INCHES      = [12,14,16,18,20,22,24,26,28,30,32,34,36,38,40];
-    const VARIANT_COLOURS     = ['Natural (1B)', 'Colours 1-6#', 'Other Colours'];
+    const COLOUR_CATALOGUE_ADMIN = [
+      { code: '1B',      bg: '#0d0d0d',                                       tier: 'Natural (1B)'  },
+      { code: '1',       bg: '#050505',                                       tier: 'Colours 1-6#'  },
+      { code: '2',       bg: '#180800',                                       tier: 'Colours 1-6#'  },
+      { code: '4',       bg: '#3a1a08',                                       tier: 'Colours 1-6#'  },
+      { code: '6',       bg: '#6b3820',                                       tier: 'Colours 1-6#'  },
+      { code: '8',       bg: '#8b5e3c',                                       tier: 'Other Colours' },
+      { code: '10',      bg: '#a67c52',                                       tier: 'Other Colours' },
+      { code: '12',      bg: '#c49a6c',                                       tier: 'Other Colours' },
+      { code: '14',      bg: '#d4a96a',                                       tier: 'Other Colours' },
+      { code: '16',      bg: '#e8c49a',                                       tier: 'Other Colours' },
+      { code: '18',      bg: '#d4c4a0',                                       tier: 'Other Colours' },
+      { code: '22',      bg: '#e8d5b0',                                       tier: 'Other Colours' },
+      { code: '24',      bg: '#e8c878',                                       tier: 'Other Colours' },
+      { code: '27',      bg: '#c49632',                                       tier: 'Other Colours' },
+      { code: '30',      bg: '#8b3a08',                                       tier: 'Other Colours' },
+      { code: '33',      bg: '#6b1a08',                                       tier: 'Other Colours' },
+      { code: '34',      bg: '#8b2808',                                       tier: 'Other Colours' },
+      { code: '44',      bg: '#4a0818',                                       tier: 'Other Colours' },
+      { code: '51',      bg: '#9a9aaa',                                       tier: 'Other Colours' },
+      { code: '99J',     bg: '#6b0828',                                       tier: 'Other Colours' },
+      { code: '144',     bg: '#e0c820',                                       tier: 'Other Colours' },
+      { code: '280',     bg: '#8b7820',                                       tier: 'Other Colours' },
+      { code: '350',     bg: '#c04020',                                       tier: 'Other Colours' },
+      { code: '613',     bg: '#f0e8c0',                                       tier: 'Other Colours' },
+      { code: '1010',    bg: '#7a6858',                                       tier: 'Other Colours' },
+      { code: 'BUG',     bg: '#3a0818',                                       tier: 'Other Colours' },
+      { code: 'RED',     bg: '#cc0000',                                       tier: 'Other Colours' },
+      { code: 'H-RED',   bg: '#ee1111',                                       tier: 'Other Colours' },
+      { code: 'PURPLE',  bg: '#6600cc',                                       tier: 'Other Colours' },
+      { code: 'BLUE',    bg: '#0033cc',                                       tier: 'Other Colours' },
+      { code: 'P66',     bg: '#9a4a8a',                                       tier: 'Other Colours' },
+      { code: '3T1B-350',bg: 'linear-gradient(135deg,#0d0d0d 33%,#c04020)',  tier: 'Other Colours' },
+      { code: '3T4-27',  bg: 'linear-gradient(135deg,#3a1a08 33%,#c49632)',  tier: 'Other Colours' },
+      { code: '3T4-30',  bg: 'linear-gradient(135deg,#3a1a08 33%,#8b3a08)',  tier: 'Other Colours' },
+      { code: 'F1B30',   bg: 'linear-gradient(135deg,#0d0d0d 50%,#8b3a08)',  tier: 'Other Colours' },
+      { code: 'F1B-350', bg: 'linear-gradient(135deg,#0d0d0d 50%,#c04020)',  tier: 'Other Colours' },
+      { code: 'F4-27',   bg: 'linear-gradient(135deg,#3a1a08 50%,#c49632)',  tier: 'Other Colours' },
+      { code: 'F4-30',   bg: 'linear-gradient(135deg,#3a1a08 50%,#8b3a08)',  tier: 'Other Colours' },
+      { code: 'F4-273',  bg: 'linear-gradient(135deg,#3a1a08 50%,#8b5e3c)',  tier: 'Other Colours' },
+      { code: 'F4-33',   bg: 'linear-gradient(135deg,#3a1a08 50%,#6b1a08)',  tier: 'Other Colours' },
+      { code: 'F6-613',  bg: 'linear-gradient(135deg,#6b3820 50%,#f0e8c0)',  tier: 'Other Colours' },
+      { code: 'F18-22',  bg: 'linear-gradient(135deg,#d4c4a0 50%,#e8d5b0)',  tier: 'Other Colours' },
+      { code: 'F27-613', bg: 'linear-gradient(135deg,#c49632 50%,#f0e8c0)',  tier: 'Other Colours' },
+      { code: 'F3044',   bg: 'linear-gradient(135deg,#8b3a08 50%,#c49a6c)',  tier: 'Other Colours' },
+      { code: 'F3304',   bg: 'linear-gradient(135deg,#8b3a08 50%,#c49632)',  tier: 'Other Colours' },
+      { code: 'T1B-27',  bg: 'linear-gradient(180deg,#0d0d0d 50%,#c49632)',  tier: 'Other Colours' },
+      { code: 'T1B30',   bg: 'linear-gradient(180deg,#0d0d0d 50%,#8b3a08)',  tier: 'Other Colours' },
+      { code: 'T1B33',   bg: 'linear-gradient(180deg,#0d0d0d 50%,#6b1a08)',  tier: 'Other Colours' },
+      { code: 'T1B99J',  bg: 'linear-gradient(180deg,#0d0d0d 50%,#6b0828)',  tier: 'Other Colours' },
+      { code: 'TIB-BUG', bg: 'linear-gradient(180deg,#0d0d0d 50%,#3a0818)',  tier: 'Other Colours' },
+    ];
+    // Maps a colour code to its pricing tier (handles old tier-name format too)
+    function _colourTier(code) {
+      if (['Natural (1B)','Colours 1-6#','Other Colours'].includes(code)) return code;
+      const c = COLOUR_CATALOGUE_ADMIN.find(x => x.code === code);
+      return c ? c.tier : 'Other Colours';
+    }
+    // Expand old tier-name arrays to individual colour codes
+    function _expandColours(cols) {
+      const TIERS = ['Natural (1B)','Colours 1-6#','Other Colours'];
+      if (!cols.length) return [];
+      if (cols.every(c => COLOUR_CATALOGUE_ADMIN.some(x => x.code === c))) return cols; // already codes
+      return cols.flatMap(t => TIERS.includes(t) ? COLOUR_CATALOGUE_ADMIN.filter(x => x.tier === t).map(x => x.code) : [t]);
+    }
     const VARIANT_LACE_SIZES  = ['2x6','4x4','5x5','6x6','7x7','9x6','13x4','13x6'];
 
     function _getVariantType() {
@@ -722,11 +786,11 @@
 
     function onVariantTypeChange() {
       const vt = _getVariantType();
-      const isBundle  = vt === 'bundle';
-      const isClosure = vt === 'closure' || vt === 'frontal';
-      document.getElementById('pmColoursSection').style.display    = isBundle  ? '' : 'none';
-      document.getElementById('pmLaceSizesSection').style.display  = isBundle  ? 'none' : '';
-      document.getElementById('pmInchesSection').style.display     = '';
+      const isBundle = vt === 'bundle';
+      // Colours available for ALL product types — admin decides which ones
+      document.getElementById('pmColoursSection').style.display   = '';
+      document.getElementById('pmLaceSizesSection').style.display = isBundle ? 'none' : '';
+      document.getElementById('pmInchesSection').style.display    = '';
       // re-populate grids if empty
       if (!document.getElementById('pmInchesGrid').children.length)    renderInchCheckboxes([]);
       if (!document.getElementById('pmLaceSizesGrid').children.length) renderLaceCheckboxes([]);
@@ -756,7 +820,21 @@
 
     function renderInchCheckboxes(selected)  { document.getElementById('pmInchesGrid').innerHTML    = _checkboxGrid(VARIANT_INCHES, 'inch', selected); }
     function renderLaceCheckboxes(selected)  { document.getElementById('pmLaceSizesGrid').innerHTML  = _checkboxGrid(VARIANT_LACE_SIZES, 'lace', selected); }
-    function renderColourCheckboxes(selected){ document.getElementById('pmColoursGrid').innerHTML    = _checkboxGrid(VARIANT_COLOURS, 'colour', selected); }
+    function renderColourCheckboxes(selected) {
+      // Expand old tier-name format to colour codes if needed
+      const sel = _expandColours(selected);
+      document.getElementById('pmColoursGrid').innerHTML = COLOUR_CATALOGUE_ADMIN.map(c => {
+        const on = sel.includes(c.code);
+        return `<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;width:46px;" title="${c.code}">
+          <input type="checkbox" data-colour="${c.code}" ${on?'checked':''} style="display:none;"
+            onchange="this.closest('label').querySelector('.adm-sw').style.outline=this.checked?'2.5px solid var(--gold-dark)':'2.5px solid transparent'">
+          <span class="adm-sw" style="width:34px;height:34px;border-radius:6px;background:${c.bg};display:block;
+            box-shadow:0 1px 3px rgba(0,0,0,0.3);outline-offset:2px;
+            outline:${on?'2.5px solid var(--gold-dark)':'2.5px solid transparent'};"></span>
+          <span style="font-size:0.52rem;color:var(--gray-600);font-weight:600;text-align:center;word-break:break-all;line-height:1.1;max-width:46px;">${escHtml(c.code)}</span>
+        </label>`;
+      }).join('');
+    }
 
     function getSelectedInches()  { return [...document.querySelectorAll('#pmInchesGrid input[data-inch]:checked')].map(el => parseInt(el.dataset.inch)); }
     function getSelectedLaces()   { return [...document.querySelectorAll('#pmLaceSizesGrid input[data-lace]:checked')].map(el => el.dataset.lace); }
@@ -779,16 +857,18 @@
       </td>`;
     }
 
-    function _renderPriceTableBundle(inches, colours, prices) {
+    function _renderPriceTableBundle(inches, colourCodes, prices) {
+      // Derive unique pricing tiers from the selected colour codes
+      const tiers = [...new Set(colourCodes.map(c => _colourTier(c)))];
       let html = `<thead><tr>
         <th style="text-align:left;padding:9px 12px;background:var(--gray-100);white-space:nowrap;font-size:0.78rem;color:var(--gray-500);font-weight:700;">Inches &times; Bundles</th>
-        ${colours.map(c=>`<th style="text-align:center;padding:9px 12px;background:var(--gray-100);font-size:0.78rem;color:var(--gray-500);font-weight:700;">${escHtml(c)}</th>`).join('')}
+        ${tiers.map(t=>`<th style="text-align:center;padding:9px 12px;background:var(--gray-100);font-size:0.78rem;color:var(--gray-500);font-weight:700;">${escHtml(t)}</th>`).join('')}
       </tr></thead><tbody>`;
       for (const inch of inches) {
         for (const bun of (inch >= 30 ? [3,4,5] : [3,4])) {
           html += `<tr style="border-bottom:1px solid var(--gray-100);">
             <td style="padding:7px 12px;font-weight:600;white-space:nowrap;font-size:0.82rem;">${inch}&quot; &times; ${bun} bun</td>
-            ${colours.map(c => _priceInput(`${inch}-${bun}-${c}`, prices)).join('')}
+            ${tiers.map(t => _priceInput(`${inch}-${bun}-${t}`, prices)).join('')}
           </tr>`;
         }
       }
@@ -855,8 +935,8 @@
       const laces   = getSelectedLaces();
       const colours = getSelectedColours();
       const prices  = _readCurrentPriceInputs();
-      const base    = { enabled: true, variant_type: vt, prices, unavailable: [] };
-      if (vt === 'bundle')              return { ...base, inches, colours };
+      const base    = { enabled: true, variant_type: vt, prices, unavailable: [], colours };
+      if (vt === 'bundle')                  return { ...base, inches };
       if (vt === 'wig' || vt === 'big-wig') return { ...base, inches, lace_sizes: laces };
       return { ...base, lace_sizes: laces, inches }; // closure / frontal
     }
@@ -880,13 +960,14 @@
       onVariantTypeChange();
       renderInchCheckboxes(variants.inches      || []);
       renderLaceCheckboxes(variants.lace_sizes  || []);
-      renderColourCheckboxes(variants.colours   || []);
+      // Expand old tier-name format to individual colour codes before restoring
+      const colourCodes = _expandColours(variants.colours || []);
+      renderColourCheckboxes(colourCodes);
       const prices = variants.prices || {};
       const inches = variants.inches || [];
       const laces  = variants.lace_sizes || [];
-      const cols   = variants.colours || [];
-      if (vt === 'bundle' && inches.length && cols.length) {
-        document.getElementById('pmPriceTable').innerHTML = _renderPriceTableBundle(inches, cols, prices);
+      if (vt === 'bundle' && inches.length && colourCodes.length) {
+        document.getElementById('pmPriceTable').innerHTML = _renderPriceTableBundle(inches, colourCodes, prices);
         document.getElementById('pmPriceTableWrap').style.display = 'block';
       } else if ((vt === 'wig' || vt === 'big-wig') && inches.length && laces.length) {
         document.getElementById('pmPriceTable').innerHTML = _renderPriceTableWigOrBigWig(inches, laces, prices);

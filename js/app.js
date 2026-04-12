@@ -493,6 +493,16 @@ function colourTier(code) {
   return c ? c.tier : 'Other Colours';
 }
 
+// Resolves v.colours (may be old tier-names or new colour codes) → filtered COLOUR_CATALOGUE entries
+function resolveColourCodes(v) {
+  const cols = v.colours || [];
+  if (!cols.length) return COLOUR_CATALOGUE; // no restriction = show all 50
+  const TIERS = ['Natural (1B)', 'Colours 1-6#', 'Other Colours'];
+  const isOldFormat = cols.some(c => TIERS.includes(c));
+  if (isOldFormat) return COLOUR_CATALOGUE.filter(x => cols.includes(x.tier));
+  return COLOUR_CATALOGUE.filter(x => cols.includes(x.code));
+}
+
 // ============================================================
 //  VARIANT SELECTION MODAL
 // ============================================================
@@ -523,7 +533,7 @@ function openVariantModal(productId) {
   function buildLabel() {
     if (vtype === 'bundle')  return `${selInches}" · ${selBundles} Bundle${selBundles>1?'s':''} · ${selColour}`;
     if (vtype === 'wig' || vtype === 'big-wig') return `${selInches}" · ${selLace} HD Lace · ${selColour}`;
-    if (vtype === 'closure' || vtype === 'frontal') return `${selLace} · ${selInches}" Hair`;
+    if (vtype === 'closure' || vtype === 'frontal') return `${selLace} · ${selInches}" Hair · ${selColour}`;
     return '';
   }
   function currentPrice() {
@@ -569,15 +579,14 @@ function openVariantModal(productId) {
       } else { s2.style.display = 'none'; }
     }
 
-    // Step 3 — colour swatches (bundles: after bundle count; wigs/big-wigs: after lace size)
+    // Step 3 — colour swatches (all product types, shown after step 2 is complete)
     const s3 = modal.querySelector('#vmStep3Wrap');
-    const showColour = (vtype === 'bundle' && selBundles) || ((vtype === 'wig' || vtype === 'big-wig') && selLace);
+    const showColour = (vtype === 'bundle' && selBundles)
+      || ((vtype === 'wig' || vtype === 'big-wig') && selLace)
+      || ((vtype === 'closure' || vtype === 'frontal') && selInches);
     if (showColour) {
       s3.style.display = '';
-      // Bundles: filter to enabled tiers. Wigs: show all 50 colours.
-      const availableCols = (vtype === 'bundle')
-        ? COLOUR_CATALOGUE.filter(c => colourList.includes(c.tier))
-        : COLOUR_CATALOGUE;
+      const availableCols = resolveColourCodes(v);
       modal.querySelector('#vmStep3Btns').innerHTML = availableCols.map(c =>
         `<span class="colour-swatch-wrap" onclick="_vmSel3('${c.code.replace(/'/g,"\\'")}')">
            <span class="colour-swatch-chip${selColour===c.code?' selected':''}" style="background:${c.bg};"></span>
@@ -587,8 +596,7 @@ function openVariantModal(productId) {
     } else { s3.style.display = 'none'; }
 
     modal.querySelector('#vmPrice').textContent = price !== null ? `${currency}${price.toFixed(2)}` : '—';
-    const needsColour = vtype === 'bundle' || vtype === 'wig' || vtype === 'big-wig';
-    modal.querySelector('#vmAddBtn').disabled = price === null || (needsColour && !selColour);
+    modal.querySelector('#vmAddBtn').disabled = price === null || !selColour;
   }
 
   // ── Step labels per type ──────────────────────────────────────
@@ -650,7 +658,7 @@ function openVariantModal(productId) {
   // Selection handlers — step 2
   window._vmSel2 = (val) => {
     if (vtype === 'bundle')          { selBundles = (typeof val === 'number') ? val : parseInt(val); selColour = null; }
-    else if (isClosureFrontal)       { selInches  = (typeof val === 'number') ? val : parseInt(val); }
+    else if (isClosureFrontal)       { selInches  = (typeof val === 'number') ? val : parseInt(val); selColour = null; }
     else                             { selLace = val; selColour = null; } // wig/big-wig — reset colour when lace changes
     render();
   };
