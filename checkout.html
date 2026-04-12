@@ -154,6 +154,9 @@
         document.getElementById('coEmail').value = session.email || '';
       }
 
+      // Restore any unsaved edits (user edits win over session pre-fill)
+      restoreCheckoutState();
+
       // Render items
       document.getElementById('coItems').innerHTML = cart.map(item => {
         const p = Store.getProduct(item.productId);
@@ -208,7 +211,7 @@
           deliveryRegion:    _selectedDelivery?.region    || 'uk',
         });
         sessionStorage.removeItem('et_delivery');
-
+        clearCheckoutState();
         Store.clearCart();
 
         if (method === 'stripe') {
@@ -248,12 +251,46 @@
       window.location.href = '/account';
     }
 
+    // Checkout form state persistence
+    function saveCheckoutState() {
+      try {
+        const method = document.querySelector('input[name="payMethod"]:checked');
+        sessionStorage.setItem('checkoutFormState', JSON.stringify({
+          name:    document.getElementById('coName').value,
+          email:   document.getElementById('coEmail').value,
+          phone:   document.getElementById('coPhone').value,
+          address: document.getElementById('coAddress').value,
+          pay:     method ? method.value : 'transfer',
+        }));
+      } catch {}
+    }
+    function restoreCheckoutState() {
+      try {
+        const s = JSON.parse(sessionStorage.getItem('checkoutFormState'));
+        if (!s) return;
+        if (s.name)    document.getElementById('coName').value    = s.name;
+        if (s.email)   document.getElementById('coEmail').value   = s.email;
+        if (s.phone)   document.getElementById('coPhone').value   = s.phone;
+        if (s.address) document.getElementById('coAddress').value = s.address;
+        if (s.pay) { const r = document.querySelector(`input[name="payMethod"][value="${s.pay}"]`); if (r) r.checked = true; }
+      } catch {}
+    }
+    function clearCheckoutState() { try { sessionStorage.removeItem('checkoutFormState'); } catch {} }
+
     document.addEventListener('DOMContentLoaded', async () => {
       await initApp();
       renderNav('');
       renderFooter();
       updateCartCount();
       renderCheckout();
+
+      // Autosave checkout fields on every change
+      const coContent = document.getElementById('checkoutContent');
+      if (coContent) {
+        coContent.addEventListener('input',  saveCheckoutState);
+        coContent.addEventListener('change', saveCheckoutState);
+      }
+
       document.body.classList.add('page-ready');
     });
   </script>

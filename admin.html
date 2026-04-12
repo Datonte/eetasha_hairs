@@ -566,6 +566,35 @@
     }
 
     // =================== SETTINGS ===================
+    // Settings state helpers
+    function saveSettingsState() {
+      try {
+        sessionStorage.setItem('adminSettingsState', JSON.stringify({
+          whatsapp:      document.getElementById('setWhatsapp').value,
+          instagram:     document.getElementById('setInstagram').value,
+          bankName:      document.getElementById('setBankName').value,
+          accountName:   document.getElementById('setAccountName').value,
+          sortCode:      document.getElementById('setSortCode').value,
+          accountNumber: document.getElementById('setAccountNumber').value,
+          deliveryFee:   document.getElementById('setDeliveryFee').value,
+        }));
+      } catch {}
+    }
+    function restoreSettingsState() {
+      try {
+        const s = JSON.parse(sessionStorage.getItem('adminSettingsState'));
+        if (!s) return;
+        if (s.whatsapp      !== undefined) document.getElementById('setWhatsapp').value      = s.whatsapp;
+        if (s.instagram     !== undefined) document.getElementById('setInstagram').value     = s.instagram;
+        if (s.bankName      !== undefined) document.getElementById('setBankName').value      = s.bankName;
+        if (s.accountName   !== undefined) document.getElementById('setAccountName').value   = s.accountName;
+        if (s.sortCode      !== undefined) document.getElementById('setSortCode').value      = s.sortCode;
+        if (s.accountNumber !== undefined) document.getElementById('setAccountNumber').value = s.accountNumber;
+        if (s.deliveryFee   !== undefined) document.getElementById('setDeliveryFee').value   = s.deliveryFee;
+      } catch {}
+    }
+    function clearSettingsState() { try { sessionStorage.removeItem('adminSettingsState'); } catch {} }
+
     async function loadSettings() {
       try {
         const s = await API.get('/api/settings');
@@ -577,6 +606,7 @@
         document.getElementById('setAccountNumber').value= s.accountNumber || '';
         document.getElementById('setDeliveryFee').value  = s.deliveryFee   ?? 5.99;
       } catch {}
+      restoreSettingsState(); // overlay any unsaved local edits on top of DB values
     }
 
     async function saveSettings(e) {
@@ -591,6 +621,7 @@
           accountNumber: document.getElementById('setAccountNumber').value.trim(),
           deliveryFee:   parseFloat(document.getElementById('setDeliveryFee').value) || 0,
         });
+        clearSettingsState();
         Toast.show('Settings saved!', 'success');
       } catch (err) { Toast.show(err.message, 'error'); }
     }
@@ -606,12 +637,23 @@
     ];
     let _deliveryOptions = [];
 
+    // Delivery options state helpers
+    function saveDeliveryOptionsState() { try { sessionStorage.setItem('adminDeliveryOptionsState', JSON.stringify(_deliveryOptions)); } catch {} }
+    function restoreDeliveryOptionsState() {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem('adminDeliveryOptionsState'));
+        if (saved && Array.isArray(saved)) _deliveryOptions = saved;
+      } catch {}
+    }
+    function clearDeliveryOptionsState() { try { sessionStorage.removeItem('adminDeliveryOptionsState'); } catch {} }
+
     async function loadDeliveryOptions() {
       try {
         const s = await API.get('/api/settings');
         const fromDB = s.deliveryOptions || [];
         // If DB has no carriers yet, fall back to defaults so the table is never empty
         _deliveryOptions = fromDB.length > 0 ? fromDB : JSON.parse(JSON.stringify(DEFAULT_DELIVERY_OPTIONS));
+        restoreDeliveryOptionsState(); // overlay any unsaved local edits on top of DB values
         renderDeliveryTable();
       } catch {}
     }
@@ -626,22 +668,22 @@
           <td style="padding:8px;text-align:center;">
             <input type="number" class="form-input" value="${o.prices?.uk ?? 0}" step="0.01" min="0"
               style="width:65px;text-align:center;padding:5px 4px;"
-              onchange="_deliveryOptions[${i}].prices.uk=parseFloat(this.value)||0">
+              onchange="_deliveryOptions[${i}].prices.uk=parseFloat(this.value)||0;saveDeliveryOptionsState()">
           </td>
           <td style="padding:8px;text-align:center;">
             <input type="number" class="form-input" value="${o.prices?.europe ?? 0}" step="0.01" min="0"
               style="width:65px;text-align:center;padding:5px 4px;"
-              onchange="_deliveryOptions[${i}].prices.europe=parseFloat(this.value)||0">
+              onchange="_deliveryOptions[${i}].prices.europe=parseFloat(this.value)||0;saveDeliveryOptionsState()">
           </td>
           <td style="padding:8px;text-align:center;">
             <input type="number" class="form-input" value="${o.prices?.world ?? 0}" step="0.01" min="0"
               style="width:65px;text-align:center;padding:5px 4px;"
-              onchange="_deliveryOptions[${i}].prices.world=parseFloat(this.value)||0">
+              onchange="_deliveryOptions[${i}].prices.world=parseFloat(this.value)||0;saveDeliveryOptionsState()">
           </td>
           <td style="padding:8px;text-align:center;">
             <input type="checkbox" ${o.active ? 'checked' : ''}
               style="width:18px;height:18px;accent-color:var(--gold-dark);cursor:pointer;"
-              onchange="_deliveryOptions[${i}].active=this.checked">
+              onchange="_deliveryOptions[${i}].active=this.checked;saveDeliveryOptionsState()">
           </td>
         </tr>`).join('');
     }
@@ -649,6 +691,7 @@
     async function saveDeliveryOptions() {
       try {
         await API.put('/api/settings', { deliveryOptions: _deliveryOptions });
+        clearDeliveryOptionsState();
         Toast.show('Delivery options saved!', 'success');
       } catch (err) { Toast.show(err.message, 'error'); }
     }
@@ -906,6 +949,10 @@
     // Autosave on any change inside the modal (event delegation)
     document.getElementById('productModal').addEventListener('input',  saveModalState);
     document.getElementById('productModal').addEventListener('change', saveModalState);
+
+    // Autosave settings form on any change
+    document.getElementById('tabSettings').addEventListener('input',  saveSettingsState);
+    document.getElementById('tabSettings').addEventListener('change', saveSettingsState);
 
     document.addEventListener('DOMContentLoaded', async () => {
       await initApp();
