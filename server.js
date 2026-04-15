@@ -42,12 +42,16 @@ if (hasResend) {
   resendClient = new Resend(process.env.RESEND_API_KEY);
 }
 
+function escEmail(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 async function sendOrderConfirmationEmail(order) {
   if (!hasResend) return;
   try {
     const itemsHtml = (order.items || []).map(i => `
       <tr>
-        <td style="padding:10px 0;border-bottom:1px solid #f0ede8;font-size:14px;">${i.product_name}${i.variant_label ? `<br><span style="color:#9b8860;font-size:12px;">${i.variant_label}</span>` : ''}</td>
+        <td style="padding:10px 0;border-bottom:1px solid #f0ede8;font-size:14px;">${escEmail(i.product_name)}${i.variant_label ? `<br><span style="color:#9b8860;font-size:12px;">${escEmail(i.variant_label)}</span>` : ''}</td>
         <td style="padding:10px 0;border-bottom:1px solid #f0ede8;text-align:center;font-size:14px;">×${i.quantity}</td>
         <td style="padding:10px 0;border-bottom:1px solid #f0ede8;text-align:right;font-size:14px;">£${(i.price * i.quantity).toFixed(2)}</td>
       </tr>`).join('');
@@ -68,11 +72,11 @@ async function sendOrderConfirmationEmail(order) {
     <!-- Body -->
     <div style="padding:36px 32px;">
       <h2 style="margin:0 0 6px;color:#1a1a1a;font-size:20px;">Order Confirmed! 🎉</h2>
-      <p style="margin:0 0 24px;color:#666;font-size:14px;font-family:Arial,sans-serif;">Hi ${order.customer_name}, thank you for your order. We've received it and will get it ready for dispatch soon.</p>
+      <p style="margin:0 0 24px;color:#666;font-size:14px;font-family:Arial,sans-serif;">Hi ${escEmail(order.customer_name)}, thank you for your order. We've received it and will get it ready for dispatch soon.</p>
 
       <div style="background:#faf9f7;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
         <p style="margin:0;font-size:13px;font-family:Arial,sans-serif;color:#666;">Order Reference</p>
-        <p style="margin:4px 0 0;font-size:20px;color:#c9a84c;font-weight:bold;letter-spacing:1px;">${order.order_number}</p>
+        <p style="margin:4px 0 0;font-size:20px;color:#c9a84c;font-weight:bold;letter-spacing:1px;">${escEmail(order.order_number)}</p>
       </div>
 
       <!-- Items -->
@@ -103,7 +107,7 @@ async function sendOrderConfirmationEmail(order) {
       <!-- Delivery address -->
       <div style="margin-top:24px;padding:16px 20px;border:1px solid #f0ede8;border-radius:8px;">
         <p style="margin:0 0 6px;font-size:11px;color:#999;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:1px;">Delivering To</p>
-        <p style="margin:0;font-size:14px;color:#333;font-family:Arial,sans-serif;white-space:pre-line;">${order.delivery_address}</p>
+        <p style="margin:0;font-size:14px;color:#333;font-family:Arial,sans-serif;white-space:pre-line;">${escEmail(order.delivery_address)}</p>
       </div>
 
       <p style="margin:28px 0 0;font-size:13px;color:#888;font-family:Arial,sans-serif;line-height:1.6;">If you have any questions about your order, contact us on WhatsApp or Instagram <strong>@eetashacollection</strong>.</p>
@@ -232,7 +236,20 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-app.use(cors({ origin: true, credentials: true }));
+const allowedOrigins = [
+  'https://eetashacollection.com',
+  'https://www.eetashacollection.com',
+  /\.vercel\.app$/,
+  ...(process.env.NODE_ENV !== 'production' ? ['http://localhost:3000', 'http://127.0.0.1:3000'] : []),
+];
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // allow server-to-server / curl
+    const ok = allowedOrigins.some(o => typeof o === 'string' ? o === origin : o.test(origin));
+    cb(ok ? null : new Error('Not allowed by CORS'), ok);
+  },
+  credentials: true,
+}));
 app.use(express.json({ limit: '500kb' }));
 app.use(express.urlencoded({ extended: true, limit: '500kb' }));
 
@@ -287,7 +304,8 @@ app.use('/api/', (req, res, next) => { ensureDefaults(); next(); });
 // ============================================================
 //  RATE LIMITERS
 // ============================================================
-const authLimiter    = rateLimit({ windowMs: 60*60*1000, max: 10, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true, message: { error: 'Too many attempts — please try again in an hour.' } });
+const authLimiter    = rateLimit({ windowMs: 60*60*1000, max: 10,  standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true, message: { error: 'Too many attempts — please try again in an hour.' } });
+const orderLimiter   = rateLimit({ windowMs: 60*60*1000, max: 20,  standardHeaders: true, legacyHeaders: false, message: { error: 'Too many orders from this device — please try again later.' } });
 const generalLimiter = rateLimit({ windowMs: 60*60*1000, max: 500, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many requests — please try again in an hour.' } });
 app.use('/api/', generalLimiter);
 
@@ -496,7 +514,7 @@ app.delete('/api/products/:id', requireAdmin, async (req, res) => {
 // ============================================================
 //  ORDERS
 // ============================================================
-app.post('/api/orders', optionalUser, [
+app.post('/api/orders', orderLimiter, optionalUser, [
   body('customerName').trim().notEmpty().withMessage('Full name is required').isLength({ max: 100 }),
   body('customerEmail').isEmail().withMessage('Valid email is required').normalizeEmail(),
   body('customerPhone').trim().notEmpty().withMessage('Phone number is required').isLength({ max: 30 }),
