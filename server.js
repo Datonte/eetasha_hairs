@@ -49,9 +49,10 @@ function escEmail(str) {
 async function sendOrderConfirmationEmail(order) {
   if (!hasResend) return;
   try {
-    // Fetch WhatsApp number from settings
-    const { data: settings } = await supabase.from('settings').select('whatsapp').eq('id', 1).single();
-    order.whatsapp = settings?.whatsapp || '';
+    // Fetch contact details from settings
+    const { data: settings } = await supabase.from('settings').select('whatsapp, instagram').eq('id', 1).single();
+    order.whatsapp  = settings?.whatsapp  || '';
+    order.instagram = settings?.instagram || '@eetashacollection';
 
     const itemsHtml = (order.items || []).map(i => `
       <tr>
@@ -116,8 +117,10 @@ async function sendOrderConfirmationEmail(order) {
 
       <div style="margin-top:28px;padding:16px 20px;background:#faf9f7;border-radius:8px;border:1px solid #f0ede8;">
         <p style="margin:0 0 10px;font-size:11px;color:#999;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:1px;">Need help with your order?</p>
-        <p style="margin:0 0 6px;font-size:14px;font-family:Arial,sans-serif;color:#555;">💬 WhatsApp: <a href="https://wa.me/${(order.whatsapp||'').replace(/[^0-9]/g,'')}" style="color:#c9a84c;text-decoration:none;">${escEmail(order.whatsapp||'+44...')}</a></p>
-        <p style="margin:0;font-size:14px;font-family:Arial,sans-serif;color:#555;">✉️ Email: <a href="mailto:eetasha.collection@gmail.com" style="color:#c9a84c;text-decoration:none;">eetasha.collection@gmail.com</a></p>
+        <p style="margin:0 0 6px;font-size:14px;font-family:Arial,sans-serif;color:#555;">💬 WhatsApp: <a href="https://wa.me/${(order.whatsapp||'').replace(/[^0-9]/g,'')}" style="color:#c9a84c;text-decoration:none;">${escEmail(order.whatsapp||'')}</a></p>
+        <p style="margin:0 0 6px;font-size:14px;font-family:Arial,sans-serif;color:#555;">✉️ Email: <a href="mailto:eetasha.collection@gmail.com" style="color:#c9a84c;text-decoration:none;">eetasha.collection@gmail.com</a></p>
+        <p style="margin:0 0 6px;font-size:14px;font-family:Arial,sans-serif;color:#555;">📸 Instagram: <a href="https://instagram.com/${(order.instagram||'').replace('@','')}" target="_blank" style="color:#c9a84c;text-decoration:none;">${escEmail(order.instagram||'@eetashacollection')}</a></p>
+        <p style="margin:0;font-size:14px;font-family:Arial,sans-serif;color:#555;">📞 Phone: <a href="tel:${escEmail(order.whatsapp||'')}" style="color:#c9a84c;text-decoration:none;">${escEmail(order.whatsapp||'')}</a></p>
       </div>
     </div>
 
