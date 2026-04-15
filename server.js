@@ -118,7 +118,7 @@ async function sendOrderConfirmationEmail(order) {
 </html>`;
 
     await resendClient.emails.send({
-      from:    'eetashacollection <onboarding@resend.dev>',
+      from:    'eetashacollection <noreply@eetashacollection.com>',
       to:      [order.customer_email],
       subject: `Order Confirmed — ${order.order_number} | eetashacollection`,
       html,
