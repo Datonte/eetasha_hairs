@@ -33,6 +33,104 @@ let stripe;
 if (hasStripe) stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // ============================================================
+//  RESEND EMAIL
+// ============================================================
+const hasResend = !!process.env.RESEND_API_KEY;
+let resendClient;
+if (hasResend) {
+  const { Resend } = require('resend');
+  resendClient = new Resend(process.env.RESEND_API_KEY);
+}
+
+async function sendOrderConfirmationEmail(order) {
+  if (!hasResend) return;
+  try {
+    const itemsHtml = (order.items || []).map(i => `
+      <tr>
+        <td style="padding:10px 0;border-bottom:1px solid #f0ede8;font-size:14px;">${i.product_name}${i.variant_label ? `<br><span style="color:#9b8860;font-size:12px;">${i.variant_label}</span>` : ''}</td>
+        <td style="padding:10px 0;border-bottom:1px solid #f0ede8;text-align:center;font-size:14px;">×${i.quantity}</td>
+        <td style="padding:10px 0;border-bottom:1px solid #f0ede8;text-align:right;font-size:14px;">£${(i.price * i.quantity).toFixed(2)}</td>
+      </tr>`).join('');
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#faf9f7;font-family:Georgia,serif;">
+  <div style="max-width:580px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.08);">
+
+    <!-- Header -->
+    <div style="background:#1a1a1a;padding:32px;text-align:center;">
+      <h1 style="margin:0;color:#c9a84c;font-size:22px;letter-spacing:2px;text-transform:uppercase;">eetashacollection</h1>
+      <p style="margin:8px 0 0;color:#999;font-size:13px;font-family:Arial,sans-serif;">Luxury Hair Collection</p>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:36px 32px;">
+      <h2 style="margin:0 0 6px;color:#1a1a1a;font-size:20px;">Order Confirmed! 🎉</h2>
+      <p style="margin:0 0 24px;color:#666;font-size:14px;font-family:Arial,sans-serif;">Hi ${order.customer_name}, thank you for your order. We've received it and will get it ready for dispatch soon.</p>
+
+      <div style="background:#faf9f7;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+        <p style="margin:0;font-size:13px;font-family:Arial,sans-serif;color:#666;">Order Reference</p>
+        <p style="margin:4px 0 0;font-size:20px;color:#c9a84c;font-weight:bold;letter-spacing:1px;">${order.order_number}</p>
+      </div>
+
+      <!-- Items -->
+      <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+        <thead>
+          <tr>
+            <th style="text-align:left;font-size:11px;color:#999;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:1px;padding-bottom:10px;border-bottom:2px solid #f0ede8;">Item</th>
+            <th style="text-align:center;font-size:11px;color:#999;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:1px;padding-bottom:10px;border-bottom:2px solid #f0ede8;">Qty</th>
+            <th style="text-align:right;font-size:11px;color:#999;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:1px;padding-bottom:10px;border-bottom:2px solid #f0ede8;">Price</th>
+          </tr>
+        </thead>
+        <tbody>${itemsHtml}</tbody>
+      </table>
+
+      <!-- Totals -->
+      <div style="border-top:2px solid #f0ede8;padding-top:16px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-family:Arial,sans-serif;font-size:14px;color:#666;">
+          <span>Subtotal</span><span>£${order.subtotal.toFixed(2)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:12px;font-family:Arial,sans-serif;font-size:14px;color:#666;">
+          <span>Delivery${order.delivery_carrier ? ` (${order.delivery_carrier})` : ''}</span><span>£${order.delivery_fee.toFixed(2)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;color:#1a1a1a;">
+          <span>Total</span><span style="color:#c9a84c;">£${order.total.toFixed(2)}</span>
+        </div>
+      </div>
+
+      <!-- Delivery address -->
+      <div style="margin-top:24px;padding:16px 20px;border:1px solid #f0ede8;border-radius:8px;">
+        <p style="margin:0 0 6px;font-size:11px;color:#999;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:1px;">Delivering To</p>
+        <p style="margin:0;font-size:14px;color:#333;font-family:Arial,sans-serif;white-space:pre-line;">${order.delivery_address}</p>
+      </div>
+
+      <p style="margin:28px 0 0;font-size:13px;color:#888;font-family:Arial,sans-serif;line-height:1.6;">If you have any questions about your order, contact us on WhatsApp or Instagram <strong>@eetashacollection</strong>.</p>
+    </div>
+
+    <!-- Footer -->
+    <div style="background:#faf9f7;padding:20px 32px;text-align:center;border-top:1px solid #f0ede8;">
+      <p style="margin:0;font-size:12px;color:#bbb;font-family:Arial,sans-serif;">© ${new Date().getFullYear()} eetashacollection · Luxury Hair Collection</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    await resendClient.emails.send({
+      from:    'eetashacollection <onboarding@resend.dev>',
+      to:      [order.customer_email],
+      subject: `Order Confirmed — ${order.order_number} | eetashacollection`,
+      html,
+    });
+    console.log(`  ✅ Confirmation email sent to ${order.customer_email}`);
+  } catch (err) {
+    console.error('  ⚠ Email send failed:', err.message);
+    // Non-fatal — order still goes through
+  }
+}
+
+// ============================================================
 //  HELPERS
 // ============================================================
 function clean(str) { return String(str || '').replace(/[<>]/g, '').trim(); }
@@ -476,6 +574,10 @@ app.post('/api/orders', optionalUser, [
     }).select().single();
 
     if (error) throw error;
+
+    // Send confirmation email (non-blocking)
+    sendOrderConfirmationEmail(order);
+
     res.status(201).json({ order });
   } catch (err) {
     console.error('Order error:', err);
