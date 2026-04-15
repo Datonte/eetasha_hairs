@@ -607,11 +607,7 @@ app.get('/api/orders/mine', requireUser, async (req, res) => {
   try {
     const { data, error } = await supabase.from('orders').select('*').eq('user_id', req.userId).order('created_at', { ascending: false });
     if (error) throw error;
-    // Hide abandoned Stripe orders (started checkout but never paid)
-    const visible = (data || []).filter(o =>
-      o.payment_method !== 'stripe' || o.payment_status === 'paid'
-    );
-    res.json(visible);
+    res.json(data || []);
   } catch {
     res.status(500).json({ error: 'Failed to load orders.' });
   }
