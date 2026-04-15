@@ -49,6 +49,10 @@ function escEmail(str) {
 async function sendOrderConfirmationEmail(order) {
   if (!hasResend) return;
   try {
+    // Fetch WhatsApp number from settings
+    const { data: settings } = await supabase.from('settings').select('whatsapp').eq('id', 1).single();
+    order.whatsapp = settings?.whatsapp || '';
+
     const itemsHtml = (order.items || []).map(i => `
       <tr>
         <td style="padding:10px 0;border-bottom:1px solid #f0ede8;font-size:14px;">${escEmail(i.product_name)}${i.variant_label ? `<br><span style="color:#9b8860;font-size:12px;">${escEmail(i.variant_label)}</span>` : ''}</td>
@@ -110,7 +114,11 @@ async function sendOrderConfirmationEmail(order) {
         <p style="margin:0;font-size:14px;color:#333;font-family:Arial,sans-serif;white-space:pre-line;">${escEmail(order.delivery_address)}</p>
       </div>
 
-      <p style="margin:28px 0 0;font-size:13px;color:#888;font-family:Arial,sans-serif;line-height:1.6;">If you have any questions about your order, contact us on WhatsApp or Instagram <strong>@eetashacollection</strong>.</p>
+      <div style="margin-top:28px;padding:16px 20px;background:#faf9f7;border-radius:8px;border:1px solid #f0ede8;">
+        <p style="margin:0 0 10px;font-size:11px;color:#999;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:1px;">Need help with your order?</p>
+        <p style="margin:0 0 6px;font-size:14px;font-family:Arial,sans-serif;color:#555;">💬 WhatsApp: <a href="https://wa.me/${(order.whatsapp||'').replace(/[^0-9]/g,'')}" style="color:#c9a84c;text-decoration:none;">${escEmail(order.whatsapp||'+44...')}</a></p>
+        <p style="margin:0;font-size:14px;font-family:Arial,sans-serif;color:#555;">✉️ Email: <a href="mailto:noreply@eetashacollection.com" style="color:#c9a84c;text-decoration:none;">noreply@eetashacollection.com</a></p>
+      </div>
     </div>
 
     <!-- Footer -->
@@ -647,6 +655,7 @@ app.get('/api/settings', async (req, res) => {
     res.json({
       whatsapp:        data.whatsapp,
       instagram:       data.instagram,
+      email:           data.email,
       bankName:        data.bank_name,
       sortCode:        data.sort_code,
       accountNumber:   data.account_number,
