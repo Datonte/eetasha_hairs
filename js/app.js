@@ -529,13 +529,11 @@ function openVariantModal(productId) {
     if (vtype === 'bundle')  return (selInches && selBundles && selColour) ? `${selInches}-${selBundles}-${colourTier(selColour)}` : null;
     if (vtype === 'wig' || vtype === 'big-wig') {
       if (!selInches || !selLace) return null;
-      const hasHair   = (v.hair_types   || []).length > 0;
+      const hasHair   = (v.hair_types || []).length > 0;
       const hasAttach = (v.attachment_types || []).length > 0;
       if (!hasHair) return `${selInches}-${selLace}`; // backward compat
-      if (selLace === '2x6' && hasAttach) {
-        if (!selAttachment || !selHairType) return null;
-        return `${selInches}-${selLace}-${selAttachment}-${selHairType}`;
-      }
+      // attachment doesn't affect price — only used in label for fulfilment
+      if (selLace === '2x6' && hasAttach && !selAttachment) return null;
       if (!selHairType) return null;
       return `${selInches}-${selLace}-${selHairType}`;
     }

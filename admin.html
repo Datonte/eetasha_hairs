@@ -912,14 +912,10 @@
     }
 
     function _renderPriceTableWigOrBigWig(inches, laceSizes, attachTypes, hairTypes, prices) {
-      // Build column definitions
+      // Build column definitions — attachment doesn't affect price, only hair type does
       const cols = [];
       for (const ls of laceSizes) {
-        if (ls === '2x6' && attachTypes.length && hairTypes.length) {
-          for (const att of attachTypes)
-            for (const ht of hairTypes)
-              cols.push({ label: `${ls} ${att} ${ht}`, key: inch => `${inch}-${ls}-${att}-${ht}` });
-        } else if (hairTypes.length) {
+        if (hairTypes.length) {
           for (const ht of hairTypes)
             cols.push({ label: `${ls} ${ht}`, key: inch => `${inch}-${ls}-${ht}` });
         } else {
