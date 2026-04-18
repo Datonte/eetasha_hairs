@@ -515,6 +515,7 @@ function openVariantModal(productId) {
 
   // ── Shared state ──────────────────────────────────────────────
   let selInches = null, selBundles = null, selColour = null, selLace = null;
+  let selAttachment = null, selHairType = null;
 
   const laceSizes   = v.lace_sizes || [];
   const inchList    = (v.inches || []).slice().sort((a,b) => a-b);
@@ -526,13 +527,30 @@ function openVariantModal(productId) {
   function buildKey() {
     // For bundles, price is stored by tier — map the chosen colour to its tier for lookup
     if (vtype === 'bundle')  return (selInches && selBundles && selColour) ? `${selInches}-${selBundles}-${colourTier(selColour)}` : null;
-    if (vtype === 'wig' || vtype === 'big-wig') return (selInches && selLace) ? `${selInches}-${selLace}` : null;
+    if (vtype === 'wig' || vtype === 'big-wig') {
+      if (!selInches || !selLace) return null;
+      const hasHair   = (v.hair_types   || []).length > 0;
+      const hasAttach = (v.attachment_types || []).length > 0;
+      if (!hasHair) return `${selInches}-${selLace}`; // backward compat
+      if (selLace === '2x6' && hasAttach) {
+        if (!selAttachment || !selHairType) return null;
+        return `${selInches}-${selLace}-${selAttachment}-${selHairType}`;
+      }
+      if (!selHairType) return null;
+      return `${selInches}-${selLace}-${selHairType}`;
+    }
     if (vtype === 'closure' || vtype === 'frontal') return (selLace && selInches) ? `${selLace}-${selInches}` : null;
     return null;
   }
   function buildLabel() {
     if (vtype === 'bundle')  return `${selInches}" · ${selBundles} Bundle${selBundles>1?'s':''} · ${selColour}`;
-    if (vtype === 'wig' || vtype === 'big-wig') return `${selInches}" · ${selLace} HD Lace · ${selColour}`;
+    if (vtype === 'wig' || vtype === 'big-wig') {
+      const parts = [`${selInches}" · ${selLace} HD Lace`];
+      if (selAttachment) parts.push(selAttachment);
+      if (selHairType)   parts.push(selHairType);
+      if (selColour)     parts.push(selColour);
+      return parts.join(' · ');
+    }
     if (vtype === 'closure' || vtype === 'frontal') return `${selLace} · ${selInches}" Hair · ${selColour}`;
     return '';
   }
@@ -579,10 +597,34 @@ function openVariantModal(productId) {
       } else { s2.style.display = 'none'; }
     }
 
-    // Step 3 — colour swatches (all product types, shown after step 2 is complete)
+    // Step 2b — attachment type (wigs, 2x6 lace only)
+    const hasAttach = (v.attachment_types || []).length > 0;
+    const hasHair   = (v.hair_types || []).length > 0;
+    const s2b = modal.querySelector('#vmStep2bWrap');
+    const show2b = (vtype === 'wig' || vtype === 'big-wig') && selLace === '2x6' && hasAttach;
+    if (show2b) {
+      s2b.style.display = '';
+      modal.querySelector('#vmStep2bBtns').innerHTML = (v.attachment_types || []).map(a =>
+        `<button class="variant-opt-btn${selAttachment===a?' selected':''}" onclick="_vmSel2b('${a}')">${a}</button>`
+      ).join('');
+    } else { s2b.style.display = 'none'; }
+
+    // Step 2c — hair type (wigs, all lace sizes)
+    const s2c = modal.querySelector('#vmStep2cWrap');
+    const attachResolved = !show2b || selAttachment;
+    const show2c = (vtype === 'wig' || vtype === 'big-wig') && selLace && hasHair && attachResolved;
+    if (show2c) {
+      s2c.style.display = '';
+      modal.querySelector('#vmStep2cBtns').innerHTML = (v.hair_types || []).map(h =>
+        `<button class="variant-opt-btn${selHairType===h?' selected':''}" onclick="_vmSel2c('${h}')">${h}</button>`
+      ).join('');
+    } else { s2c.style.display = 'none'; }
+
+    // Step 3 — colour swatches (all product types, shown after all prior steps complete)
     const s3 = modal.querySelector('#vmStep3Wrap');
+    const wigReady = selLace && (!hasHair || selHairType) && (!show2b || selAttachment);
     const showColour = (vtype === 'bundle' && selBundles)
-      || ((vtype === 'wig' || vtype === 'big-wig') && selLace)
+      || ((vtype === 'wig' || vtype === 'big-wig') && wigReady)
       || ((vtype === 'closure' || vtype === 'frontal') && selInches);
     if (showColour) {
       s3.style.display = '';
@@ -601,11 +643,18 @@ function openVariantModal(productId) {
 
   // ── Step labels per type ──────────────────────────────────────
   const isClosureFrontal = vtype === 'closure' || vtype === 'frontal';
+  const isWigType        = vtype === 'wig' || vtype === 'big-wig';
+  const hasAttachOpt     = isWigType && (v.attachment_types || []).length > 0;
+  const hasHairOpt       = isWigType && (v.hair_types || []).length > 0;
   const step1Label = isClosureFrontal ? '1. Choose Lace Size' : '1. Choose Inches';
   const step2Label = vtype === 'bundle' ? '2. Choose Bundles'
                    : isClosureFrontal   ? '2. Choose Hair Length'
                    :                     '2. Choose Lace Size';
-  const step3Label = '3. Choose Colour';
+  // Dynamic step numbers for new wig steps
+  let stepN = 3;
+  const step2bLabel = `${stepN++}. Choose Attachment`;
+  const step2cLabel = `${hasAttachOpt ? stepN++ : stepN++}. Choose Hair Type`;
+  const step3Label  = `${stepN}. Choose Colour`;
 
   // ── Build modal HTML ──────────────────────────────────────────
   document.getElementById('_variantModal')?.remove();
@@ -631,6 +680,16 @@ function openVariantModal(productId) {
       <div id="vmStep2Wrap" style="margin-bottom:18px;display:none;">
         <div class="variant-step-label">${step2Label}</div>
         <div id="vmStep2Btns" class="variant-opts-row"></div>
+      </div>
+
+      <div id="vmStep2bWrap" style="margin-bottom:18px;display:none;">
+        <div class="variant-step-label">${step2bLabel}</div>
+        <div id="vmStep2bBtns" class="variant-opts-row"></div>
+      </div>
+
+      <div id="vmStep2cWrap" style="margin-bottom:18px;display:none;">
+        <div class="variant-step-label">${step2cLabel}</div>
+        <div id="vmStep2cBtns" class="variant-opts-row"></div>
       </div>
 
       <div id="vmStep3Wrap" style="margin-bottom:20px;display:none;">
@@ -659,10 +718,13 @@ function openVariantModal(productId) {
   window._vmSel2 = (val) => {
     if (vtype === 'bundle')          { selBundles = (typeof val === 'number') ? val : parseInt(val); selColour = null; }
     else if (isClosureFrontal)       { selInches  = (typeof val === 'number') ? val : parseInt(val); selColour = null; }
-    else                             { selLace = val; selColour = null; } // wig/big-wig — reset colour when lace changes
+    else                             { selLace = val; selAttachment = null; selHairType = null; selColour = null; } // wig — reset all downstream
     render();
   };
-  // Selection handlers — step 3 (colour, bundles only)
+  // Selection handlers — step 2b (attachment) and 2c (hair type)
+  window._vmSel2b = (val) => { selAttachment = val; selHairType = null; selColour = null; render(); };
+  window._vmSel2c = (val) => { selHairType = val; selColour = null; render(); };
+  // Selection handlers — step 3 (colour)
   window._vmSel3 = (c) => { selColour = c; render(); };
 
   window._vmAddToCart = (pid) => {

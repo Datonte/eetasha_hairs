@@ -282,7 +282,17 @@
               <label class="form-label" style="margin-bottom:8px;">Available Lace Sizes</label>
               <div id="pmLaceSizesGrid" style="display:flex;flex-wrap:wrap;gap:7px;"></div>
             </div>
-            <!-- Colours grid (bundle only) -->
+            <!-- Attachment options (wigs only) -->
+            <div class="form-group" style="margin-top:14px;display:none;" id="pmAttachmentSection">
+              <label class="form-label" style="margin-bottom:8px;">Attachment Options <span style="font-size:0.75rem;color:var(--gray-500);">(for 2x6 lace only)</span></label>
+              <div id="pmAttachmentGrid" style="display:flex;flex-wrap:wrap;gap:7px;"></div>
+            </div>
+            <!-- Hair type options (wigs only) -->
+            <div class="form-group" style="margin-top:14px;display:none;" id="pmHairTypeSection">
+              <label class="form-label" style="margin-bottom:8px;">Hair Type</label>
+              <div id="pmHairTypeGrid" style="display:flex;flex-wrap:wrap;gap:7px;"></div>
+            </div>
+            <!-- Colours grid -->
             <div class="form-group" style="margin-top:14px;" id="pmColoursSection">
               <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
                 <label class="form-label" style="margin:0;">Available Colours</label>
@@ -785,6 +795,8 @@
       return cols.flatMap(t => TIERS.includes(t) ? COLOUR_CATALOGUE_ADMIN.filter(x => x.tier === t).map(x => x.code) : [t]);
     }
     const VARIANT_LACE_SIZES  = ['2x6','4x4','5x5','6x6','7x7','9x6','13x4','13x6'];
+    const ATTACHMENT_TYPES    = ['Glueless', 'Glued'];
+    const HAIR_TYPES          = ['Virgin', 'Raw'];
 
     function _getVariantType() {
       return document.getElementById('pmVariantType')?.value || 'bundle';
@@ -793,14 +805,19 @@
     function onVariantTypeChange() {
       const vt = _getVariantType();
       const isBundle = vt === 'bundle';
+      const isWig    = vt === 'wig' || vt === 'big-wig';
       // Colours available for ALL product types — admin decides which ones
-      document.getElementById('pmColoursSection').style.display   = '';
-      document.getElementById('pmLaceSizesSection').style.display = isBundle ? 'none' : '';
-      document.getElementById('pmInchesSection').style.display    = '';
+      document.getElementById('pmColoursSection').style.display    = '';
+      document.getElementById('pmLaceSizesSection').style.display  = isBundle ? 'none' : '';
+      document.getElementById('pmInchesSection').style.display     = '';
+      document.getElementById('pmAttachmentSection').style.display = isWig ? '' : 'none';
+      document.getElementById('pmHairTypeSection').style.display   = isWig ? '' : 'none';
       // re-populate grids if empty
-      if (!document.getElementById('pmInchesGrid').children.length)    renderInchCheckboxes([]);
-      if (!document.getElementById('pmLaceSizesGrid').children.length) renderLaceCheckboxes([]);
-      if (!document.getElementById('pmColoursGrid').children.length)   renderColourCheckboxes([]);
+      if (!document.getElementById('pmInchesGrid').children.length)     renderInchCheckboxes([]);
+      if (!document.getElementById('pmLaceSizesGrid').children.length)  renderLaceCheckboxes([]);
+      if (!document.getElementById('pmColoursGrid').children.length)    renderColourCheckboxes([]);
+      if (isWig && !document.getElementById('pmAttachmentGrid').children.length) renderAttachmentCheckboxes([]);
+      if (isWig && !document.getElementById('pmHairTypeGrid').children.length)   renderHairTypeCheckboxes([]);
       document.getElementById('pmPriceTableWrap').style.display = 'none';
       document.getElementById('pmPriceTable').innerHTML = '';
     }
@@ -824,8 +841,13 @@
       }).join('');
     }
 
-    function renderInchCheckboxes(selected)  { document.getElementById('pmInchesGrid').innerHTML    = _checkboxGrid(VARIANT_INCHES, 'inch', selected); }
-    function renderLaceCheckboxes(selected)  { document.getElementById('pmLaceSizesGrid').innerHTML  = _checkboxGrid(VARIANT_LACE_SIZES, 'lace', selected); }
+    function renderInchCheckboxes(selected)       { document.getElementById('pmInchesGrid').innerHTML      = _checkboxGrid(VARIANT_INCHES, 'inch', selected); }
+    function renderLaceCheckboxes(selected)       { document.getElementById('pmLaceSizesGrid').innerHTML   = _checkboxGrid(VARIANT_LACE_SIZES, 'lace', selected); }
+    function renderAttachmentCheckboxes(selected) { document.getElementById('pmAttachmentGrid').innerHTML  = _checkboxGrid(ATTACHMENT_TYPES, 'attachment', selected); }
+    function renderHairTypeCheckboxes(selected)   { document.getElementById('pmHairTypeGrid').innerHTML    = _checkboxGrid(HAIR_TYPES, 'hairtype', selected); }
+
+    function getSelectedAttachments() { return [...document.querySelectorAll('#pmAttachmentGrid input[data-attachment]:checked')].map(el => el.dataset.attachment); }
+    function getSelectedHairTypes()   { return [...document.querySelectorAll('#pmHairTypeGrid input[data-hairtype]:checked')].map(el => el.dataset.hairtype); }
     function renderColourCheckboxes(selected) {
       // Expand old tier-name format to colour codes if needed
       const sel = _expandColours(selected);
@@ -889,15 +911,30 @@
       return html + '</tbody>';
     }
 
-    function _renderPriceTableWigOrBigWig(inches, laceSizes, prices) {
+    function _renderPriceTableWigOrBigWig(inches, laceSizes, attachTypes, hairTypes, prices) {
+      // Build column definitions
+      const cols = [];
+      for (const ls of laceSizes) {
+        if (ls === '2x6' && attachTypes.length && hairTypes.length) {
+          for (const att of attachTypes)
+            for (const ht of hairTypes)
+              cols.push({ label: `${ls} ${att} ${ht}`, key: inch => `${inch}-${ls}-${att}-${ht}` });
+        } else if (hairTypes.length) {
+          for (const ht of hairTypes)
+            cols.push({ label: `${ls} ${ht}`, key: inch => `${inch}-${ls}-${ht}` });
+        } else {
+          cols.push({ label: ls, key: inch => `${inch}-${ls}` });
+        }
+      }
+      const thStyle = 'text-align:center;padding:9px 12px;background:var(--gray-100);font-size:0.75rem;color:var(--gray-500);font-weight:700;white-space:nowrap;';
       let html = `<thead><tr>
         <th style="text-align:left;padding:9px 12px;background:var(--gray-100);white-space:nowrap;font-size:0.78rem;color:var(--gray-500);font-weight:700;">Inches</th>
-        ${laceSizes.map(ls=>`<th style="text-align:center;padding:9px 12px;background:var(--gray-100);font-size:0.78rem;color:var(--gray-500);font-weight:700;">${escHtml(ls)}</th>`).join('')}
+        ${cols.map(c => `<th style="${thStyle}">${escHtml(c.label)}</th>`).join('')}
       </tr></thead><tbody>`;
       for (const inch of inches) {
         html += `<tr style="border-bottom:1px solid var(--gray-100);">
           <td style="padding:7px 12px;font-weight:600;white-space:nowrap;font-size:0.82rem;">${inch}&quot;</td>
-          ${laceSizes.map(ls => _priceInput(`${inch}-${ls}`, prices)).join('')}
+          ${cols.map(c => _priceInput(c.key(inch), prices)).join('')}
         </tr>`;
       }
       return html + '</tbody>';
@@ -933,7 +970,7 @@
       } else if (vt === 'wig' || vt === 'big-wig') {
         if (!inches.length) { Toast.show('Select at least one inch size.', 'error'); return; }
         if (!laces.length)  { Toast.show('Select at least one lace size.', 'error'); return; }
-        table.innerHTML = _renderPriceTableWigOrBigWig(inches, laces, prices);
+        table.innerHTML = _renderPriceTableWigOrBigWig(inches, laces, getSelectedAttachments(), getSelectedHairTypes(), prices);
       } else { // closure / frontal
         if (!laces.length)  { Toast.show('Select at least one lace size.', 'error'); return; }
         if (!inches.length) { Toast.show('Select at least one inch size.', 'error'); return; }
@@ -951,7 +988,7 @@
       const prices  = _readCurrentPriceInputs();
       const base    = { enabled: true, variant_type: vt, prices, unavailable: [], colours };
       if (vt === 'bundle')                  return { ...base, inches };
-      if (vt === 'wig' || vt === 'big-wig') return { ...base, inches, lace_sizes: laces };
+      if (vt === 'wig' || vt === 'big-wig') return { ...base, inches, lace_sizes: laces, attachment_types: getSelectedAttachments(), hair_types: getSelectedHairTypes() };
       return { ...base, lace_sizes: laces, inches }; // closure / frontal
     }
 
@@ -974,17 +1011,21 @@
       onVariantTypeChange();
       renderInchCheckboxes(variants.inches      || []);
       renderLaceCheckboxes(variants.lace_sizes  || []);
+      renderAttachmentCheckboxes(variants.attachment_types || []);
+      renderHairTypeCheckboxes(variants.hair_types         || []);
       // Expand old tier-name format to individual colour codes before restoring
-      const colourCodes = _expandColours(variants.colours || []);
+      const colourCodes  = _expandColours(variants.colours || []);
       renderColourCheckboxes(colourCodes);
-      const prices = variants.prices || {};
-      const inches = variants.inches || [];
-      const laces  = variants.lace_sizes || [];
+      const prices      = variants.prices || {};
+      const inches      = variants.inches || [];
+      const laces       = variants.lace_sizes || [];
+      const attachTypes = variants.attachment_types || [];
+      const hairTypes   = variants.hair_types || [];
       if (vt === 'bundle' && inches.length && colourCodes.length) {
         document.getElementById('pmPriceTable').innerHTML = _renderPriceTableBundle(inches, colourCodes, prices);
         document.getElementById('pmPriceTableWrap').style.display = 'block';
       } else if ((vt === 'wig' || vt === 'big-wig') && inches.length && laces.length) {
-        document.getElementById('pmPriceTable').innerHTML = _renderPriceTableWigOrBigWig(inches, laces, prices);
+        document.getElementById('pmPriceTable').innerHTML = _renderPriceTableWigOrBigWig(inches, laces, attachTypes, hairTypes, prices);
         document.getElementById('pmPriceTableWrap').style.display = 'block';
       } else if ((vt === 'closure' || vt === 'frontal') && laces.length && inches.length) {
         document.getElementById('pmPriceTable').innerHTML = _renderPriceTableClosureOrFrontal(laces, inches, prices);
