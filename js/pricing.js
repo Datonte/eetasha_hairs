@@ -26,8 +26,20 @@
   const DEFAULT_PRICING = {
     version: 1,
     usdToGbp: 0.757,                 // $1 = £0.757 (mid-market, 15 Nov 2026)
-    markupPercent: null,             // set later — selling price = cost × (1 + markup%)
     wigMakingGbp: 15,                // optional service added to a unit
+    stylingGbp: 10,                  // optional styling on top of wig-making
+    // Costs on top of the supplier price (filled in on the admin Pricing tab)
+    costs: {
+      inboundPerPieceGbp: null,      // FedEx from supplier, spread per piece
+      dutyPercent: 0,                // UK import duty (about 0% bundles/lace)
+      importVatPercent: 20,          // not VAT-registered → import VAT is a real cost
+      cardFeePercent: 2,             // card fees can't be charged separately (UK law) → built in
+      cardFeeFixedGbp: 0.20,
+      packagingGbp: null,            // per order (branded bag, tag, mailer)
+    },
+    // Markup on the landed cost, by what is being sold (filled in on the Pricing tab)
+    markups: { bundles: null, lace: null, units: null },
+    rounding: 'x9',                  // 'x9' → £249, £319 · 'pound' → whole pounds · 'none'
     weftLists: {
       list1: { label: 'Weft list 1', grades: blankGrades() },
       list2: { label: 'Weft list 2', grades: blankGrades() },
@@ -99,14 +111,44 @@
     if (texUsd) { usd += texUsd * pieces; lines.push({ label: `${sel.texture}: ${pieces} piece${pieces > 1 ? 's' : ''} × $${texUsd}`, usd: texUsd * pieces }); }
     if (colUsd) { usd += colUsd * pieces; lines.push({ label: `${sel.colour}: ${pieces} piece${pieces > 1 ? 's' : ''} × $${colUsd}`, usd: colUsd * pieces }); }
 
-    const costGbp = money(usd * rate);
+    const costGbp = money(usd * rate);          // supplier price in pounds
     for (const l of lines) l.gbp = money(l.usd * rate);
 
-    const wigMakingGbp = sel.wigMaking ? Number(p.wigMakingGbp || 0) : 0;
-    const markup = p.markupPercent === null || p.markupPercent === '' || p.markupPercent === undefined ? null : Number(p.markupPercent);
-    const sellGbp = markup === null || !isFinite(markup) ? null : money(costGbp * (1 + markup / 100) + wigMakingGbp);
+    // ── Landed cost: what the unit really costs once it's in your hands ──
+    const c = p.costs || {};
+    const n = v => (v === null || v === undefined || v === '' || !isFinite(Number(v))) ? 0 : Number(v);
+    const inboundGbp   = money(n(c.inboundPerPieceGbp) * pieces);
+    const dutyGbp      = money((costGbp + inboundGbp) * n(c.dutyPercent) / 100);
+    const vatGbp       = money((costGbp + inboundGbp + dutyGbp) * n(c.importVatPercent) / 100);
+    const packagingGbp = money(n(c.packagingGbp));
+    const landedGbp    = money(costGbp + inboundGbp + dutyGbp + vatGbp + packagingGbp);
 
-    return { pieces, lines, costUsd: money(usd), costGbp, wigMakingGbp, markupPercent: markup, sellGbp };
+    // ── Selling price ──
+    const category = bundles > 0 && lacePieces ? 'units' : (bundles > 0 ? 'bundles' : 'lace');
+    const rawMarkup = p.markups?.[category];
+    const markup = rawMarkup === null || rawMarkup === undefined || rawMarkup === '' || !isFinite(Number(rawMarkup)) ? null : Number(rawMarkup);
+    const wigMakingGbp = sel.wigMaking ? n(p.wigMakingGbp) : 0;
+    const stylingGbp   = sel.styling   ? n(p.stylingGbp)   : 0;
+    const servicesGbp  = money(wigMakingGbp + stylingGbp);
+
+    let sellGbp = null, cardFeeGbp = null, profitGbp = null;
+    if (markup !== null) {
+      const beforeFees = landedGbp * (1 + markup / 100) + servicesGbp;
+      const pct = n(c.cardFeePercent) / 100, fixed = n(c.cardFeeFixedGbp);
+      let price = pct < 1 ? (beforeFees + fixed) / (1 - pct) : beforeFees;   // card fee paid out of the price
+      if (p.rounding === 'x9')         price = Math.ceil((price + 1) / 10) * 10 - 1;   // 343.20 → 349
+      else if (p.rounding === 'pound') price = Math.ceil(price);
+      sellGbp    = money(price);
+      cardFeeGbp = money(sellGbp * pct + fixed);
+      profitGbp  = money(sellGbp - landedGbp - cardFeeGbp);
+    }
+
+    return {
+      pieces, lines, costUsd: money(usd), costGbp,
+      inboundGbp, dutyGbp, vatGbp, packagingGbp, landedGbp,
+      category, markupPercent: markup, wigMakingGbp, stylingGbp, servicesGbp,
+      sellGbp, cardFeeGbp, profitGbp,
+    };
   }
 
   // Copy only known fields with sane numbers onto a fresh layout (used before saving).
@@ -117,8 +159,19 @@
 
     const rate = Number(src.usdToGbp);
     out.usdToGbp = isFinite(rate) && rate > 0.2 && rate < 3 ? Math.round(rate * 100000) / 100000 : DEFAULT_PRICING.usdToGbp;
-    out.markupPercent = num(src.markupPercent, 1000);
     out.wigMakingGbp = num(src.wigMakingGbp, 1000) ?? DEFAULT_PRICING.wigMakingGbp;
+    out.stylingGbp   = num(src.stylingGbp, 1000) ?? DEFAULT_PRICING.stylingGbp;
+    for (const k of Object.keys(out.costs)) {
+      const max = k.endsWith('Percent') ? 100 : 1000;
+      const v = num(src.costs?.[k], max);
+      if (v !== null || src.costs?.[k] === null || src.costs?.[k] === '') out.costs[k] = v;
+    }
+    for (const k of Object.keys(out.markups)) out.markups[k] = num(src.markups?.[k], 1000);
+    // Older saved files had one markup for everything — use it as the starting point
+    if (src.markups === undefined && num(src.markupPercent, 1000) !== null) {
+      for (const k of Object.keys(out.markups)) out.markups[k] = num(src.markupPercent, 1000);
+    }
+    out.rounding = ['x9', 'pound', 'none'].includes(src.rounding) ? src.rounding : DEFAULT_PRICING.rounding;
 
     for (const listId of Object.keys(out.weftLists)) {
       const s = src.weftLists?.[listId];

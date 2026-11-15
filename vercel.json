@@ -1,10 +1,10 @@
 {
   "redirects": [
     { "source": "/index.html", "destination": "/", "permanent": true },
-    { "source": "/:page(shop|about|account|admin|checkout|checkout-success|delivery).html", "destination": "/:page", "permanent": true }
+    { "source": "/:page(shop|about|account|admin|checkout|checkout-success|delivery|returns).html", "destination": "/:page", "permanent": true }
   ],
   "rewrites": [
-    { "source": "/:page(shop|about|account|admin|checkout|checkout-success|delivery)", "destination": "/:page.html" },
+    { "source": "/:page(shop|about|account|admin|checkout|checkout-success|delivery|returns)", "destination": "/:page.html" },
     { "source": "/api/:path*", "destination": "/api/index" },
     { "source": "/product/:slug", "destination": "/api/index" },
     { "source": "/sitemap.xml", "destination": "/api/index" }

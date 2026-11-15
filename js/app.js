@@ -370,6 +370,8 @@ function renderFooter() {
           <div>
             <h4>Customer Care</h4>
             <a href="/about#contact">Contact Us</a>
+            <a href="/returns">Returns &amp; Refunds</a>
+            <a href="/returns#delivery">Delivery</a>
             ${s.whatsapp ? `<a href="https://wa.me/${s.whatsapp.replace(/[^0-9]/g,'')}" target="_blank" rel="noopener">WhatsApp Support</a>` : ''}
           </div>
         </div>
@@ -394,7 +396,7 @@ function productCardHTML(p) {
 
   let btn = '';
   if (!p.in_stock) {
-    btn = `<span class="product-card-stock stock-out">Out of Stock</span>`;
+    btn = `<span class="product-card-stock stock-out">Out of stock – coming back soon</span>`;
   } else if (hasVariants) {
     btn = `<button class="btn btn-primary btn-sm btn-full" onclick="openVariantModal('${p.id}')">Select Options</button>`;
   } else {
@@ -521,6 +523,9 @@ function openVariantModal(productId) {
   // ── Shared state ──────────────────────────────────────────────
   let selInches = null, selBundles = null, selColour = null, selLace = null;
   let selAttachment = null, selHairType = null;
+  let selStyling = false;   // optional wig styling service
+  const stylingFee  = Number(State.settings.wigStylingFee) || 10;
+  const canStyle    = vtype === 'wig' || vtype === 'big-wig';
 
   const laceSizes   = v.lace_sizes || [];
   const inchList    = (v.inches || []).slice().sort((a,b) => a-b);
@@ -640,7 +645,12 @@ function openVariantModal(productId) {
       ).join('');
     } else { s3.style.display = 'none'; }
 
-    modal.querySelector('#vmPrice').textContent = price !== null ? `${currency}${price.toFixed(2)}` : '—';
+    // Optional styling (wigs only) — shown once the colour is chosen
+    const sStyle = modal.querySelector('#vmStylingWrap');
+    if (sStyle) sStyle.style.display = (canStyle && selColour) ? '' : 'none';
+
+    const total = price !== null ? price + (canStyle && selStyling ? stylingFee : 0) : null;
+    modal.querySelector('#vmPrice').textContent = total !== null ? `${currency}${total.toFixed(2)}` : '—';
     modal.querySelector('#vmAddBtn').disabled = price === null || !selColour;
   }
 
@@ -700,6 +710,15 @@ function openVariantModal(productId) {
         <div id="vmStep3Btns" class="colour-swatch-grid"></div>
       </div>
 
+      ${canStyle ? `
+      <div id="vmStylingWrap" style="margin-bottom:20px;display:none;">
+        <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1.5px solid var(--gray-200);border-radius:var(--radius);cursor:pointer;">
+          <input type="checkbox" id="vmStyling" onchange="_vmStyling(this.checked)" style="width:18px;height:18px;accent-color:var(--gold-dark);">
+          <span style="flex:1;font-size:0.88rem;"><strong>Add styling</strong><br><span style="color:var(--gray-500);font-size:0.78rem;">Curls, layers or a sleek finish, ready to wear</span></span>
+          <span style="font-weight:700;color:var(--gold-dark);">+${currency}${stylingFee.toFixed(2)}</span>
+        </label>
+      </div>` : ''}
+
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
         <span style="font-size:0.85rem;color:var(--gray-500);">Price</span>
         <span id="vmPrice" style="font-family:var(--font-head);font-size:1.3rem;color:var(--gold-dark);font-weight:700;">—</span>
@@ -730,11 +749,19 @@ function openVariantModal(productId) {
   // Selection handlers — step 3 (colour)
   window._vmSel3 = (c) => { selColour = c; render(); };
 
+  window._vmStyling = (on) => { selStyling = !!on; render(); };
+
   window._vmAddToCart = (pid) => {
     const price = currentPrice();
     const key   = buildKey();
     if (price === null || !key) return;
-    Store.addToCart(pid, 1, { key, label: buildLabel(), price });
+    const styled = canStyle && selStyling;
+    // Styling travels on the cart line as "<key>|styled"; the server adds the fee itself
+    Store.addToCart(pid, 1, {
+      key:   styled ? `${key}|styled` : key,
+      label: styled ? `${buildLabel()} · Styled` : buildLabel(),
+      price: styled ? price + stylingFee : price,
+    });
     modal.remove();
     openCart();
   };

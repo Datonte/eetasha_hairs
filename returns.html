@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Returns &amp; Refunds | eetashacollection</title>
+  <link rel="canonical" href="https://eetashacollection.com/returns">
+  <meta property="og:site_name" content="eetashacollection">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://eetashacollection.com/returns">
+  <meta property="og:title" content="Returns &amp; Refunds | eetashacollection">
+  <meta property="og:description" content="Our hygiene-seal returns policy, delivery and refunds for wigs, bundles, closures and frontals.">
+  <meta property="og:image" content="https://eetashacollection.com/images/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/images/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
+  <meta name="theme-color" content="#1a1c1c">
+  <meta name="description" content="Our hygiene-seal returns policy, delivery and refunds for wigs, bundles, closures and frontals.">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.101.1/dist/umd/supabase.min.js"></script>
+  <style>
+    .policy { max-width: 760px; margin: 0 auto; }
+    .policy h2 { font-size: 1.35rem; margin: 36px 0 12px; }
+    .policy p, .policy li { color: var(--gray-600); line-height: 1.8; font-size: 0.95rem; }
+    .policy ul { list-style: disc; padding-left: 22px; margin: 8px 0 0; }
+    .policy li { margin-bottom: 6px; }
+    .policy-callout { background: var(--gold-bg); border-left: 3px solid var(--gold); border-radius: var(--radius); padding: 16px 20px; margin: 20px 0; }
+    .policy-callout p { margin: 0; color: var(--gray-700); }
+  </style>
+</head>
+<body data-page="returns">
+  <div id="siteNav"></div>
+
+  <section class="section page-top">
+    <div class="container policy">
+      <span class="section-subtitle">Customer care</span>
+      <h1 class="serif mb-2">Returns &amp; Refunds</h1>
+      <p>We want you to love your hair. Because hair is a personal hygiene product, our returns are handled differently from most shops. Please read this before you order.</p>
+
+      <div class="policy-callout">
+        <p><strong>Every unit is sent with our branded eetashacollection tag, which acts as a hygiene seal.</strong> Please keep the tag on until you have checked your order. Once the tag is removed, the hair can't be returned for hygiene reasons.</p>
+      </div>
+
+      <h2 class="serif">Wrong or faulty item</h2>
+      <p>If we've sent you the wrong unit, or it arrives faulty:</p>
+      <ul>
+        <li>Contact us <strong>within 48 hours of delivery</strong> on WhatsApp or by email so we can sort it out quickly.</li>
+        <li>Send clear photos or a video showing the issue, with the <strong>tag still attached</strong> and the hair <strong>unworn</strong>.</li>
+        <li>Once confirmed, we'll exchange or refund the item and cover the return postage.</li>
+      </ul>
+
+      <h2 class="serif">Hygiene seal &amp; used hair</h2>
+      <p>For hygiene reasons we can't accept returns of any hair once the tag (hygiene seal) has been removed, or if the hair has been worn, washed, cut, coloured, bleached, plucked or styled, or the lace has been cut.</p>
+
+      <h2 class="serif">Custom units</h2>
+      <p>Wigs that are made, coloured or styled to your order are made to your specification, so they can't be returned if you change your mind.</p>
+
+      <h2 class="serif">Unopened items</h2>
+      <p>Unworn items with the tag still attached can be returned within 14 days of delivery. Let us know within 14 days, then send the item back within 14 days of telling us, using a tracked service. Return postage is paid by you. We'll refund you within 14 days of receiving the item back.</p>
+
+      <h2 class="serif">When we can't accept a return</h2>
+      <ul>
+        <li>The tag/hygiene seal has been removed, or the item isn't returned in its original packaging.</li>
+        <li>The hair has been worn, washed, dyed, bleached, heat-damaged, cut or plucked, or the lace has been cut.</li>
+        <li>The wrong length, colour, texture or lace size was chosen when ordering.</li>
+        <li>Normal shedding or tangling caused by care and styling, or slight natural differences in colour and texture.</li>
+        <li>A change of mind more than 14 days after delivery.</li>
+        <li>The parcel was delivered to the address given at checkout.</li>
+      </ul>
+
+      <h2 class="serif" id="delivery">Delivery</h2>
+      <ul>
+        <li><strong>UK:</strong> tracked delivery, with free tracked delivery on orders over £400. Next-day delivery is also available.</li>
+        <li><strong>International</strong> (Europe, USA &amp; Canada, Africa and worldwide): tracked express delivery.</li>
+        <li>In-stock items are usually dispatched within 5–10 working days, including wig-making. Items marked "out of stock – coming back soon" can't be ordered until they're back.</li>
+        <li><strong>International orders:</strong> import taxes, duties and customs fees in your country are not included and are paid by you on delivery.</li>
+      </ul>
+
+      <h2 class="serif">International orders</h2>
+      <p>This policy applies to all orders. Shipping charges, import taxes and duties are not refundable.</p>
+
+      <h2 class="serif">Your statutory rights</h2>
+      <p>Nothing in this policy affects your statutory rights as a consumer.</p>
+
+      <h2 class="serif">Contact us</h2>
+      <p>WhatsApp: <a id="returnsWhatsapp" href="#" style="color:var(--gold-dark);">message us</a> · Email: <a href="mailto:eetasha.collection@gmail.com" style="color:var(--gold-dark);">eetasha.collection@gmail.com</a></p>
+    </div>
+  </section>
+
+  <div id="siteFooter"></div>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      await initApp();
+      renderNav('');
+      renderFooter();
+      updateCartCount();
+      const wa = (Store.getSettings().whatsapp || '').replace(/[^0-9]/g, '');
+      const link = document.getElementById('returnsWhatsapp');
+      if (wa) { link.href = `https://wa.me/${wa}`; link.textContent = Store.getSettings().whatsapp; link.target = '_blank'; link.rel = 'noopener'; }
+      document.body.classList.add('page-ready');
+    });
+  </script>
+</body>
+</html>

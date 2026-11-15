@@ -222,14 +222,26 @@ async function markStripeOrderPaid(sessionId) {
 // ============================================================
 function clean(str) { return String(str || '').replace(/[<>]/g, '').trim(); }
 
+// Delivery zones: uk | europe | usa (USA & Canada) | world (Africa & everywhere else).
+// A price of null means the service is not offered in that zone.
+const DELIVERY_REGIONS = ['uk', 'europe', 'usa', 'world'];
 const DEFAULT_DELIVERY_OPTIONS = [
-  { id:'evri',          carrier:'Evri',       service:'Standard',   prices:{ uk:3.20,  europe:9.99,  world:13.99 }, days:{ uk:'2-4 days', europe:'5-8 days', world:'8-14 days'  }, minDays:{ uk:2, europe:5, world:8  }, active:true },
-  { id:'royal-mail-48', carrier:'Royal Mail', service:'Tracked 48', prices:{ uk:3.40,  europe:12.99, world:16.99 }, days:{ uk:'2-3 days', europe:'5-7 days', world:'7-14 days'  }, minDays:{ uk:2, europe:5, world:7  }, active:true },
-  { id:'royal-mail-24', carrier:'Royal Mail', service:'Tracked 24', prices:{ uk:4.19,  europe:14.99, world:18.99 }, days:{ uk:'1-2 days', europe:'5-7 days', world:'7-10 days'  }, minDays:{ uk:1, europe:5, world:7  }, active:true },
-  { id:'dpd',           carrier:'DPD',        service:'Next Day',   prices:{ uk:7.99,  europe:15.99, world:24.99 }, days:{ uk:'Next day', europe:'3-5 days', world:'5-8 days'   }, minDays:{ uk:1, europe:3, world:5  }, active:true },
-  { id:'dhl',           carrier:'DHL',        service:'Express',    prices:{ uk:9.99,  europe:19.99, world:29.99 }, days:{ uk:'1-2 days', europe:'2-3 days', world:'3-5 days'   }, minDays:{ uk:1, europe:2, world:3  }, active:true },
-  { id:'ups',           carrier:'UPS',        service:'Express',    prices:{ uk:10.99, europe:22.99, world:34.99 }, days:{ uk:'1-2 days', europe:'2-3 days', world:'3-5 days'   }, minDays:{ uk:1, europe:2, world:3  }, active:true },
+  { id:'uk-tracked',   carrier:'UK Tracked',      service:'Royal Mail / Evri, tracked',       prices:{ uk:4.99, europe:null,  usa:null,  world:null  }, days:{ uk:'2-3 working days' },                                                     minDays:{ uk:2 },                 active:true },
+  { id:'uk-nextday',   carrier:'UK Next Day',     service:'Tracked & signed for',             prices:{ uk:9.99, europe:null,  usa:null,  world:null  }, days:{ uk:'Next working day' },                                                     minDays:{ uk:1 },                 active:true },
+  { id:'intl-economy', carrier:'Tracked Economy', service:'Royal Mail International Tracked', prices:{ uk:null, europe:19.99, usa:null,  world:null  }, days:{ europe:'5-8 working days' },                                               minDays:{ europe:5 },             active:true },
+  { id:'intl-express', carrier:'Express',         service:'DHL / FedEx Express, tracked & insured', prices:{ uk:null, europe:29.99, usa:39.99, world:49.99 }, days:{ europe:'2-4 working days', usa:'2-5 working days', world:'3-7 working days' }, minDays:{ europe:2, usa:2, world:3 }, active:true },
 ];
+// Free UK delivery on the cheapest UK option when the order subtotal reaches this amount
+const FREE_UK_DELIVERY_OVER = Number(process.env.FREE_UK_DELIVERY_OVER || 400);
+// Optional styling service for wigs (shown to customers, so not secret)
+const WIG_STYLING_FEE = Number(process.env.WIG_STYLING_FEE || 10);
+const hasPrice = v => typeof v === 'number' && isFinite(v) && v >= 0;
+function deliveryOptionsFrom(settings) {
+  return settings?.delivery_options?.length ? settings.delivery_options : DEFAULT_DELIVERY_OPTIONS;
+}
+function cheapestActiveOption(opts, region) {
+  return opts.filter(o => o.active && hasPrice(o.prices?.[region])).sort((a, b) => a.prices[region] - b.prices[region])[0] || null;
+}
 function valid(req, res) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) { res.status(400).json({ error: errors.array()[0].msg }); return false; }
@@ -722,19 +734,7 @@ app.post('/api/orders', orderLimiter, optionalUser, [
   try {
     const { customerName, customerEmail, customerPhone, deliveryAddress, items, paymentMethod, deliveryCarrierId, deliveryRegion } = req.body;
 
-    // Get delivery fee — use selected carrier if provided, else fall back to flat fee
-    const { data: settings } = await supabase.from('settings').select('delivery_fee, delivery_options').eq('id', 1).single();
-    let deliveryFee     = parseFloat(settings?.delivery_fee) || 5.99;
-    let deliveryCarrier = '';
-    if (deliveryCarrierId && deliveryRegion) {
-      const opts    = settings?.delivery_options || [];
-      const region  = ['uk','europe','world'].includes(deliveryRegion) ? deliveryRegion : 'uk';
-      const carrier = opts.find(o => o.id === deliveryCarrierId && o.active);
-      if (carrier && carrier.prices?.[region] !== undefined) {
-        deliveryFee     = carrier.prices[region];
-        deliveryCarrier = `${carrier.carrier} ${carrier.service} (${region.toUpperCase()})`;
-      }
-    }
+    const { data: settings } = await supabase.from('settings').select('delivery_options').eq('id', 1).single();
 
     // Compute prices from DB — NEVER trust client-sent prices
     let subtotal   = 0;
@@ -742,26 +742,47 @@ app.post('/api/orders', orderLimiter, optionalUser, [
     for (const item of items) {
       const { data: product } = await supabase.from('products').select('*').eq('id', item.productId).single();
       if (!product) return res.status(400).json({ error: 'One or more products were not found.' });
-      if (!product.in_stock) return res.status(400).json({ error: `"${product.name}" is currently out of stock.` });
+      if (!product.in_stock) return res.status(400).json({ error: `"${product.name}" is out of stock — coming back soon.` });
       const qty = parseInt(item.qty);
+
+      // Optional wig styling is encoded on the cart line as "<variantKey>|styled"
+      const rawKey  = item.variantKey ? String(item.variantKey) : null;
+      const styled  = !!rawKey && rawKey.endsWith('|styled');
+      const baseKey = styled ? rawKey.slice(0, -'|styled'.length) : rawKey;
+      const vtype   = product.variants?.variant_type;
+      if (styled && vtype !== 'wig' && vtype !== 'big-wig') return res.status(400).json({ error: `Styling is only available on wigs.` });
 
       // Variant price validation
       let unitPrice;
       if (product.variants?.enabled) {
-        if (!item.variantKey) return res.status(400).json({ error: `Please select options for "${product.name}".` });
-        unitPrice = product.variants.prices?.[item.variantKey];
+        if (!baseKey) return res.status(400).json({ error: `Please select options for "${product.name}".` });
+        unitPrice = product.variants.prices?.[baseKey];
         if (unitPrice === undefined) return res.status(400).json({ error: `Invalid option selected for "${product.name}".` });
-        if (product.variants.unavailable?.includes(item.variantKey)) return res.status(400).json({ error: `Selected option for "${product.name}" is unavailable.` });
+        if (product.variants.unavailable?.includes(baseKey)) return res.status(400).json({ error: `Selected option for "${product.name}" is unavailable.` });
       } else {
         unitPrice = product.price;
       }
+      unitPrice = Number(unitPrice) + (styled ? WIG_STYLING_FEE : 0);
 
       subtotal += unitPrice * qty;
       orderItems.push({
         product_id: product.id, product_name: product.name,
         price: unitPrice, quantity: qty,
-        variant: item.variantKey || null, variant_label: item.variantLabel ? clean(item.variantLabel) : null,
+        variant: rawKey, variant_label: item.variantLabel ? clean(item.variantLabel) : null,
       });
+    }
+    subtotal = Math.round(subtotal * 100) / 100;
+
+    // Delivery: the price for the chosen option in the chosen zone (same list the delivery page shows)
+    const opts    = deliveryOptionsFrom(settings);
+    const region  = DELIVERY_REGIONS.includes(deliveryRegion) ? deliveryRegion : null;
+    const carrier = region && opts.find(o => o.id === deliveryCarrierId && o.active && hasPrice(o.prices?.[region]));
+    if (!carrier) return res.status(400).json({ error: 'Please go back and choose a delivery option for your country.' });
+    let deliveryFee     = carrier.prices[region];
+    let deliveryCarrier = `${carrier.carrier} – ${carrier.service} (${region.toUpperCase()})`;
+    if (region === 'uk' && subtotal >= FREE_UK_DELIVERY_OVER && cheapestActiveOption(opts, 'uk')?.id === carrier.id) {
+      deliveryFee = 0;
+      deliveryCarrier += ` – FREE over £${FREE_UK_DELIVERY_OVER}`;
     }
 
     const total = Math.round((subtotal + deliveryFee) * 100) / 100;
@@ -882,7 +903,9 @@ app.get('/api/settings', async (req, res) => {
       accountName:     data.account_name,
       currency:        data.currency,
       deliveryFee:     data.delivery_fee,
-      deliveryOptions: data.delivery_options || [],
+      deliveryOptions: deliveryOptionsFrom(data),
+      freeUkDeliveryOver: FREE_UK_DELIVERY_OVER,
+      wigStylingFee:   WIG_STYLING_FEE,
     });
   } catch {
     res.status(500).json({ error: 'Failed to load settings.' });
@@ -909,7 +932,22 @@ app.put('/api/settings', requireAdmin, [
     for (const [clientKey, dbKey] of Object.entries(allowed)) {
       if (req.body[clientKey] !== undefined) updates[dbKey] = String(req.body[clientKey]);
     }
-    if (req.body.deliveryOptions !== undefined) updates['delivery_options'] = req.body.deliveryOptions;
+    if (req.body.deliveryOptions !== undefined) {
+      if (!Array.isArray(req.body.deliveryOptions)) return res.status(400).json({ error: 'Invalid delivery options.' });
+      const str = (v, max) => clean(String(v ?? '')).slice(0, max);
+      updates['delivery_options'] = req.body.deliveryOptions.slice(0, 30).map(o => ({
+        id:      str(o.id, 40) || crypto.randomBytes(4).toString('hex'),
+        carrier: str(o.carrier, 60),
+        service: str(o.service, 80),
+        prices:  Object.fromEntries(DELIVERY_REGIONS.map(r => {
+          const n = o.prices?.[r];
+          return [r, (n === null || n === '' || n === undefined || !isFinite(Number(n))) ? null : Math.max(0, Math.round(Number(n) * 100) / 100)];
+        })),
+        days:    Object.fromEntries(DELIVERY_REGIONS.filter(r => o.days?.[r]).map(r => [r, str(o.days[r], 40)])),
+        minDays: Object.fromEntries(DELIVERY_REGIONS.filter(r => isFinite(Number(o.minDays?.[r]))).map(r => [r, Number(o.minDays[r])])),
+        active:  !!o.active,
+      }));
+    }
     await supabase.from('settings').update(updates).eq('id', 1);
     res.json({ ok: true });
   } catch {
@@ -1166,7 +1204,7 @@ app.get('/product/:slug', async (req, res) => {
           <div class="product-card-category">${escHtml(p.category || 'Hair')}</div>
           <h1 class="serif">${escHtml(p.name)}</h1>
           <div class="pd-price">${price.hasRange ? `<small>from </small>${money(price.low)}` : money(price.low)}</div>
-          <p class="pd-stock ${p.in_stock ? 'in' : 'out'}">${p.in_stock ? 'In stock' : 'Out of stock'}</p>
+          <p class="pd-stock ${p.in_stock ? 'in' : 'out'}">${p.in_stock ? 'In stock' : 'Out of stock – coming back soon'}</p>
           <div class="pd-desc">${escHtml(desc)}</div>
           <div id="pdAction"><a href="/shop" class="btn btn-primary">Shop the collection</a></div>
           <ul class="pd-perks">
@@ -1189,7 +1227,7 @@ app.get('/product/:slug', async (req, res) => {
       const box = document.getElementById('pdAction');
       if (p) {
         const hasVariants = p.variants?.enabled && p.variants?.prices && Object.keys(p.variants.prices).length > 0;
-        if (!p.in_stock)              box.innerHTML = '<button class="btn btn-secondary" disabled>Out of Stock</button>';
+        if (!p.in_stock)              box.innerHTML = '<button class="btn btn-secondary" disabled>Out of stock – coming back soon</button>';
         else if (hasVariants)         box.innerHTML = '<button class="btn btn-primary" id="pdBtn">Select Options</button>';
         else                          box.innerHTML = '<button class="btn btn-primary" id="pdBtn">Add to Bag</button>';
         document.getElementById('pdBtn')?.addEventListener('click', () => {
@@ -1217,6 +1255,7 @@ app.get('/sitemap.xml', async (req, res) => {
       { loc: `${SITE_URL}/`,      lastmod: today, priority: '1.0' },
       { loc: `${SITE_URL}/shop`,  lastmod: today, priority: '0.9' },
       { loc: `${SITE_URL}/about`,                 priority: '0.5' },
+      { loc: `${SITE_URL}/returns`,               priority: '0.3' },
       ...(products || []).map(p => ({
         loc: SITE_URL + productPath(p),
         lastmod: (p.created_at || '').slice(0, 10) || undefined,

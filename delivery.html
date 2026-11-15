@@ -154,6 +154,7 @@
         <div class="admin-card mb-3 hidden" id="carrierSection">
           <h3 class="serif mb-2"><span class="step-badge">2</span>Select a carrier</h3>
           <div id="carrierList"></div>
+          <div id="deliveryNote" style="margin-top:14px;font-size:0.82rem;line-height:1.6;"></div>
         </div>
 
         <button class="btn btn-primary btn-full hidden" id="continueBtn" onclick="continueToCheckout()">
@@ -258,7 +259,7 @@
       { name:'Barbados',               region:'world'  },
       { name:'Bolivia',                region:'world'  },
       { name:'Brazil',                 region:'world'  },
-      { name:'Canada',                 region:'world'  },
+      { name:'Canada',                 region:'usa'    },
       { name:'Chile',                  region:'world'  },
       { name:'Colombia',               region:'world'  },
       { name:'Costa Rica',             region:'world'  },
@@ -277,7 +278,7 @@
       { name:'Paraguay',               region:'world'  },
       { name:'Peru',                   region:'world'  },
       { name:'Trinidad & Tobago',      region:'world'  },
-      { name:'United States',          region:'world'  },
+      { name:'United States',          region:'usa'    },
       { name:'Uruguay',                region:'world'  },
       { name:'Venezuela',              region:'world'  },
       { name:'Afghanistan',            region:'world'  },
@@ -321,28 +322,34 @@
     const REGION_LABELS = {
       uk:     '🇬🇧 United Kingdom',
       europe: '🇪🇺 Europe',
+      usa:    '🇺🇸 USA & Canada',
       world:  '🌍 International',
     };
-    const REGION_SHORT = { uk:'UK', europe:'Europe', world:'International' };
+    const REGION_SHORT = { uk:'UK', europe:'Europe', usa:'USA & Canada', world:'International' };
 
-    // ── Fallback carrier defaults ──
-    const FALLBACK_OPTIONS = [
-      { id:'evri',          carrier:'Evri',       service:'Standard',   prices:{uk:3.20,  europe:9.99,  world:13.99}, days:{uk:'2-4 days', europe:'5-8 days', world:'8-14 days'}, minDays:{uk:2, europe:5, world:8},  active:true },
-      { id:'royal-mail-48', carrier:'Royal Mail', service:'Tracked 48', prices:{uk:3.40,  europe:12.99, world:16.99}, days:{uk:'2-3 days', europe:'5-7 days', world:'7-14 days'}, minDays:{uk:2, europe:5, world:7},  active:true },
-      { id:'royal-mail-24', carrier:'Royal Mail', service:'Tracked 24', prices:{uk:4.19,  europe:14.99, world:18.99}, days:{uk:'1-2 days', europe:'5-7 days', world:'7-10 days'}, minDays:{uk:1, europe:5, world:7},  active:true },
-      { id:'dpd',           carrier:'DPD',        service:'Next Day',   prices:{uk:7.99,  europe:15.99, world:24.99}, days:{uk:'Next day', europe:'3-5 days', world:'5-8 days'},  minDays:{uk:1, europe:3, world:5},  active:true },
-      { id:'dhl',           carrier:'DHL',        service:'Express',    prices:{uk:9.99,  europe:19.99, world:29.99}, days:{uk:'1-2 days', europe:'2-3 days', world:'3-5 days'},  minDays:{uk:1, europe:2, world:3},  active:true },
-      { id:'ups',           carrier:'UPS',        service:'Express',    prices:{uk:10.99, europe:22.99, world:34.99}, days:{uk:'1-2 days', europe:'2-3 days', world:'3-5 days'},  minDays:{uk:1, europe:2, world:3},  active:true },
-    ];
+    // Delivery options come from the server (/api/settings), which falls back to its own
+    // defaults. This list is only used if the server can't be reached.
+    const FALLBACK_OPTIONS = [];
 
     const CARRIER_LOGOS = {
-      'evri':       '📦',
-      'royal-mail-48': '📮',
-      'royal-mail-24': '📮',
-      'dpd':        '🚚',
-      'ups':        '🟤',
-      'dhl':        '🟡',
+      'uk-tracked':   '📮',
+      'uk-nextday':   '🚚',
+      'intl-economy': '📦',
+      'intl-express': '✈️',
     };
+    const hasPrice = v => typeof v === 'number' && isFinite(v) && v >= 0;
+    function deliveryOptionsForRegion(region) {
+      const dbOptions = Store.getSettings().deliveryOptions;
+      const source    = (dbOptions && dbOptions.length > 0) ? dbOptions : FALLBACK_OPTIONS;
+      return source.filter(o => o.active && hasPrice(o.prices?.[region]))
+                   .sort((a, b) => a.prices[region] - b.prices[region]);
+    }
+    // Free UK delivery applies to the cheapest UK option once the bag reaches the threshold
+    function freeDeliveryApplies(region, optionId) {
+      const threshold = Number(Store.getSettings().freeUkDeliveryOver) || 0;
+      if (region !== 'uk' || !threshold || Store.getCartTotal() < threshold) return false;
+      return deliveryOptionsForRegion('uk')[0]?.id === optionId;
+    }
 
     let _selectedCountry = '';
     let _selectedRegion  = '';
@@ -464,15 +471,24 @@
       const region = _selectedRegion;
       const { currency } = Store.getSettings();
       const list   = document.getElementById('carrierList');
-      const dbOptions = Store.getSettings().deliveryOptions;
-      const source    = (dbOptions && dbOptions.length > 0) ? dbOptions : FALLBACK_OPTIONS;
+      const options = deliveryOptionsForRegion(region);
 
-      const options = source
-        .filter(o => o.active)
-        .sort((a, b) => (a.prices?.[region] || 0) - (b.prices?.[region] || 0));
+      // Note under the options: free-delivery progress (UK) or import taxes (international)
+      const note = document.getElementById('deliveryNote');
+      const threshold = Number(Store.getSettings().freeUkDeliveryOver) || 0;
+      if (region === 'uk' && threshold) {
+        const away = threshold - Store.getCartTotal();
+        note.innerHTML = away <= 0
+          ? `<span style="color:var(--success);font-weight:600;">🎉 Your order qualifies for free UK tracked delivery.</span>`
+          : `<span style="color:var(--gray-600);">Free UK tracked delivery on orders over ${currency}${threshold}. You're ${currency}${away.toFixed(2)} away.</span>`;
+      } else if (region) {
+        note.innerHTML = `<span style="color:var(--gray-600);">ℹ️ Import taxes, duties and customs fees in your country are not included and are paid by you when the parcel arrives.</span>`;
+      } else {
+        note.innerHTML = '';
+      }
 
       if (!options.length) {
-        list.innerHTML = '<p style="color:var(--gray-400);text-align:center;padding:20px;">No delivery options available.</p>';
+        list.innerHTML = '<p style="color:var(--gray-400);text-align:center;padding:20px;">Sorry, we don\'t deliver to this country yet. Message us on WhatsApp and we\'ll see what we can do.</p>';
         return;
       }
 
@@ -502,7 +518,9 @@
               <div class="carrier-days">⏱ ${escHtml(o.days?.[region] || '')}</div>
               ${badges}
             </div>
-            <div class="carrier-price">${currency}${Number(o.prices?.[region] || 0).toFixed(2)}</div>
+            <div class="carrier-price">${freeDeliveryApplies(region, o.id)
+              ? `<span style="text-decoration:line-through;color:var(--gray-400);font-size:0.8em;">${currency}${Number(o.prices[region]).toFixed(2)}</span> FREE`
+              : `${currency}${Number(o.prices[region]).toFixed(2)}`}</div>
           </div>
         </label>`;
       }).join('');
@@ -516,10 +534,9 @@
       const carrierId = document.querySelector('input[name="carrier"]:checked')?.value;
       if (!carrierId) { Toast.show('Please select a carrier.', 'error'); return; }
 
-      const dbOpts  = Store.getSettings().deliveryOptions;
-      const options = (dbOpts && dbOpts.length > 0) ? dbOpts : FALLBACK_OPTIONS;
-      const carrier = options.find(o => o.id === carrierId);
+      const carrier = deliveryOptionsForRegion(_selectedRegion).find(o => o.id === carrierId);
       if (!carrier) { Toast.show('Invalid carrier selected.', 'error'); return; }
+      const isFree  = freeDeliveryApplies(_selectedRegion, carrierId);
 
       sessionStorage.setItem('et_delivery', JSON.stringify({
         carrierId,
@@ -528,7 +545,7 @@
         region:      _selectedRegion,
         country:     _selectedCountry,
         regionLabel: REGION_LABELS[_selectedRegion],
-        price:       carrier.prices?.[_selectedRegion] || 0,
+        price:       isFree ? 0 : carrier.prices[_selectedRegion],
         days:        carrier.days?.[_selectedRegion]   || '',
       }));
 
