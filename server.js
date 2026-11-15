@@ -190,10 +190,16 @@ async function ensureDefaults() {
     // Create admin account if none exists
     const { count: adminCount } = await supabase
       .from('admins').select('*', { count: 'exact', head: true });
+    // The initial password comes from the environment — never from source code.
     if (adminCount === 0) {
-      const hash = await bcrypt.hash('eetasha2024', 12);
-      await supabase.from('admins').insert({ username: 'admin', password_hash: hash });
-      console.log('  ✅ Admin created  →  username: admin  password: eetasha2024  (change this!)');
+      const initial = process.env.ADMIN_INITIAL_PASSWORD || '';
+      if (initial.length >= 12 && !KNOWN_DEFAULT_ADMIN_PASSWORDS.includes(initial)) {
+        const hash = await bcrypt.hash(initial, 12);
+        await supabase.from('admins').insert({ username: 'admin', password_hash: hash });
+        console.log('  ✅ Admin account created from ADMIN_INITIAL_PASSWORD. You can remove that variable now.');
+      } else {
+        console.warn('  ⚠ No admin account exists. Set ADMIN_INITIAL_PASSWORD (12+ characters) and restart to create one.');
+      }
     }
 
     // Seed sample products if none exist
@@ -267,19 +273,38 @@ app.use(express.urlencoded({ extended: true, limit: '500kb' }));
 // ============================================================
 //  ADMIN SESSION  (signed cookie — kept for admin only)
 // ============================================================
-const _sessSecret = process.env.SESSION_SECRET || 'et-fallback-secret';
+// SESSION_SECRET is required in production. There is deliberately no shared
+// fallback: a fallback committed to a public repo would let anyone forge an
+// admin cookie. Locally, a random per-process secret is generated instead.
+const IS_PROD = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
+const _envSecret = process.env.SESSION_SECRET || '';
+const _sessSecret = _envSecret.length >= 32
+  ? _envSecret
+  : (IS_PROD ? null : crypto.randomBytes(32).toString('hex'));
+if (!_sessSecret) {
+  console.error('  ❌ SESSION_SECRET is missing or shorter than 32 characters — admin login is DISABLED until it is set.');
+}
+const ADMIN_SESSION_HOURS = 12;
+// Known default password that was once committed to this repo. Logging in with it
+// is allowed only to change it — every other admin action is blocked.
+const KNOWN_DEFAULT_ADMIN_PASSWORDS = ['eetasha2024'];
+
 function _sessSign(payload) {
   return payload + '.' + crypto.createHmac('sha256', _sessSecret).update(payload).digest('base64url');
 }
 function _sessUnsign(token) {
+  if (!_sessSecret) return null;
   const i = token.lastIndexOf('.');
   if (i < 0) return null;
   const payload  = token.slice(0, i);
-  const expected = _sessSign(payload);
-  if (token.length !== expected.length) return null;
-  let diff = 0;
-  for (let j = 0; j < token.length; j++) diff |= token.charCodeAt(j) ^ expected.charCodeAt(j);
-  return diff === 0 ? payload : null;
+  const expected = Buffer.from(_sessSign(payload));
+  const given    = Buffer.from(token);
+  if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) return null;
+  return payload;
+}
+// Short fingerprint of the password hash: changing the password invalidates every existing session.
+function _pwFingerprint(hash) {
+  return crypto.createHash('sha256').update(String(hash)).digest('base64url').slice(0, 16);
 }
 app.use(function sessionMiddleware(req, res, next) {
   const cookies = {};
@@ -290,18 +315,25 @@ app.use(function sessionMiddleware(req, res, next) {
   const token = cookies['et_sess'];
   if (token) {
     const payload = _sessUnsign(token);
-    if (payload) { try { Object.assign(req.session, JSON.parse(Buffer.from(payload, 'base64url').toString())); } catch {} }
+    if (payload) {
+      try {
+        const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
+        // Sessions without an expiry (issued by older code) or past expiry are ignored
+        if (data && typeof data.exp === 'number' && data.exp > Date.now()) Object.assign(req.session, data);
+      } catch {}
+    }
   }
   const origEnd = res.end.bind(res);
   res.end = function(...args) {
     if (!res.headersSent) {
       const sess   = req.session;
-      const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-      if (sess === null) {
-        res.setHeader('Set-Cookie', 'et_sess=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
-      } else if (Object.keys(sess).length > 0) {
-        const p = Buffer.from(JSON.stringify(sess)).toString('base64url');
-        res.setHeader('Set-Cookie', `et_sess=${_sessSign(p)}; Path=/; Max-Age=${7*24*3600}; HttpOnly; SameSite=Lax${secure}`);
+      const secure = IS_PROD ? '; Secure' : '';
+      if (sess === null || (sess && Object.keys(sess).length === 0 && token)) {
+        res.setHeader('Set-Cookie', `et_sess=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict${secure}`);
+      } else if (sess && Object.keys(sess).length > 0 && _sessSecret) {
+        const p      = Buffer.from(JSON.stringify(sess)).toString('base64url');
+        const maxAge = Math.max(0, Math.floor((sess.exp - Date.now()) / 1000));
+        res.setHeader('Set-Cookie', `et_sess=${_sessSign(p)}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Strict${secure}`);
       }
     }
     return origEnd.apply(this, args);
@@ -347,11 +379,30 @@ async function optionalUser(req, res, next) {
   next();
 }
 
-// Admin: uses signed-cookie session (unchanged)
-function requireAdmin(req, res, next) {
-  if (!req.session?.adminId) return res.status(403).json({ error: 'Admin access required.' });
-  next();
+// Admin: signed-cookie session, re-checked against the database on every request
+// so a password change (or deleted admin) immediately ends all other sessions.
+async function loadSessionAdmin(req) {
+  if (!req.session?.adminId || !req.session?.pv) return null;
+  const { data: admin } = await supabase.from('admins').select('id, password_hash').eq('id', req.session.adminId).single();
+  if (!admin || _pwFingerprint(admin.password_hash) !== req.session.pv) return null;
+  return admin;
 }
+function requireAdminSession({ allowMustChange = false } = {}) {
+  return async (req, res, next) => {
+    try {
+      const admin = await loadSessionAdmin(req);
+      if (!admin) { req.session = null; return res.status(403).json({ error: 'Admin access required.' }); }
+      if (req.session.mustChange && !allowMustChange) {
+        return res.status(403).json({ error: 'Please change the default admin password first.', mustChangePassword: true });
+      }
+      req.admin = admin;
+      next();
+    } catch {
+      res.status(403).json({ error: 'Admin access required.' });
+    }
+  };
+}
+const requireAdmin = requireAdminSession();
 
 // ============================================================
 //  ADMIN AUTH
@@ -360,13 +411,20 @@ app.post('/api/admin/login', authLimiter, [
   body('password').notEmpty().withMessage('Password is required'),
 ], async (req, res) => {
   if (!valid(req, res)) return;
+  if (!_sessSecret) return res.status(503).json({ error: 'Admin login is disabled: SESSION_SECRET is not configured on the server.' });
   try {
     const { data: admin } = await supabase.from('admins').select('*').eq('username', 'admin').single();
-    if (!admin) return res.status(401).json({ error: 'Invalid credentials.' });
+    if (!admin) return res.status(401).json({ error: 'Incorrect admin password.' });
     const ok = await bcrypt.compare(req.body.password, admin.password_hash);
     if (!ok) return res.status(401).json({ error: 'Incorrect admin password.' });
-    req.session.adminId = admin.id;
-    res.json({ ok: true });
+    const mustChange = KNOWN_DEFAULT_ADMIN_PASSWORDS.includes(req.body.password);
+    req.session = {
+      adminId: admin.id,
+      pv:      _pwFingerprint(admin.password_hash),
+      exp:     Date.now() + ADMIN_SESSION_HOURS * 3600 * 1000,
+      ...(mustChange ? { mustChange: true } : {}),
+    };
+    res.json({ ok: true, mustChangePassword: mustChange });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Login failed.' });
@@ -374,29 +432,40 @@ app.post('/api/admin/login', authLimiter, [
 });
 
 app.post('/api/admin/logout', (req, res) => {
-  delete req.session.adminId;
+  req.session = null;
   res.json({ ok: true });
 });
 
-app.get('/api/admin/me', (req, res) => {
-  res.json({ isAdmin: !!req.session?.adminId });
+app.get('/api/admin/me', async (req, res) => {
+  const admin = await loadSessionAdmin(req).catch(() => null);
+  if (!admin && req.session?.adminId) req.session = null;
+  res.json({ isAdmin: !!admin, mustChangePassword: !!(admin && req.session?.mustChange) });
 });
 
-app.post('/api/admin/change-password', requireAdmin, authLimiter, [
+app.post('/api/admin/change-password', authLimiter, requireAdminSession({ allowMustChange: true }), [
   body('currentPassword').notEmpty().withMessage('Current password is required'),
-  body('newPassword').isLength({ min: 8 }).withMessage('New password must be at least 8 characters'),
+  body('newPassword').isLength({ min: 12 }).withMessage('New password must be at least 12 characters'),
   body('confirmPassword').notEmpty().withMessage('Please confirm your new password'),
 ], async (req, res) => {
   if (!valid(req, res)) return;
   const { currentPassword, newPassword, confirmPassword } = req.body;
   if (newPassword !== confirmPassword) return res.status(400).json({ error: 'Passwords do not match.' });
+  if (KNOWN_DEFAULT_ADMIN_PASSWORDS.includes(newPassword) || newPassword === currentPassword) {
+    return res.status(400).json({ error: 'Please choose a new password you have not used before.' });
+  }
   try {
-    const { data: admin } = await supabase.from('admins').select('*').eq('id', req.session.adminId).single();
-    if (!admin) return res.status(404).json({ error: 'Admin not found.' });
+    const admin = req.admin;
     const ok = await bcrypt.compare(currentPassword, admin.password_hash);
     if (!ok) return res.status(401).json({ error: 'Incorrect current password.' });
     const hash = await bcrypt.hash(newPassword, 12);
-    await supabase.from('admins').update({ password_hash: hash }).eq('id', req.session.adminId);
+    const { error } = await supabase.from('admins').update({ password_hash: hash }).eq('id', admin.id);
+    if (error) throw error;
+    // Re-issue this session against the new password; all other sessions are now invalid.
+    req.session = {
+      adminId: admin.id,
+      pv:      _pwFingerprint(hash),
+      exp:     Date.now() + ADMIN_SESSION_HOURS * 3600 * 1000,
+    };
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: 'Failed to change password.' });
@@ -406,13 +475,19 @@ app.post('/api/admin/change-password', requireAdmin, authLimiter, [
 app.post('/api/admin/upload-image', requireAdmin, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file provided.' });
-    const ext      = req.file.originalname.split('.').pop().toLowerCase();
-    const allowed  = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-    if (!allowed.includes(ext)) return res.status(400).json({ error: 'Only jpg, png, webp or gif allowed.' });
-    const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    // Decide the type from the file's actual bytes, not its name or the browser's claim
+    const b = req.file.buffer;
+    const sniffed =
+      (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF)                       ? { ext: 'jpg',  type: 'image/jpeg' } :
+      (b[0] === 0x89 && b.slice(1, 4).toString() === 'PNG')                  ? { ext: 'png',  type: 'image/png'  } :
+      (b.slice(0, 4).toString() === 'RIFF' && b.slice(8, 12).toString() === 'WEBP') ? { ext: 'webp', type: 'image/webp' } :
+      (b.slice(0, 4).toString() === 'GIF8')                                   ? { ext: 'gif',  type: 'image/gif'  } :
+      null;
+    if (!sniffed) return res.status(400).json({ error: 'Only jpg, png, webp or gif images are allowed.' });
+    const filename = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${sniffed.ext}`;
     const { error } = await supabase.storage
       .from('product-images')
-      .upload(filename, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
+      .upload(filename, b, { contentType: sniffed.type, upsert: false });
     if (error) throw new Error(error.message);
     const { data: { publicUrl } } = supabase.storage.from('product-images').getPublicUrl(filename);
     res.json({ url: publicUrl });
@@ -532,7 +607,10 @@ app.post('/api/orders', orderLimiter, optionalUser, [
   body('deliveryAddress').trim().notEmpty().withMessage('Delivery address is required').isLength({ max: 500 }),
   body('items').isArray({ min: 1 }).withMessage('Your cart is empty'),
   body('items.*.productId').notEmpty().withMessage('Invalid product'),
+  body('items').isArray({ max: 50 }).withMessage('Too many items in one order'),
   body('items.*.qty').isInt({ min: 1, max: 99 }).withMessage('Invalid quantity'),
+  body('items.*.variantKey').optional({ nullable: true }).isString().isLength({ max: 100 }).withMessage('Invalid option'),
+  body('items.*.variantLabel').optional({ nullable: true }).isString().isLength({ max: 200 }).withMessage('Invalid option'),
   body('paymentMethod').isIn(['stripe', 'transfer']).withMessage('Invalid payment method'),
 ], async (req, res) => {
   if (!valid(req, res)) return;
@@ -577,7 +655,7 @@ app.post('/api/orders', orderLimiter, optionalUser, [
       orderItems.push({
         product_id: product.id, product_name: product.name,
         price: unitPrice, quantity: qty,
-        variant: item.variantKey || null, variant_label: item.variantLabel || null,
+        variant: item.variantKey || null, variant_label: item.variantLabel ? clean(item.variantLabel) : null,
       });
     }
 
@@ -722,6 +800,13 @@ app.post('/api/create-checkout-session', async (req, res) => {
     if (!orderId) return res.status(400).json({ error: 'Order ID required.' });
     const { data: order } = await supabase.from('orders').select('*').eq('id', orderId).single();
     if (!order) return res.status(404).json({ error: 'Order not found.' });
+    if (order.payment_method !== 'stripe' || order.payment_status === 'paid' || order.order_status === 'cancelled') {
+      return res.status(400).json({ error: 'This order cannot be paid by card.' });
+    }
+    // Only ever redirect back to our own site (the Origin header can be forged by scripts)
+    const origin = allowedOrigins.some(o => typeof o === 'string' ? o === req.headers.origin : o.test(req.headers.origin || ''))
+      ? req.headers.origin
+      : (process.env.PUBLIC_SITE_URL || 'https://eetashacollection.com');
 
     const lineItems = (order.items || []).map(i => ({
       price_data: { currency: 'gbp', product_data: { name: i.product_name }, unit_amount: Math.round(i.price * 100) },
@@ -738,8 +823,8 @@ app.post('/api/create-checkout-session', async (req, res) => {
       payment_method_types: ['card'],
       line_items:           lineItems,
       mode:                 'payment',
-      success_url: `${req.headers.origin}/checkout-success?session_id={CHECKOUT_SESSION_ID}&order_id=${order.id}`,
-      cancel_url:  `${req.headers.origin}/checkout`,
+      success_url: `${origin}/checkout-success?session_id={CHECKOUT_SESSION_ID}&order_id=${order.id}`,
+      cancel_url:  `${origin}/checkout`,
       customer_email: order.customer_email,
       metadata: { orderId: order.id, orderNumber: order.order_number },
     });
@@ -748,7 +833,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
     res.json({ url: sess.url });
   } catch (err) {
     console.error('Stripe error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Card payment could not be started. Please try again or choose bank transfer.' });
   }
 });
 
@@ -763,7 +848,8 @@ app.get('/api/verify-payment/:sessionId', async (req, res) => {
     }
     res.json({ paid: sess.payment_status === 'paid', orderId: sess.metadata?.orderId, orderNumber: sess.metadata?.orderNumber });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Verify payment error:', err.message);
+    res.status(500).json({ error: 'Could not verify payment.' });
   }
 });
 

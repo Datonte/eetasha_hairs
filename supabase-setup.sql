@@ -60,15 +60,19 @@ CREATE TABLE IF NOT EXISTS admins (
 
 -- ============================================================
 --  Row Level Security
---  All access goes through the Express API (service role key)
---  which bypasses RLS, so we disable it for simplicity.
+--  All access goes through the Express API (service role key),
+--  which bypasses RLS. RLS is ON with no policies so the public
+--  anon key (sent to browsers for login) cannot read or change
+--  any table directly.
 -- ============================================================
-ALTER TABLE products DISABLE ROW LEVEL SECURITY;
-ALTER TABLE orders   DISABLE ROW LEVEL SECURITY;
-ALTER TABLE settings DISABLE ROW LEVEL SECURITY;
-ALTER TABLE admins   DISABLE ROW LEVEL SECURITY;
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admins   ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON products, orders, settings, admins FROM anon, authenticated;
 
 -- ============================================================
---  Done! The server will seed the admin account and
---  sample products automatically on first startup.
+--  Done! The server seeds sample products on first startup.
+--  The admin account is created from the ADMIN_INITIAL_PASSWORD
+--  environment variable (12+ characters).
 -- ============================================================

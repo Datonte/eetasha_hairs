@@ -143,7 +143,7 @@
               <div></div>
               <div class="form-group">
                 <label class="form-label">New Password</label>
-                <input type="password" class="form-input" id="pwdNew" placeholder="At least 8 characters" minlength="8" autocomplete="new-password">
+                <input type="password" class="form-input" id="pwdNew" placeholder="At least 12 characters" minlength="12" autocomplete="new-password">
               </div>
               <div class="form-group">
                 <label class="form-label">Confirm New Password</label>
@@ -329,8 +329,9 @@
       const btn = document.getElementById('adminLoginBtn');
       btn.disabled = true; btn.textContent = 'Checking…';
       try {
-        await API.post('/api/admin/login', { password: document.getElementById('adminPwd').value });
-        showAdminDash();
+        const { mustChangePassword } = await API.post('/api/admin/login', { password: document.getElementById('adminPwd').value });
+        document.getElementById('adminPwd').value = '';
+        showAdminDash({ mustChangePassword });
       } catch (err) {
         Toast.show(err.message, 'error');
       } finally {
@@ -345,10 +346,17 @@
       document.getElementById('adminHeaderLogout').classList.add('hidden');
     }
 
-    async function showAdminDash() {
+    async function showAdminDash({ mustChangePassword = false } = {}) {
       document.getElementById('adminLogin').classList.add('hidden');
       document.getElementById('adminDash').classList.remove('hidden');
       document.getElementById('adminHeaderLogout').classList.remove('hidden');
+      if (mustChangePassword) {
+        // Server blocks everything else until the default password is replaced
+        switchTab('settings', document.querySelector('.admin-nav-item[onclick*="settings"]'));
+        document.getElementById('pwdCurrent')?.closest('.admin-card')?.scrollIntoView({ behavior: 'smooth' });
+        Toast.show('For security, please change the default admin password before continuing.', 'error');
+        return;
+      }
       await Promise.all([loadAdminStats(), loadAdminProducts(), loadAdminOrders(), loadSettings(), loadDeliveryOptions()]);
     }
 
@@ -720,10 +728,11 @@
           newPassword:     document.getElementById('pwdNew').value,
           confirmPassword: document.getElementById('pwdConfirm').value,
         });
-        Toast.show('Password changed successfully.', 'success');
+        Toast.show('Password changed. Any other devices have been signed out.', 'success');
         document.getElementById('pwdCurrent').value = '';
         document.getElementById('pwdNew').value     = '';
         document.getElementById('pwdConfirm').value = '';
+        showAdminDash(); // reload everything (needed after a forced default-password change)
       } catch (err) { Toast.show(err.message, 'error'); }
     }
 
@@ -1091,10 +1100,10 @@
 
       // Check if already logged in as admin (server-side session)
       try {
-        const { isAdmin } = await API.get('/api/admin/me');
+        const { isAdmin, mustChangePassword } = await API.get('/api/admin/me');
         if (isAdmin) {
-          showAdminDash();
-          restoreModalState(); // re-open any unsaved work after tab switch / page reload
+          showAdminDash({ mustChangePassword });
+          if (!mustChangePassword) restoreModalState(); // re-open any unsaved work after tab switch / page reload
         }
       } catch {}
       document.body.classList.add('page-ready');
