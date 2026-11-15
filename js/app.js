@@ -404,17 +404,23 @@ function productCardHTML(p) {
 
   return `
     <div class="product-card" ontouchstart="this.classList.toggle('desc-open')">
-      <div class="product-card-img-wrap">
+      <a class="product-card-img-wrap" href="${productUrl(p)}" style="display:block;">
         <img class="product-card-img" src="${escHtml(p.image_url || '')}" alt="${escHtml(p.name)}" onerror="this.style.background='var(--gray-200)'" loading="lazy">
         ${desc ? `<div class="product-card-overlay"><p class="product-card-overlay-text">${desc}</p></div>` : ''}
-      </div>
+      </a>
       <div class="product-card-body">
         <div class="product-card-category">${escHtml(p.category || 'Hair')}</div>
-        <div class="product-card-name">${escHtml(p.name)}</div>
+        <a class="product-card-name" href="${productUrl(p)}" style="display:block;">${escHtml(p.name)}</a>
         <div class="product-card-price">${priceDisplay}</div>
         ${btn}
       </div>
     </div>`;
+}
+
+// Must match productPath() in server.js
+function productUrl(p) {
+  const slug = String(p.name || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'product';
+  return `/product/${slug}-${encodeURIComponent(p.id)}`;
 }
 
 function addToCartOrLogin(productId) {

@@ -250,6 +250,7 @@ app.use(helmet({
     directives: {
       defaultSrc:  ["'self'"],
       scriptSrc:   ["'self'", "'unsafe-inline'", 'https://js.stripe.com', 'https://cdn.jsdelivr.net'],
+      scriptSrcAttr: ["'unsafe-inline'"],   // pages use onclick="" handlers (helmet blocks them by default)
       styleSrc:    ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc:     ["'self'", 'https://fonts.gstatic.com', 'https://fonts.googleapis.com'],
       imgSrc:      ["'self'", 'data:', 'https:', 'blob:'],
@@ -858,6 +859,223 @@ app.get('/api/verify-payment/:sessionId', async (req, res) => {
   } catch (err) {
     console.error('Verify payment error:', err.message);
     res.status(500).json({ error: 'Could not verify payment.' });
+  }
+});
+
+// ============================================================
+//  SEO: PRODUCT PAGES + SITEMAP  (server-rendered so search engines can read them)
+// ============================================================
+const SITE_URL  = (process.env.PUBLIC_SITE_URL || 'https://eetashacollection.com').replace(/\/+$/, '');
+const BRAND     = 'eetashacollection';
+const OG_IMAGE  = `${SITE_URL}/images/og-image.png`;
+const UUID_RE   = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+const escHtml   = escEmail;
+
+function slugify(s) {
+  return String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'product';
+}
+function productPath(p) { return `/product/${slugify(p.name)}-${p.id}`; }
+function priceInfo(p) {
+  const v = p.variants;
+  if (v?.enabled && v.prices && Object.keys(v.prices).length) {
+    const unavailable = new Set(v.unavailable || []);
+    const vals = Object.entries(v.prices).filter(([k]) => !unavailable.has(k)).map(([, x]) => Number(x)).filter(x => x > 0);
+    if (vals.length) return { low: Math.min(...vals), high: Math.max(...vals), hasRange: true };
+  }
+  return { low: Number(p.price), high: Number(p.price), hasRange: false };
+}
+function productDescription(p) {
+  const d = String(p.description || '').trim();
+  return d || `${p.name} from ${BRAND}. Premium ${String(p.category || 'hair').toLowerCase()} — luxury quality with tracked UK and worldwide delivery.`;
+}
+function jsonLd(obj) { return JSON.stringify(obj).replace(/</g, '\\u003c'); }
+
+function pageShell({ title, description, canonical, image, head = '', body }) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escHtml(title)}</title>
+  <meta name="description" content="${escHtml(description)}">
+  <link rel="canonical" href="${escHtml(canonical)}">
+  <meta property="og:site_name" content="${BRAND}">
+  <meta property="og:title" content="${escHtml(title)}">
+  <meta property="og:description" content="${escHtml(description)}">
+  <meta property="og:url" content="${escHtml(canonical)}">
+  <meta property="og:image" content="${escHtml(image)}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#1a1c1c">
+  <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/images/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.101.1/dist/umd/supabase.min.js"></script>
+  ${head}
+</head>
+<body data-page="product">
+  <div id="siteNav"></div>
+  ${body}
+  <div id="siteFooter"></div>
+  <script src="/js/app.js"></script>
+</body>
+</html>`;
+}
+
+const PRODUCT_PAGE_STYLE = `<style>
+  .pd-crumbs { font-size: 0.8rem; color: var(--gray-500); margin-bottom: 24px; }
+  .pd-crumbs a:hover { color: var(--gold-dark); }
+  .pd { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+  .pd-img { border-radius: var(--radius-lg); overflow: hidden; background: var(--gray-100); aspect-ratio: 4 / 5; }
+  .pd-img img { width: 100%; height: 100%; object-fit: cover; }
+  .pd-info h1 { font-size: clamp(1.6rem, 3vw, 2.2rem); margin: 6px 0 12px; }
+  .pd-price { font-family: var(--font-head); font-size: 1.5rem; color: var(--gold-dark); margin-bottom: 8px; }
+  .pd-price small { font-size: 0.8rem; color: var(--gray-400); font-family: var(--font-body); }
+  .pd-stock { font-size: 0.82rem; font-weight: 600; margin-bottom: 20px; }
+  .pd-stock.in { color: var(--success); } .pd-stock.out { color: var(--error); }
+  .pd-desc { color: var(--gray-600); line-height: 1.8; margin-bottom: 24px; white-space: pre-line; }
+  .pd-perks { margin-top: 28px; border-top: 1px solid var(--gray-200); padding-top: 20px; display: grid; gap: 10px; font-size: 0.88rem; color: var(--gray-600); }
+  .pd-perks li { display: flex; gap: 10px; align-items: center; }
+  .pd-perks .material-symbols-outlined { color: var(--gold-dark); font-size: 20px; }
+  @media (max-width: 768px) { .pd { grid-template-columns: 1fr; gap: 24px; } }
+</style>`;
+
+app.get('/product/:slug', async (req, res) => {
+  const m = UUID_RE.exec(req.params.slug || '');
+  const notFound = () => res.status(404).type('html').send(pageShell({
+    title: `Product not found | ${BRAND}`, description: 'This product is no longer available.',
+    canonical: `${SITE_URL}/shop`, image: OG_IMAGE,
+    head: '<meta name="robots" content="noindex">',
+    body: `<main class="section page-top"><div class="container text-center" style="padding:60px 20px;">
+      <h1 class="serif mb-2">Product not found</h1>
+      <p style="color:var(--gray-500);margin-bottom:24px;">This item may have sold out or been removed.</p>
+      <a href="/shop" class="btn btn-primary">Browse the collection</a></div></main>
+      <script>document.addEventListener('DOMContentLoaded', async () => { await initApp(); renderNav('shop'); renderFooter(); document.body.classList.add('page-ready'); });</script>`,
+  }));
+  if (!m) return notFound();
+  try {
+    const { data: p } = await supabase.from('products').select('*').eq('id', m[1].toLowerCase()).single();
+    if (!p) return notFound();
+    const canonicalPath = productPath(p);
+    if (req.path !== canonicalPath) return res.redirect(301, canonicalPath);
+
+    const canonical = SITE_URL + canonicalPath;
+    const desc      = productDescription(p);
+    const image     = p.image_url || OG_IMAGE;
+    const price     = priceInfo(p);
+    const money     = n => `£${Number(n).toFixed(2)}`;
+    const availability = p.in_stock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';
+
+    const ld = {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: p.name,
+      description: desc,
+      image: [image],
+      sku: p.id,
+      category: p.category || undefined,
+      brand: { '@type': 'Brand', name: BRAND },
+      offers: price.hasRange
+        ? { '@type': 'AggregateOffer', priceCurrency: 'GBP', lowPrice: price.low.toFixed(2), highPrice: price.high.toFixed(2), availability, url: canonical }
+        : { '@type': 'Offer', priceCurrency: 'GBP', price: price.low.toFixed(2), availability, url: canonical, itemCondition: 'https://schema.org/NewCondition' },
+    };
+    const crumbsLd = {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: SITE_URL + '/' },
+        { '@type': 'ListItem', position: 2, name: 'Shop', item: SITE_URL + '/shop' },
+        { '@type': 'ListItem', position: 3, name: p.name, item: canonical },
+      ],
+    };
+
+    const html = pageShell({
+      title: `${p.name} | ${BRAND}`,
+      description: desc.slice(0, 160),
+      canonical, image,
+      head: `${PRODUCT_PAGE_STYLE}
+  <meta property="og:type" content="product">
+  <meta property="product:price:amount" content="${price.low.toFixed(2)}">
+  <meta property="product:price:currency" content="GBP">
+  <script type="application/ld+json">${jsonLd(ld)}</script>
+  <script type="application/ld+json">${jsonLd(crumbsLd)}</script>`,
+      body: `<main class="section page-top" id="productPage" data-product-id="${escHtml(p.id)}">
+    <div class="container">
+      <nav class="pd-crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <a href="/shop">Shop</a> / <span>${escHtml(p.name)}</span></nav>
+      <div class="pd">
+        <div class="pd-img">${p.image_url ? `<img src="${escHtml(p.image_url)}" alt="${escHtml(p.name)}">` : ''}</div>
+        <div class="pd-info">
+          <div class="product-card-category">${escHtml(p.category || 'Hair')}</div>
+          <h1 class="serif">${escHtml(p.name)}</h1>
+          <div class="pd-price">${price.hasRange ? `<small>from </small>${money(price.low)}` : money(price.low)}</div>
+          <p class="pd-stock ${p.in_stock ? 'in' : 'out'}">${p.in_stock ? 'In stock' : 'Out of stock'}</p>
+          <div class="pd-desc">${escHtml(desc)}</div>
+          <div id="pdAction"><a href="/shop" class="btn btn-primary">Shop the collection</a></div>
+          <ul class="pd-perks">
+            <li><span class="material-symbols-outlined">local_shipping</span>Tracked UK &amp; worldwide delivery</li>
+            <li><span class="material-symbols-outlined">verified</span>Premium quality hair, carefully selected</li>
+            <li><span class="material-symbols-outlined">support_agent</span>Personal help on WhatsApp</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      await initApp();
+      renderNav('shop');
+      renderFooter();
+      updateCartCount();
+      const id = document.getElementById('productPage').dataset.productId;
+      const p  = Store.getProduct(id);
+      const box = document.getElementById('pdAction');
+      if (p) {
+        const hasVariants = p.variants?.enabled && p.variants?.prices && Object.keys(p.variants.prices).length > 0;
+        if (!p.in_stock)              box.innerHTML = '<button class="btn btn-secondary" disabled>Out of Stock</button>';
+        else if (hasVariants)         box.innerHTML = '<button class="btn btn-primary" id="pdBtn">Select Options</button>';
+        else if (!Store.getSession()) box.innerHTML = '<button class="btn btn-secondary" id="pdBtn">Sign in to Buy</button>';
+        else                          box.innerHTML = '<button class="btn btn-primary" id="pdBtn">Add to Bag</button>';
+        document.getElementById('pdBtn')?.addEventListener('click', () => {
+          if (hasVariants) openVariantModal(p.id);
+          else if (!Store.getSession()) promptLogin();
+          else addToCartOrLogin(p.id);
+        });
+      }
+      document.body.classList.add('page-ready');
+    });
+  </script>`,
+    });
+    res.set('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400');
+    res.type('html').send(html);
+  } catch (err) {
+    console.error('Product page error:', err.message);
+    res.status(500).type('html').send('<p>Something went wrong. <a href="/shop">Back to the shop</a></p>');
+  }
+});
+
+app.get('/sitemap.xml', async (req, res) => {
+  try {
+    const { data: products } = await supabase.from('products').select('id, name, created_at, in_stock');
+    const today = new Date().toISOString().slice(0, 10);
+    const urls = [
+      { loc: `${SITE_URL}/`,      lastmod: today, priority: '1.0' },
+      { loc: `${SITE_URL}/shop`,  lastmod: today, priority: '0.9' },
+      { loc: `${SITE_URL}/about`,                 priority: '0.5' },
+      ...(products || []).map(p => ({
+        loc: SITE_URL + productPath(p),
+        lastmod: (p.created_at || '').slice(0, 10) || undefined,
+        priority: p.in_stock ? '0.8' : '0.4',
+      })),
+    ];
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.map(u => `  <url><loc>${escHtml(u.loc)}</loc>${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''}<priority>${u.priority}</priority></url>`).join('\n')}
+</urlset>`;
+    res.set('Cache-Control', 'public, max-age=0, s-maxage=3600');
+    res.type('application/xml').send(xml);
+  } catch (err) {
+    console.error('Sitemap error:', err.message);
+    res.status(500).type('text/plain').send('Sitemap unavailable');
   }
 });
 

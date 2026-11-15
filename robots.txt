@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /admin
+Disallow: /api/admin/
+
+Sitemap: https://eetashacollection.com/sitemap.xml
