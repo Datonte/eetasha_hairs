@@ -655,8 +655,8 @@ function openVariantModal(productId) {
                    :                     '2. Choose Lace Size';
   // Dynamic step numbers for new wig steps
   let stepN = 3;
-  const step2bLabel = `${stepN++}. Choose Attachment`;
-  const step2cLabel = `${hasAttachOpt ? stepN++ : stepN++}. Choose Hair Type`;
+  const step2bLabel = `${hasAttachOpt ? stepN++ : stepN}. Choose Attachment`;
+  const step2cLabel = `${hasHairOpt ? stepN++ : stepN}. Choose Hair Type`;
   const step3Label  = `${stepN}. Choose Colour`;
 
   // ── Build modal HTML ──────────────────────────────────────────
