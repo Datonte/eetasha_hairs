@@ -17,3 +17,10 @@ npm-debug.log*
 Thumbs.db
 
 .vercel
+
+# Private business data (supplier costs) — never commit
+private/
+
+# Photos/screenshots dropped into the project folder — never publish by accident
+WhatsApp Image*
+*.HEIC

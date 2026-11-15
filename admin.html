@@ -61,6 +61,9 @@
       <button class="admin-nav-item" onclick="switchTab('delivery', this)">
         <span class="material-symbols-outlined">local_shipping</span> Delivery
       </button>
+      <button class="admin-nav-item" onclick="switchTab('pricing', this)">
+        <span class="material-symbols-outlined">calculate</span> Pricing
+      </button>
       <button class="admin-nav-item" onclick="adminLogout()" style="margin-top:auto;">
         <span class="material-symbols-outlined">logout</span> Log Out
       </button>
@@ -165,6 +168,63 @@
           </form>
         </div>
       </div><!-- /tabSettings -->
+
+      <!-- Pricing Tab (private supplier costs — admin only) -->
+      <div class="admin-tab-content" id="tabPricing">
+        <div id="prMigrationBanner" class="hidden" style="background:#fef3cd;color:#856404;border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;font-size:0.85rem;">
+          <strong>One-time setup needed:</strong> run <code>supabase-pricing-migration.sql</code> in the Supabase SQL Editor so your price lists can be saved. You can still try the calculator below.
+        </div>
+
+        <div class="admin-card">
+          <h2 class="serif mb-1">Unit cost calculator</h2>
+          <p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:16px;">Work out what any unit costs you from your supplier, including add-ons on every piece.</p>
+          <div class="grid-3" style="gap:12px;">
+            <div class="form-group"><label class="form-label">Weft list</label><select class="form-input" id="prWeftList"></select></div>
+            <div class="form-group"><label class="form-label">Hair grade</label><select class="form-input" id="prGrade"></select></div>
+            <div class="form-group"><label class="form-label">Bundle length</label><select class="form-input" id="prLength"></select></div>
+            <div class="form-group"><label class="form-label">Number of bundles</label><select class="form-input" id="prBundles"></select></div>
+            <div class="form-group"><label class="form-label">Closure / frontal</label><select class="form-input" id="prLace"></select></div>
+            <div class="form-group"><label class="form-label">Closure / frontal length</label><select class="form-input" id="prLaceLength"></select></div>
+            <div class="form-group"><label class="form-label">Texture</label><select class="form-input" id="prTexture"></select></div>
+            <div class="form-group"><label class="form-label">Colour</label><select class="form-input" id="prColour"></select></div>
+            <div class="form-group" style="display:flex;align-items:flex-end;"><label style="display:flex;gap:8px;align-items:center;font-size:0.85rem;cursor:pointer;"><input type="checkbox" id="prWigMaking" style="accent-color:var(--gold-dark);"> Add wig-making service</label></div>
+          </div>
+          <div id="prResult" style="margin-top:12px;background:var(--gold-bg);border-radius:var(--radius);padding:16px;"></div>
+        </div>
+
+        <div class="admin-card" style="margin-top:24px;">
+          <h2 class="serif mb-1">Exchange rate &amp; markup</h2>
+          <div class="grid-3" style="gap:12px;">
+            <div class="form-group"><label class="form-label">$1 = £</label><input type="number" step="0.001" min="0.2" max="3" class="form-input" id="prRate"></div>
+            <div class="form-group"><label class="form-label">Markup % (leave blank for now)</label><input type="number" step="1" min="0" class="form-input" id="prMarkup" placeholder="e.g. 80"></div>
+            <div class="form-group"><label class="form-label">Wig-making service (£)</label><input type="number" step="0.01" min="0" class="form-input" id="prWigFee"></div>
+          </div>
+          <p style="font-size:0.75rem;color:var(--gray-400);">Supplier prices stay in dollars. When the dollar changes, update the rate and every cost updates.</p>
+        </div>
+
+        <div class="admin-card" style="margin-top:24px;">
+          <h2 class="serif mb-1">Add-ons per piece (USD)</h2>
+          <p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:12px;">Charged on every bundle <em>and</em> the closure/frontal. 3 bundles + frontal = 4 pieces.</p>
+          <div id="prAddons" class="grid-2" style="gap:16px;"></div>
+        </div>
+
+        <div class="admin-card" style="margin-top:24px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px;">
+            <h2 class="serif" style="margin:0;">Supplier price lists (USD)</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <label class="btn btn-sm btn-outline" style="cursor:pointer;">Import price file<input type="file" accept=".json,application/json" id="prImport" style="display:none;"></label>
+              <button class="btn btn-sm btn-outline" onclick="exportPricing()">Download backup</button>
+            </div>
+          </div>
+          <p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:12px;">Bundles are priced per 100g. The small grey figure is the price in pounds. Leave a box empty if the supplier doesn't sell it.</p>
+          <div id="prTables"></div>
+        </div>
+
+        <div style="position:sticky;bottom:0;background:var(--bg);padding:14px 0;margin-top:16px;display:flex;gap:12px;align-items:center;">
+          <button class="btn btn-primary" onclick="savePricing()">Save prices</button>
+          <span id="prSaveState" style="font-size:0.8rem;color:var(--gray-500);"></span>
+        </div>
+      </div><!-- /tabPricing -->
 
       <!-- Delivery Tab -->
       <div class="admin-tab-content" id="tabDelivery">
@@ -332,6 +392,7 @@
     </div>
   </div>
 
+  <script src="js/pricing.js"></script>
   <script src="js/app.js"></script>
   <script>
     // =================== AUTH ===================
@@ -368,7 +429,7 @@
         Toast.show('For security, please change the default admin password before continuing.', 'error');
         return;
       }
-      await Promise.all([loadAdminStats(), loadAdminProducts(), loadAdminOrders(), loadSettings(), loadDeliveryOptions()]);
+      await Promise.all([loadAdminStats(), loadAdminProducts(), loadAdminOrders(), loadSettings(), loadDeliveryOptions(), loadPricing()]);
     }
 
     // =================== TAB ===================
@@ -630,6 +691,185 @@
         Toast.show(`${orderNumber} marked as paid — customer emailed.`, 'success');
         await Promise.all([loadAdminOrders(), loadAdminStats()]);
       } catch (err) { Toast.show(err.message, 'error'); }
+    }
+
+    // =================== PRICING (private supplier costs) ===================
+    let _pricing = null;
+    let _laceLengthFollows = true;   // closure length follows bundle length until changed by hand
+    const toGbp = usd => (usd === null || usd === undefined || usd === '' || !isFinite(Number(usd))) ? '' : `£${(Number(usd) * (Number(_pricing?.usdToGbp) || 0)).toFixed(2)}`;
+    const getPath = (obj, path) => path.split('.').reduce((o, k) => o?.[k], obj);
+    function setPath(obj, path, value) {
+      const keys = path.split('.'); const last = keys.pop();
+      const target = keys.reduce((o, k) => (o[k] ??= {}), obj); target[last] = value;
+    }
+
+    async function loadPricing() {
+      try {
+        const r = await API.get('/api/admin/pricing');
+        _pricing = r.pricing;
+        document.getElementById('prMigrationBanner').classList.toggle('hidden', !r.needsMigration);
+        document.getElementById('prSaveState').textContent = (!r.saved && !r.needsMigration) ? 'No prices saved yet — use "Import price file".' : '';
+        renderPricing();
+      } catch (err) { Toast.show('Failed to load pricing.', 'error'); }
+    }
+
+    function priceInput(path, value, width = 70) {
+      return `<input type="number" step="0.01" min="0" class="form-input" data-path="${escHtml(path)}" value="${value ?? ''}" style="width:${width}px;padding:5px 6px;font-size:0.82rem;">
+              <div class="pr-gbp" style="font-size:0.68rem;color:var(--gray-400);min-height:14px;">${toGbp(value)}</div>`;
+    }
+    function priceGrid(title, lengths, cols) {
+      const th = 'padding:6px 8px;background:var(--gray-100);font-size:0.75rem;color:var(--gray-500);text-align:center;';
+      return `<div style="margin-bottom:22px;">
+        ${title}
+        <div style="overflow-x:auto;"><table style="border-collapse:collapse;">
+          <thead><tr><th style="${th}">Length</th>${cols.map(c => `<th style="${th}">${escHtml(c.label)}</th>`).join('')}</tr></thead>
+          <tbody>${lengths.map(len => `<tr><td style="padding:4px 8px;font-weight:600;font-size:0.82rem;">${len}"</td>${cols.map(c => {
+            const path = `${c.base}.${len}`;
+            return `<td style="padding:3px 4px;text-align:center;vertical-align:top;">${priceInput(path, getPath(_pricing, path))}</td>`;
+          }).join('')}</tr>`).join('')}</tbody>
+        </table></div></div>`;
+    }
+
+    function renderPricing() {
+      const p = _pricing, P = window.Pricing;
+      document.getElementById('prRate').value    = p.usdToGbp;
+      document.getElementById('prMarkup').value  = p.markupPercent ?? '';
+      document.getElementById('prWigFee').value  = p.wigMakingGbp ?? '';
+
+      document.getElementById('prAddons').innerHTML = Object.entries(p.addons).map(([group, items]) => `
+        <div><div class="form-label" style="margin-bottom:8px;">${group === 'texture' ? 'Texture' : 'Colour'}</div>
+          ${Object.entries(items).map(([name, v]) => `
+            <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;">
+              <span style="flex:1;font-size:0.85rem;padding-top:6px;">${escHtml(name)}</span>
+              <span style="font-size:0.8rem;color:var(--gray-400);padding-top:6px;">$</span>
+              <div>${priceInput(`addons.${group}.${name}`, v, 80)}</div>
+            </div>`).join('')}
+        </div>`).join('');
+
+      const weftHtml = Object.entries(p.weftLists).map(([id, list]) => priceGrid(
+        `<input class="form-input" data-path="weftLists.${id}.label" value="${escHtml(list.label)}" style="max-width:260px;font-weight:600;margin-bottom:8px;" title="Rename this list">`,
+        P.WEFT_LENGTHS,
+        Object.keys(list.grades).map(g => ({ label: P.GRADE_LABELS[g] || g, base: `weftLists.${id}.grades.${g}` }))
+      )).join('');
+      const laceHtml = Object.entries(p.laces).map(([kind, sizes]) => priceGrid(
+        `<div class="form-label" style="margin-bottom:8px;">${kind === 'closure' ? 'Closures' : 'Frontals'} (per piece)</div>`,
+        P.LACE_LENGTHS,
+        Object.keys(sizes).map(size => ({ label: size, base: `laces.${kind}.${size}` }))
+      )).join('');
+      document.getElementById('prTables').innerHTML = weftHtml + laceHtml;
+      populateCalculator();
+    }
+
+    function refreshGbpHints() {
+      document.querySelectorAll('#tabPricing input[data-path]').forEach(inp => {
+        const hint = inp.nextElementSibling;
+        if (hint?.classList.contains('pr-gbp')) hint.textContent = toGbp(inp.value === '' ? null : inp.value);
+      });
+    }
+
+    function fillSelect(id, options, preferred) {
+      const el = document.getElementById(id); const prev = el.value;
+      el.innerHTML = options.map(o => `<option value="${escHtml(String(o.value))}">${escHtml(o.label)}</option>`).join('');
+      const want = [prev, preferred].find(v => v !== undefined && v !== '' && options.some(o => String(o.value) === String(v)));
+      if (want !== undefined) el.value = want;
+    }
+    function populateCalculator() {
+      const p = _pricing, P = window.Pricing;
+      fillSelect('prWeftList', Object.entries(p.weftLists).map(([id, l]) => ({ value: id, label: l.label })));
+      fillSelect('prGrade', Object.entries(P.GRADE_LABELS).map(([v, label]) => ({ value: v, label })), 'sdd');
+      fillSelect('prLength', P.WEFT_LENGTHS.map(l => ({ value: l, label: `${l}"` })), 20);
+      fillSelect('prBundles', [0, 1, 2, 3, 4, 5, 6].map(n => ({ value: n, label: n === 0 ? 'None' : `${n} bundle${n > 1 ? 's' : ''}` })), 3);
+      fillSelect('prLace', [{ value: '', label: 'None' },
+        ...Object.keys(p.laces.closure || {}).map(s => ({ value: s, label: `${s} closure` })),
+        ...Object.keys(p.laces.frontal || {}).map(s => ({ value: s, label: `${s} frontal` }))], '13x4');
+      fillSelect('prLaceLength', P.LACE_LENGTHS.map(l => ({ value: l, label: `${l}"` })), 20);
+      fillSelect('prTexture', Object.keys(p.addons.texture).map(n => ({ value: n, label: n })));
+      fillSelect('prColour', Object.keys(p.addons.colour).map(n => ({ value: n, label: n })));
+      updateCalculator();
+    }
+
+    function updateCalculator() {
+      if (!_pricing) return;
+      const v = id => document.getElementById(id).value;
+      const sel = {
+        weftList: v('prWeftList'), grade: v('prGrade'), length: Number(v('prLength')), bundles: Number(v('prBundles')),
+        lace: v('prLace') || null, laceLength: Number(v('prLaceLength')),
+        texture: v('prTexture'), colour: v('prColour'), wigMaking: document.getElementById('prWigMaking').checked,
+      };
+      document.getElementById('prLaceLength').disabled = !sel.lace;
+      const r = window.Pricing.computeUnit(_pricing, sel);
+      const box = document.getElementById('prResult');
+      if (r.error) { box.innerHTML = `<p style="color:var(--error);font-size:0.88rem;margin:0;">${escHtml(r.error)} <span style="color:var(--gray-500);">Fill it in below if your supplier sells it.</span></p>`; return; }
+      const row = (label, usd, gbp, strong) => `<tr style="${strong ? 'font-weight:700;border-top:1px solid var(--gray-300);' : ''}">
+        <td style="padding:5px 0;font-size:0.85rem;">${label}</td>
+        <td style="padding:5px 12px;text-align:right;font-size:0.8rem;color:var(--gray-500);">${usd}</td>
+        <td style="padding:5px 0;text-align:right;font-size:0.9rem;">${gbp}</td></tr>`;
+      box.innerHTML = `<table style="width:100%;border-collapse:collapse;">
+          ${r.lines.map(l => row(escHtml(l.label), `$${l.usd.toFixed(2)}`, `£${l.gbp.toFixed(2)}`)).join('')}
+          ${row(`Your cost (${r.pieces} piece${r.pieces > 1 ? 's' : ''})`, `$${r.costUsd.toFixed(2)}`, `£${r.costGbp.toFixed(2)}`, true)}
+        </table>
+        <p style="margin:12px 0 0;font-size:0.9rem;">${r.sellGbp !== null
+          ? `Selling price at ${r.markupPercent}% markup${r.wigMakingGbp ? ` + £${r.wigMakingGbp.toFixed(2)} wig-making` : ''}: <strong style="font-size:1.15rem;color:var(--gold-dark);">£${r.sellGbp.toFixed(2)}</strong> &nbsp;<span style="color:var(--gray-500);font-size:0.8rem;">(profit £${(r.sellGbp - r.costGbp - r.wigMakingGbp).toFixed(2)} before shipping, VAT &amp; fees)</span>`
+          : `<span style="color:var(--gray-500);">Set a markup % below to see the selling price.</span>`}</p>`;
+    }
+
+    document.getElementById('tabPricing').addEventListener('input', e => {
+      const t = e.target;
+      if (!_pricing) return;
+      if (t.dataset.path) {
+        const isLabel = t.dataset.path.endsWith('.label');
+        setPath(_pricing, t.dataset.path, isLabel ? t.value : (t.value === '' ? null : Number(t.value)));
+        if (!isLabel) { const hint = t.nextElementSibling; if (hint?.classList.contains('pr-gbp')) hint.textContent = toGbp(t.value === '' ? null : t.value); }
+        else populateCalculator();
+      } else if (t.id === 'prRate')   { _pricing.usdToGbp = Number(t.value) || _pricing.usdToGbp; refreshGbpHints(); }
+      else if (t.id === 'prMarkup')   { _pricing.markupPercent = t.value === '' ? null : Number(t.value); }
+      else if (t.id === 'prWigFee')   { _pricing.wigMakingGbp = t.value === '' ? 0 : Number(t.value); }
+      if (t.dataset.path || ['prRate', 'prMarkup', 'prWigFee'].includes(t.id)) document.getElementById('prSaveState').textContent = 'Unsaved changes';
+      updateCalculator();
+    });
+    document.getElementById('tabPricing').addEventListener('change', e => {
+      const id = e.target.id;
+      if (id === 'prLaceLength') _laceLengthFollows = false;
+      if (id === 'prLength' && _laceLengthFollows) {
+        const len = Number(e.target.value), laceSel = document.getElementById('prLaceLength');
+        if ([...laceSel.options].some(o => Number(o.value) === len)) laceSel.value = String(len);
+      }
+      if (e.target.tagName === 'SELECT' || e.target.type === 'checkbox') updateCalculator();
+    });
+    document.getElementById('prImport').addEventListener('change', async e => {
+      const file = e.target.files?.[0]; e.target.value = '';
+      if (!file) return;
+      try {
+        _pricing = window.Pricing.sanitizePricing(JSON.parse(await file.text()));
+        renderPricing();
+        document.getElementById('prSaveState').textContent = 'Imported — click "Save prices" to keep them.';
+        Toast.show('Price file imported. Check it, then click Save prices.', 'success');
+      } catch { Toast.show('That file could not be read as a price file.', 'error'); }
+    });
+
+    function exportPricing() {
+      if (!_pricing) return;
+      const blob = new Blob([JSON.stringify(_pricing, null, 2)], { type: 'application/json' });
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `eetasha-prices-${new Date().toISOString().slice(0, 10)}.json` });
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+    }
+
+    async function savePricing() {
+      if (!_pricing) return;
+      const state = document.getElementById('prSaveState');
+      state.textContent = 'Saving…';
+      try {
+        const r = await API.put('/api/admin/pricing', { pricing: _pricing });
+        _pricing = r.pricing;
+        renderPricing();
+        document.getElementById('prMigrationBanner').classList.add('hidden');
+        state.textContent = `Saved ✓ ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+        Toast.show('Prices saved.', 'success');
+      } catch (err) {
+        state.textContent = '';
+        if (/one-time update/i.test(err.message)) document.getElementById('prMigrationBanner').classList.remove('hidden');
+        Toast.show(err.message, 'error');
+      }
     }
 
     async function updateOrderStatus(id, status) {

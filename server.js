@@ -19,6 +19,7 @@ const { body, validationResult } = require('express-validator');
 const path      = require('path');
 const { createClient } = require('@supabase/supabase-js');
 const multer  = require('multer');
+const Pricing = require('./js/pricing.js');
 const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 const app  = express();
@@ -913,6 +914,37 @@ app.put('/api/settings', requireAdmin, [
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: 'Failed to save settings.' });
+  }
+});
+
+// ============================================================
+//  PRICING  (supplier costs — ADMIN ONLY, never sent to customers)
+// ============================================================
+const PRICING_MIGRATION_MSG = 'The database needs a one-time update before prices can be saved: run supabase-pricing-migration.sql in the Supabase SQL Editor.';
+const isMissingPricingColumn = err => !!err && (err.code === '42703' || err.code === 'PGRST204' || /pricing/i.test(err.message || ''));
+
+app.get('/api/admin/pricing', requireAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('settings').select('pricing').eq('id', 1).single();
+    if (isMissingPricingColumn(error)) return res.json({ pricing: Pricing.DEFAULT_PRICING, saved: false, needsMigration: true });
+    if (error) throw error;
+    res.json({ pricing: Pricing.sanitizePricing(data?.pricing || Pricing.DEFAULT_PRICING), saved: !!data?.pricing, needsMigration: false });
+  } catch (err) {
+    console.error('Pricing load error:', err.message);
+    res.status(500).json({ error: 'Failed to load pricing.' });
+  }
+});
+
+app.put('/api/admin/pricing', requireAdmin, async (req, res) => {
+  try {
+    const clean = Pricing.sanitizePricing(req.body?.pricing);
+    const { error } = await supabase.from('settings').update({ pricing: clean }).eq('id', 1);
+    if (isMissingPricingColumn(error)) return res.status(409).json({ error: PRICING_MIGRATION_MSG, needsMigration: true });
+    if (error) throw error;
+    res.json({ ok: true, pricing: clean });
+  } catch (err) {
+    console.error('Pricing save error:', err.message);
+    res.status(500).json({ error: 'Failed to save pricing.' });
   }
 });
 
