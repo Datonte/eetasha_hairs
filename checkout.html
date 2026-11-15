@@ -170,9 +170,10 @@
           <img src="${escHtml(p.image_url || '')}" style="width:50px;height:60px;border-radius:6px;object-fit:cover;background:var(--gray-100);" onerror="this.style.background='var(--gray-200)'">
           <div style="flex:1;">
             <div style="font-weight:600;font-size:0.82rem;">${escHtml(p.name)}</div>
+            ${item.variantLabel ? `<div style="font-size:0.72rem;color:var(--gold-dark);">${escHtml(item.variantLabel)}</div>` : ''}
             <div style="font-size:0.75rem;color:var(--gray-500);">Qty: ${item.qty}</div>
           </div>
-          <div class="serif" style="color:var(--gold-dark);">${settings.currency}${(p.price * item.qty).toFixed(2)}</div>
+          <div class="serif" style="color:var(--gold-dark);">${settings.currency}${((item.variantPrice ?? p.price) * item.qty).toFixed(2)}</div>
         </div>`;
       }).join('');
 
@@ -215,20 +216,22 @@
           deliveryCarrierId: _selectedDelivery?.carrierId || '',
           deliveryRegion:    _selectedDelivery?.region    || 'uk',
         });
-        sessionStorage.removeItem('et_delivery');
-        clearCheckoutState();
-        Store.clearCart();
-
         if (method === 'stripe') {
+          // Keep the bag and delivery choice until Stripe confirms payment, so a
+          // customer who cancels on the card page comes back to a full bag.
           try {
             const { url } = await API.post('/api/create-checkout-session', { orderId: order.id });
             window.location.href = url;
             return;
-          } catch {
-            // Stripe not configured — fall back to transfer modal
-            Toast.show('Card payment is not available yet. Switching to bank transfer.', 'info');
+          } catch (err) {
+            Toast.show(err.message || 'Card payment could not be started. Please try again or choose bank transfer.', 'error');
+            return;
           }
         }
+
+        sessionStorage.removeItem('et_delivery');
+        clearCheckoutState();
+        Store.clearCart();
 
         // Show transfer details
         const settings = Store.getSettings();
@@ -253,7 +256,7 @@
 
     function closeTransferModal() {
       document.getElementById('transferModal').classList.remove('open');
-      window.location.href = '/account';
+      window.location.href = Store.getSession() ? '/account' : '/';
     }
 
     // Checkout form state persistence

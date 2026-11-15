@@ -54,13 +54,28 @@ function escEmail(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-async function sendOrderConfirmationEmail(order) {
+// kind: 'paid'     → payment received (card paid, or bank transfer marked paid by admin)
+//       'transfer' → order placed, waiting for the customer's bank transfer
+async function sendOrderConfirmationEmail(order, kind = 'paid') {
   if (!hasResend) return;
   try {
-    // Fetch contact details from settings
-    const { data: settings } = await supabase.from('settings').select('whatsapp, instagram').eq('id', 1).single();
+    // Fetch contact + bank details from settings
+    const { data: settings } = await supabase.from('settings')
+      .select('whatsapp, instagram, bank_name, sort_code, account_number, account_name').eq('id', 1).single();
     order.whatsapp  = settings?.whatsapp  || '';
     order.instagram = settings?.instagram || '@eetashacollection';
+    const awaitingTransfer = kind === 'transfer';
+    const bankHtml = awaitingTransfer ? `
+      <div style="margin-bottom:24px;padding:16px 20px;border:2px solid #c9a84c;border-radius:8px;font-family:Arial,sans-serif;">
+        <p style="margin:0 0 10px;font-size:13px;color:#1a1a1a;font-weight:bold;">Please pay by bank transfer to complete your order</p>
+        <p style="margin:0 0 4px;font-size:14px;color:#555;">Bank: <strong>${escEmail(settings?.bank_name || '')}</strong></p>
+        <p style="margin:0 0 4px;font-size:14px;color:#555;">Account name: <strong>${escEmail(settings?.account_name || '')}</strong></p>
+        <p style="margin:0 0 4px;font-size:14px;color:#555;">Sort code: <strong>${escEmail(settings?.sort_code || '')}</strong></p>
+        <p style="margin:0 0 4px;font-size:14px;color:#555;">Account number: <strong>${escEmail(settings?.account_number || '')}</strong></p>
+        <p style="margin:0 0 4px;font-size:14px;color:#555;">Amount: <strong>£${Number(order.total).toFixed(2)}</strong></p>
+        <p style="margin:0;font-size:14px;color:#555;">Reference: <strong>${escEmail(order.order_number)}</strong></p>
+        <p style="margin:10px 0 0;font-size:12px;color:#999;">We'll confirm and prepare your order as soon as the payment arrives.</p>
+      </div>` : '';
 
     const itemsHtml = (order.items || []).map(i => `
       <tr>
@@ -84,8 +99,11 @@ async function sendOrderConfirmationEmail(order) {
 
     <!-- Body -->
     <div style="padding:36px 32px;">
-      <h2 style="margin:0 0 6px;color:#1a1a1a;font-size:20px;">Order Confirmed! 🎉</h2>
-      <p style="margin:0 0 24px;color:#666;font-size:14px;font-family:Arial,sans-serif;">Hi ${escEmail(order.customer_name)}, thank you for your order. We've received it and will get it ready for dispatch soon.</p>
+      <h2 style="margin:0 0 6px;color:#1a1a1a;font-size:20px;">${awaitingTransfer ? 'Order Received' : 'Order Confirmed! 🎉'}</h2>
+      <p style="margin:0 0 24px;color:#666;font-size:14px;font-family:Arial,sans-serif;">Hi ${escEmail(order.customer_name)}, ${awaitingTransfer
+        ? 'thank you for your order. Please complete your bank transfer using the details below.'
+        : "thank you — your payment has been received and we'll get your order ready for dispatch soon."}</p>
+      ${bankHtml}
 
       <div style="background:#faf9f7;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
         <p style="margin:0;font-size:13px;font-family:Arial,sans-serif;color:#666;">Order Reference</p>
@@ -143,14 +161,59 @@ async function sendOrderConfirmationEmail(order) {
     await resendClient.emails.send({
       from:    'eetashacollection <noreply@eetashacollection.com>',
       to:      [order.customer_email],
-      subject: `Order Confirmed — ${order.order_number} | eetashacollection`,
+      subject: awaitingTransfer
+        ? `Order Received — ${order.order_number} | Complete your bank transfer`
+        : `Order Confirmed — ${order.order_number} | eetashacollection`,
       html,
     });
-    console.log(`  ✅ Confirmation email sent to ${order.customer_email}`);
+    console.log(`  ✅ ${kind} email sent for ${order.order_number}`);
   } catch (err) {
     console.error('  ⚠ Email send failed:', err.message);
     // Non-fatal — order still goes through
   }
+}
+
+// Tells the shop owner about a new order, with everything needed to fulfil it.
+async function sendAdminOrderEmail(order, kind = 'paid') {
+  if (!hasResend) return;
+  try {
+    const to = process.env.ADMIN_NOTIFY_EMAIL || 'eetasha.collection@gmail.com';
+    const items = (order.items || []).map(i =>
+      `<li style="margin-bottom:6px;"><strong>${escEmail(i.product_name)}</strong> × ${i.quantity} — £${(i.price * i.quantity).toFixed(2)}${i.variant_label ? `<br><span style="color:#775a19;">${escEmail(i.variant_label)}</span>` : ''}</li>`).join('');
+    const status = kind === 'transfer' ? '⏳ Awaiting bank transfer — check your account before dispatching' : '✅ Paid by card';
+    await resendClient.emails.send({
+      from:    'eetashacollection <noreply@eetashacollection.com>',
+      to:      [to],
+      subject: `${kind === 'transfer' ? 'New order (awaiting transfer)' : 'New paid order'} — ${order.order_number} — £${Number(order.total).toFixed(2)}`,
+      html: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#333;max-width:560px;">
+        <h2 style="margin:0 0 4px;">${escEmail(order.order_number)} · £${Number(order.total).toFixed(2)}</h2>
+        <p style="margin:0 0 16px;">${status}</p>
+        <ul style="padding-left:18px;margin:0 0 16px;">${items}</ul>
+        <p style="margin:0 0 4px;"><strong>${escEmail(order.customer_name)}</strong></p>
+        <p style="margin:0 0 4px;">${escEmail(order.customer_email)} · ${escEmail(order.customer_phone)}</p>
+        <p style="margin:0 0 4px;white-space:pre-line;">${escEmail(order.delivery_address)}</p>
+        <p style="margin:0 0 16px;">Delivery: ${escEmail(order.delivery_carrier || 'Standard')} (£${Number(order.delivery_fee).toFixed(2)})</p>
+        <p style="margin:0;"><a href="${(process.env.PUBLIC_SITE_URL || 'https://eetashacollection.com').trim()}/admin">Open admin dashboard</a></p>
+      </div>`,
+    });
+  } catch (err) {
+    console.error('  ⚠ Admin email failed:', err.message);
+  }
+}
+
+// Marks a card order as paid exactly once (called by the Stripe webhook AND the
+// success page — whichever comes first sends the emails, the other does nothing).
+async function markStripeOrderPaid(sessionId) {
+  const { data: rows, error } = await supabase.from('orders')
+    .update({ payment_status: 'paid', order_status: 'confirmed' })
+    .eq('stripe_session_id', sessionId)
+    .neq('payment_status', 'paid')
+    .select();
+  if (error) throw error;
+  for (const order of rows || []) {
+    await Promise.all([sendOrderConfirmationEmail(order, 'paid'), sendAdminOrderEmail(order, 'paid')]);
+  }
+  return (rows || []).length > 0;
 }
 
 // ============================================================
@@ -276,6 +339,37 @@ app.use(cors({
   },
   credentials: true,
 }));
+// ============================================================
+//  STRIPE WEBHOOK  (must be registered before express.json: needs the raw body)
+//  Stripe calls this when a card payment succeeds, even if the customer
+//  closes the tab before returning to the success page.
+// ============================================================
+app.post('/api/stripe-webhook', express.raw({ type: 'application/json', limit: '1mb' }), async (req, res) => {
+  const secret = (process.env.STRIPE_WEBHOOK_SECRET || '').trim();
+  if (!hasStripe || !secret) return res.status(503).json({ error: 'Webhook not configured.' });
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], secret);
+  } catch (err) {
+    console.error('Webhook signature check failed:', err.message);
+    return res.status(400).json({ error: 'Invalid signature.' });
+  }
+  try {
+    const sess = event.data.object;
+    if ((event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded')
+        && sess.payment_status === 'paid') {
+      await markStripeOrderPaid(sess.id);
+    } else if (event.type === 'checkout.session.expired') {
+      await supabase.from('orders').update({ payment_status: 'expired' })
+        .eq('stripe_session_id', sess.id).eq('payment_status', 'pending');
+    }
+    res.json({ received: true });
+  } catch (err) {
+    console.error('Webhook handling error:', err.message);
+    res.status(500).json({ error: 'Webhook handling failed.' });   // Stripe will retry
+  }
+});
+
 app.use(express.json({ limit: '500kb' }));
 app.use(express.urlencoded({ extended: true, limit: '500kb' }));
 
@@ -515,11 +609,12 @@ app.get('/api/admin/stats', requireAdmin, async (req, res) => {
     ] = await Promise.all([
       supabase.from('products').select('*', { count: 'exact', head: true }),
       supabase.from('orders').select('*', { count: 'exact', head: true }),
-      supabase.from('orders').select('total, order_status'),
+      supabase.from('orders').select('total, order_status, payment_method, payment_status'),
       supabase.auth.admin.listUsers({ perPage: 1000 }),
     ]);
-    const revenue  = (orders || []).filter(o => o.order_status !== 'cancelled').reduce((s, o) => s + (parseFloat(o.total) || 0), 0);
-    const pending  = (orders || []).filter(o => o.order_status === 'pending').length;
+    // Revenue = money actually received; "pending" excludes card checkouts that were never paid
+    const revenue  = (orders || []).filter(o => o.payment_status === 'paid' && o.order_status !== 'cancelled').reduce((s, o) => s + (parseFloat(o.total) || 0), 0);
+    const pending  = (orders || []).filter(o => o.order_status === 'pending' && !(o.payment_method === 'stripe' && o.payment_status !== 'paid')).length;
     const customers = authData?.users?.length || 0;
     res.json({ products: productCount || 0, orders: orderCount || 0, revenue, pending, customers });
   } catch {
@@ -670,29 +765,39 @@ app.post('/api/orders', orderLimiter, optionalUser, [
 
     const total = Math.round((subtotal + deliveryFee) * 100) / 100;
 
-    // Generate order number
-    const { count } = await supabase.from('orders').select('*', { count: 'exact', head: true });
-    const orderNumber = 'ORD-' + String((count || 0) + 1001).padStart(5, '0');
+    // Order number = highest existing number + 1. If two customers check out at the
+    // same moment, the UNIQUE constraint rejects the duplicate and we try the next one.
+    const { data: latest } = await supabase.from('orders').select('order_number')
+      .like('order_number', 'ORD-%').order('order_number', { ascending: false }).limit(1);
+    let nextNum = Math.max(1001, (parseInt(String(latest?.[0]?.order_number || '').replace(/\D/g, ''), 10) || 1000) + 1);
 
-    const { data: order, error } = await supabase.from('orders').insert({
-      order_number:     orderNumber,
-      user_id:          req.userId || null,
-      customer_name:    clean(customerName),
-      customer_email:   customerEmail,
-      customer_phone:   clean(customerPhone),
-      delivery_address: clean(deliveryAddress),
-      subtotal:         Math.round(subtotal * 100) / 100,
-      delivery_fee:     deliveryFee,
-      delivery_carrier: deliveryCarrier,
-      total,
-      payment_method:   paymentMethod,
-      items:            orderItems,
-    }).select().single();
-
+    let order, error;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      ({ data: order, error } = await supabase.from('orders').insert({
+        order_number:     'ORD-' + String(nextNum).padStart(5, '0'),
+        user_id:          req.userId || null,
+        customer_name:    clean(customerName),
+        customer_email:   customerEmail,
+        customer_phone:   clean(customerPhone),
+        delivery_address: clean(deliveryAddress),
+        subtotal:         Math.round(subtotal * 100) / 100,
+        delivery_fee:     deliveryFee,
+        delivery_carrier: deliveryCarrier,
+        total,
+        payment_method:   paymentMethod,
+        items:            orderItems,
+      }).select().single());
+      if (!error || error.code !== '23505') break;   // 23505 = duplicate order number
+      nextNum++;
+    }
     if (error) throw error;
 
-    // Send confirmation email (non-blocking)
-    sendOrderConfirmationEmail(order);
+    // Card orders are emailed only once Stripe confirms payment (see markStripeOrderPaid).
+    // Bank-transfer orders get the transfer details now. Awaited so serverless
+    // hosting doesn't freeze the function before the email is sent.
+    if (paymentMethod === 'transfer') {
+      await Promise.all([sendOrderConfirmationEmail(order, 'transfer'), sendAdminOrderEmail(order, 'transfer')]);
+    }
 
     res.status(201).json({ order });
   } catch (err) {
@@ -731,6 +836,30 @@ app.put('/api/orders/:id/status', requireAdmin, [
     res.json({ ok: true });
   } catch {
     res.status(404).json({ error: 'Order not found.' });
+  }
+});
+
+// Admin confirms a bank transfer has arrived → order is confirmed and the customer is emailed.
+app.put('/api/orders/:id/payment', requireAdmin, [
+  body('status').isIn(['paid', 'pending']).withMessage('Invalid payment status'),
+], async (req, res) => {
+  if (!valid(req, res)) return;
+  try {
+    const paid = req.body.status === 'paid';
+    let q = supabase.from('orders')
+      .update({ payment_status: paid ? 'paid' : 'pending' })
+      .eq('id', req.params.id).eq('payment_method', 'transfer');
+    q = paid ? q.neq('payment_status', 'paid') : q.eq('payment_status', 'paid');
+    const { data: rows, error } = await q.select();
+    if (error) throw error;
+    if (paid && rows?.length) {
+      // Move a still-pending order to confirmed (don't touch one already shipped)
+      await supabase.from('orders').update({ order_status: 'confirmed' }).eq('id', req.params.id).eq('order_status', 'pending');
+      await sendOrderConfirmationEmail(rows[0], 'paid');
+    }
+    res.json({ ok: true, changed: rows?.length || 0 });
+  } catch {
+    res.status(500).json({ error: 'Failed to update payment.' });
   }
 });
 
@@ -818,7 +947,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
       : (process.env.PUBLIC_SITE_URL || 'https://eetashacollection.com');
 
     const lineItems = (order.items || []).map(i => ({
-      price_data: { currency: 'gbp', product_data: { name: i.product_name }, unit_amount: Math.round(i.price * 100) },
+      price_data: { currency: 'gbp', product_data: { name: (i.variant_label ? `${i.product_name} — ${i.variant_label}` : i.product_name).slice(0, 250) }, unit_amount: Math.round(i.price * 100) },
       quantity: i.quantity,
     }));
     if (order.delivery_fee > 0) {
@@ -836,6 +965,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
       cancel_url:  `${origin}/checkout`,
       customer_email: order.customer_email,
       metadata: { orderId: order.id, orderNumber: order.order_number },
+      expires_at: Math.floor(Date.now() / 1000) + 60 * 60,   // abandoned checkouts expire after 1 hour
     });
 
     await supabase.from('orders').update({ stripe_session_id: sess.id }).eq('id', orderId);
@@ -850,11 +980,7 @@ app.get('/api/verify-payment/:sessionId', async (req, res) => {
   if (!hasStripe) return res.json({ paid: false });
   try {
     const sess = await stripe.checkout.sessions.retrieve(req.params.sessionId);
-    if (sess.payment_status === 'paid') {
-      await supabase.from('orders')
-        .update({ payment_status: 'paid', order_status: 'confirmed' })
-        .eq('stripe_session_id', req.params.sessionId);
-    }
+    if (sess.payment_status === 'paid') await markStripeOrderPaid(sess.id);
     res.json({ paid: sess.payment_status === 'paid', orderId: sess.metadata?.orderId, orderNumber: sess.metadata?.orderNumber });
   } catch (err) {
     console.error('Verify payment error:', err.message);
@@ -1033,11 +1159,9 @@ app.get('/product/:slug', async (req, res) => {
         const hasVariants = p.variants?.enabled && p.variants?.prices && Object.keys(p.variants.prices).length > 0;
         if (!p.in_stock)              box.innerHTML = '<button class="btn btn-secondary" disabled>Out of Stock</button>';
         else if (hasVariants)         box.innerHTML = '<button class="btn btn-primary" id="pdBtn">Select Options</button>';
-        else if (!Store.getSession()) box.innerHTML = '<button class="btn btn-secondary" id="pdBtn">Sign in to Buy</button>';
         else                          box.innerHTML = '<button class="btn btn-primary" id="pdBtn">Add to Bag</button>';
         document.getElementById('pdBtn')?.addEventListener('click', () => {
           if (hasVariants) openVariantModal(p.id);
-          else if (!Store.getSession()) promptLogin();
           else addToCartOrLogin(p.id);
         });
       }

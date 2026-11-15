@@ -44,6 +44,9 @@
         try {
           const result = await API.get(`/api/verify-payment/${encodeURIComponent(sessionId)}`);
           if (result.paid) {
+            // Payment confirmed — now it's safe to empty the bag
+            Store.clearCart();
+            try { sessionStorage.removeItem('et_delivery'); sessionStorage.removeItem('checkoutFormState'); } catch {}
             document.getElementById('orderId').textContent = `Order: ${result.orderNumber || orderId}`;
           } else {
             document.getElementById('statusIcon').textContent = 'pending';

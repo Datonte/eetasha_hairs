@@ -258,7 +258,8 @@ function renderNav(activePage = '', opts = {}) {
         <div class="nav-actions">
           ${!adminMode && sess ? `
           <button onclick="openChangePasswordModal()" aria-label="Change Password" title="Change Password" style="font-size:0.78rem;padding:6px 10px;border:1px solid var(--gold-dark);border-radius:6px;color:var(--gold-dark);background:none;cursor:pointer;font-family:inherit;">Password</button>
-          <button onclick="navLogout()" aria-label="Sign Out" title="Sign Out" style="font-size:0.78rem;padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;color:var(--gray-600);background:none;cursor:pointer;font-family:inherit;">Sign Out</button>
+          <button onclick="navLogout()" aria-label="Sign Out" title="Sign Out" style="font-size:0.78rem;padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;color:var(--gray-600);background:none;cursor:pointer;font-family:inherit;">Sign Out</button>` : ''}
+          ${!adminMode ? `
           <button onclick="openCart()" aria-label="Cart">
             <span class="material-symbols-outlined">shopping_bag</span>
             <span class="cart-count"></span>
@@ -396,8 +397,6 @@ function productCardHTML(p) {
     btn = `<span class="product-card-stock stock-out">Out of Stock</span>`;
   } else if (hasVariants) {
     btn = `<button class="btn btn-primary btn-sm btn-full" onclick="openVariantModal('${p.id}')">Select Options</button>`;
-  } else if (!Store.getSession()) {
-    btn = `<button class="btn btn-secondary btn-sm btn-full" onclick="promptLogin()">Sign in to Buy</button>`;
   } else {
     btn = `<button class="btn btn-primary btn-sm btn-full" onclick="addToCartOrLogin('${p.id}')">Add to Bag</button>`;
   }
@@ -735,7 +734,6 @@ function openVariantModal(productId) {
     const price = currentPrice();
     const key   = buildKey();
     if (price === null || !key) return;
-    if (!Store.getSession()) { modal.remove(); promptLogin(); return; }
     Store.addToCart(pid, 1, { key, label: buildLabel(), price });
     modal.remove();
     openCart();

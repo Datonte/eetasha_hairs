@@ -329,8 +329,11 @@
       } else {
         empty.classList.add('hidden');
         list.innerHTML = orders.map(o => {
-          const statusLabel = o.order_status.charAt(0).toUpperCase() + o.order_status.slice(1);
-          const itemsText   = (o.items || []).map(i => `${escHtml(i.product_name)} × ${i.quantity}`).join(', ');
+          const unpaid      = o.payment_status !== 'paid' && o.order_status !== 'cancelled';
+          const statusLabel = unpaid && o.payment_method === 'stripe'   ? 'Payment not completed'
+                            : unpaid && o.payment_method === 'transfer' ? 'Awaiting payment'
+                            : o.order_status.charAt(0).toUpperCase() + o.order_status.slice(1);
+          const itemsText   = (o.items || []).map(i => `${escHtml(i.product_name)} × ${i.quantity}${i.variant_label ? ` <span style="color:var(--gray-400);">(${escHtml(i.variant_label)})</span>` : ''}`).join(', ');
           return `<div class="order-card">
             <div class="order-header">
               <span class="order-id serif">${escHtml(o.order_number)}</span>

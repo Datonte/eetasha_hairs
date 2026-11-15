@@ -86,7 +86,13 @@
       <!-- Orders Tab -->
       <div class="admin-tab-content" id="tabOrders">
         <div class="admin-card">
-          <h2 class="serif mb-2">Orders</h2>
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+            <h2 class="serif" style="margin:0;">Orders</h2>
+            <label style="font-size:0.8rem;color:var(--gray-600);display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="showUnpaidCard" onchange="renderAdminOrders()" style="accent-color:var(--gold-dark);">
+              Show unfinished card checkouts
+            </label>
+          </div>
           <div id="adminOrderList"></div>
           <div id="adminOrderEmpty" class="hidden text-center" style="padding:40px;color:var(--gray-400);">
             <p>No orders yet. They'll appear here when customers order.</p>
@@ -546,17 +552,40 @@
     }
 
     // =================== ORDERS ===================
+    let _adminOrders = [];
     async function loadAdminOrders() {
       try {
-        const orders = await API.get('/api/orders');
-        const list   = document.getElementById('adminOrderList');
-        const empty  = document.getElementById('adminOrderEmpty');
+        _adminOrders = await API.get('/api/orders');
+        renderAdminOrders();
+      } catch (err) { Toast.show('Failed to load orders.', 'error'); }
+    }
 
-        if (!orders.length) { list.innerHTML = ''; empty.classList.remove('hidden'); return; }
-        empty.classList.add('hidden');
+    // Payment badge: what the shop owner needs to know before dispatching
+    function paymentBadge(o) {
+      const base = 'display:inline-block;padding:3px 9px;border-radius:12px;font-size:0.7rem;font-weight:700;letter-spacing:0.03em;';
+      if (o.payment_status === 'paid')  return `<span style="${base}background:#d4edda;color:#155724;">✓ PAID${o.payment_method === 'stripe' ? ' · CARD' : ' · TRANSFER'}</span>`;
+      if (o.payment_method === 'transfer') return `<span style="${base}background:#fef3cd;color:#856404;">AWAITING TRANSFER</span>`;
+      if (o.payment_status === 'expired')  return `<span style="${base}background:#eee;color:#777;">CARD CHECKOUT ABANDONED</span>`;
+      return `<span style="${base}background:#eee;color:#777;">CARD NOT PAID YET</span>`;
+    }
+    const isUnfinishedCard = o => o.payment_method === 'stripe' && o.payment_status !== 'paid';
 
-        list.innerHTML = orders.map(o => `
-          <div class="order-card">
+    function renderAdminOrders() {
+      const list   = document.getElementById('adminOrderList');
+      const empty  = document.getElementById('adminOrderEmpty');
+      const showUnpaid = document.getElementById('showUnpaidCard')?.checked;
+      const orders = _adminOrders.filter(o => showUnpaid || !isUnfinishedCard(o));
+      const hiddenCount = _adminOrders.length - orders.length;
+
+      if (!orders.length) {
+        list.innerHTML = hiddenCount ? `<p style="text-align:center;color:var(--gray-400);padding:20px;">${hiddenCount} unfinished card checkout${hiddenCount > 1 ? 's' : ''} hidden.</p>` : '';
+        empty.classList.toggle('hidden', !!hiddenCount);
+        return;
+      }
+      empty.classList.add('hidden');
+
+      list.innerHTML = orders.map(o => `
+          <div class="order-card" style="${isUnfinishedCard(o) ? 'opacity:0.55;' : ''}">
             <div class="order-header">
               <span class="order-id serif">${escHtml(o.order_number)}</span>
               <select class="form-input" style="width:auto;padding:6px 10px;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;"
@@ -568,11 +597,19 @@
                 <option value="cancelled" ${o.order_status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
               </select>
             </div>
-            <div style="font-size:0.82rem;color:var(--gray-600);margin-bottom:4px;">
-              <strong>${escHtml(o.customer_name)}</strong> · ${escHtml(o.customer_phone || '')} · ${o.payment_method === 'stripe' ? '💳 Card' : '🏦 Transfer'}
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+              ${paymentBadge(o)}
+              ${o.payment_method === 'transfer' && o.payment_status !== 'paid' && o.order_status !== 'cancelled'
+                ? `<button class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:0.72rem;" onclick="markTransferPaid('${o.id}', '${escHtml(o.order_number)}', '${formatCurrency(o.total)}')">Mark as paid</button>` : ''}
             </div>
-            <div class="order-items">${(o.items || []).map(i => `${escHtml(i.product_name)} × ${i.quantity}`).join(', ')}</div>
-            <div style="font-size:0.78rem;color:var(--gray-400);margin-top:4px;">${escHtml(o.delivery_address || '')}</div>
+            <div style="font-size:0.82rem;color:var(--gray-600);margin-bottom:6px;">
+              <strong>${escHtml(o.customer_name)}</strong> · ${escHtml(o.customer_phone || '')} · ${escHtml(o.customer_email || '')}
+            </div>
+            <ul class="order-items" style="margin:0 0 6px;padding-left:16px;list-style:disc;">
+              ${(o.items || []).map(i => `<li><strong>${escHtml(i.product_name)}</strong> × ${i.quantity} — ${formatCurrency(i.price * i.quantity)}${i.variant_label ? `<br><span style="color:var(--gold-dark);">${escHtml(i.variant_label)}</span>` : ''}</li>`).join('')}
+            </ul>
+            <div style="font-size:0.78rem;color:var(--gray-500);margin-top:4px;white-space:pre-line;">${escHtml(o.delivery_address || '')}</div>
+            ${o.delivery_carrier ? `<div style="font-size:0.75rem;color:var(--gray-400);margin-top:2px;">🚚 ${escHtml(o.delivery_carrier)} · ${formatCurrency(o.delivery_fee || 0)}</div>` : ''}
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
               <span class="order-date">${formatDate(o.created_at)}</span>
               <div style="display:flex;gap:8px;align-items:center;">
@@ -582,8 +619,17 @@
                 </a>` : ''}
               </div>
             </div>
-          </div>`).join('');
-      } catch (err) { Toast.show('Failed to load orders.', 'error'); }
+          </div>`).join('') + (hiddenCount && !showUnpaid
+          ? `<p style="text-align:center;color:var(--gray-400);font-size:0.8rem;padding:12px;">${hiddenCount} unfinished card checkout${hiddenCount > 1 ? 's' : ''} hidden.</p>` : '');
+    }
+
+    async function markTransferPaid(id, orderNumber, amount) {
+      if (!confirm(`Confirm you have received ${amount} for ${orderNumber}?\n\nThe customer will be emailed that their order is confirmed.`)) return;
+      try {
+        await API.put(`/api/orders/${id}/payment`, { status: 'paid' });
+        Toast.show(`${orderNumber} marked as paid — customer emailed.`, 'success');
+        await Promise.all([loadAdminOrders(), loadAdminStats()]);
+      } catch (err) { Toast.show(err.message, 'error'); }
     }
 
     async function updateOrderStatus(id, status) {
