@@ -1,6 +1,14 @@
 'use strict';
 require('dotenv').config();
 
+// Strip stray whitespace/newlines from secrets pasted into the hosting dashboard —
+// a trailing "\n" on a key makes every Supabase/Stripe request fail.
+for (const k of ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'STRIPE_SECRET_KEY',
+                 'STRIPE_PUBLISHABLE_KEY', 'RESEND_API_KEY', 'SESSION_SECRET', 'ADMIN_INITIAL_PASSWORD',
+                 'PUBLIC_SITE_URL', 'NODE_ENV']) {
+  if (typeof process.env[k] === 'string') process.env[k] = process.env[k].trim();
+}
+
 const express   = require('express');
 const cors      = require('cors');
 const helmet    = require('helmet');
