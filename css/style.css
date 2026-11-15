@@ -621,7 +621,8 @@ body.page-ready { opacity: 1; transition: opacity 0.22s ease; }
 /* Homepage banner: collage of real product photos */
 .hero-collage { display: grid; grid-template-columns: repeat(4, 1fr); height: 100%; }
 .hero-collage img { width: 100%; height: 100%; object-fit: cover; object-position: center 25%; }
-.hero .hero-overlay { background: linear-gradient(135deg, rgba(0,0,0,0.62), rgba(0,0,0,0.38)); }
+.hero .hero-overlay { background: linear-gradient(90deg, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.62) 45%, rgba(0,0,0,0.25) 100%); }
+.hero-content h1, .hero-content p { text-shadow: 0 2px 12px rgba(0,0,0,0.5); }
 @media (max-width: 768px) {
   .hero-collage { grid-template-columns: repeat(2, 1fr); }
   .hero-collage img:nth-child(n+3) { display: none; }
