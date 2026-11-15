@@ -32,8 +32,5 @@ JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r'
 ORDER BY 1;
 
--- 4. Is the admin password still the old default that was published in the repo?
---    "still_default = true" means: log in to /admin now — the site will make you change it.
-SELECT username,
-       extensions.crypt('eetasha2024', password_hash) = password_hash AS still_default
-FROM public.admins;
+-- Admin password: if it is still the old default (eetasha2024), logging in at
+-- /admin will force you to change it before anything else.
