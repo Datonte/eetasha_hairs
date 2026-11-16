@@ -672,7 +672,20 @@ async function openBuiltPicker(p) {
       return btn(`${l}"`, i === s.li, `_bp.set('li',${i})`, from === null, from !== null ? `from ${currency}${Math.round(from)}` : '');
     }).join(''));
 
-    if (!isLace && o.bundleCounts.length > 1) {
+    if (isBundles && o.bundleCounts.length > 6) {
+      // Lots of choices (e.g. 1–40 bundles): a − / + counter instead of a wall of buttons
+      const qty = o.bundleCounts[s.bi], total = current();
+      const canDown = o.bundleCounts.slice(0, s.bi).some((_, i) => anyPrice(table.prices[s.li]?.[i]));
+      const canUp   = o.bundleCounts.slice(s.bi + 1).some((_, i) => anyPrice(table.prices[s.li]?.[s.bi + 1 + i]));
+      html += `<div style="margin-bottom:16px;"><div class="variant-step-label">${n++}. Number of bundles</div>
+        <div class="bp-stepper">
+          <button type="button" onclick="_bp.step(-1)" ${canDown ? '' : 'disabled'} aria-label="One less bundle">−</button>
+          <input type="number" inputmode="numeric" min="${o.bundleCounts[0]}" max="${o.bundleCounts[o.bundleCounts.length - 1]}" value="${qty}" onchange="_bp.qty(this.value)" aria-label="Number of bundles">
+          <button type="button" onclick="_bp.step(1)" ${canUp ? '' : 'disabled'} aria-label="One more bundle">+</button>
+          ${total !== null ? `<span class="bp-each">${money(total / qty)} per bundle</span>` : ''}
+        </div>
+        <div style="font-size:0.72rem;color:var(--gray-400);margin-top:6px;">Choose ${o.bundleCounts[0]}–${o.bundleCounts[o.bundleCounts.length - 1]} bundles</div></div>`;
+    } else if (!isLace && o.bundleCounts.length > 1) {
       html += step(n++, isBundles ? 'Number of bundles' : 'Bundles', o.bundleCounts.map((b, i) =>
         btn(`${b} bundle${b > 1 ? 's' : ''}`, i === s.bi, `_bp.set('bi',${i})`, !anyPrice(table.prices[s.li]?.[i]))).join(''));
     }
@@ -747,6 +760,20 @@ async function openBuiltPicker(p) {
   window._bp = {
     set(k, v) { s[k] = v; render(); },
     colour(c) { s.colour = c; render(); },
+    // − / + bundle counter: move to the next count that has a price
+    step(dir) {
+      for (let i = s.bi + dir; i >= 0 && i < o.bundleCounts.length; i += dir) {
+        if (anyPrice(table.prices[s.li]?.[i])) { s.bi = i; break; }
+      }
+      render();
+    },
+    // Typed a number: use it if available, otherwise the nearest count that is
+    qty(val) {
+      const want = Math.round(Number(val));
+      const ok = o.bundleCounts.map((b, i) => ({ b, i })).filter(x => anyPrice(table.prices[s.li]?.[x.i]));
+      if (ok.length) s.bi = ok.reduce((best, x) => Math.abs(x.b - want) < Math.abs(best.b - want) ? x : best).i;
+      render();
+    },
     add() {
       const price = current();
       if (price === null) return;

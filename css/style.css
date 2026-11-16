@@ -694,3 +694,11 @@ body.page-ready { opacity: 1; transition: opacity 0.22s ease; }
 .pt-cell { display: inline-flex; align-items: center; gap: 6px; }
 .pt-cell input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--gold-dark); cursor: pointer; flex-shrink: 0; }
 .pt-cell.pt-off input[type="number"] { background: var(--gray-100); color: var(--gray-400); text-decoration: line-through; }
+
+/* Bundle counter (1–40 bundles) in the option picker */
+.bp-stepper { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bp-stepper button { width: 42px; height: 42px; border-radius: 50%; border: 1.5px solid var(--gray-300); font-size: 1.3rem; line-height: 1; color: var(--black); background: #fff; }
+.bp-stepper button:hover:not(:disabled) { border-color: var(--gold-dark); color: var(--gold-dark); }
+.bp-stepper button:disabled { opacity: 0.35; cursor: not-allowed; }
+.bp-stepper input { width: 64px; height: 42px; text-align: center; font-size: 1.05rem; font-weight: 700; border: 1.5px solid var(--gray-200); border-radius: var(--radius); }
+.bp-each { font-size: 0.8rem; color: var(--gray-500); margin-left: 4px; }

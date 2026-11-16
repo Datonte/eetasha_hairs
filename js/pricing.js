@@ -261,6 +261,7 @@
   const COLOUR_NATURAL = 'Natural colour', COLOUR_MID = 'Colour #2–#18', COLOUR_HIGH = 'Colour #24 / #613 / #60 / Ash';
   const COLOUR_GROUPS = [COLOUR_NATURAL, COLOUR_MID, COLOUR_HIGH];
   const MAX_LACE_LENGTH = LACE_LENGTHS[LACE_LENGTHS.length - 1];
+  const BUNDLE_QTY_RANGE = Array.from({ length: 40 }, (_, i) => i + 1);   // bundles on their own: 1–40
 
   // Which supplier colour surcharge a colour code falls under
   function colourGroup(code) {
@@ -291,7 +292,10 @@
       weftList: Object.keys(p.weftLists || {}).includes(s.weftList) ? s.weftList : 'list1',
       grade: Object.keys(GRADE_LABELS).includes(s.grade) ? s.grade : 'sdd',
       lengths: pick(ints(s.lengths), lengthPool, lengthPool.filter(l => l >= 12)).sort((a, b) => a - b),
-      bundleCounts: kind === 'lace' ? [] : pick(ints(s.bundleCounts), [1, 2, 3, 4, 5, 6], kind === 'unit' ? [3, 4] : [1, 2, 3, 4]).sort((a, b) => a - b),
+      // Units: 1–6 bundles per unit. Bundles on their own: customers can buy 1–40.
+      bundleCounts: kind === 'lace' ? [] : (kind === 'unit'
+        ? pick(ints(s.bundleCounts), [1, 2, 3, 4, 5, 6], [3, 4])
+        : pick(ints(s.bundleCounts), BUNDLE_QTY_RANGE, BUNDLE_QTY_RANGE)).sort((a, b) => a - b),
       laces: kind === 'bundles' ? [] : pick(s.laces, laceSizes, laceSizes),
       textures: pick(s.textures, TEXTURES, ['Natural straight']),
       colourMode: s.colourMode === 'fixed' ? 'fixed' : 'choose',
@@ -307,7 +311,7 @@
     // Combinations this product doesn't come in: "length|bundles|*" (e.g. 12" × 4 bundles)
     // or "length|*|lace" (e.g. 12" with a 13x6 frontal). Customers never see them.
     cfg.excluded = [...new Set((Array.isArray(s.excluded) ? s.excluded : [])
-      .map(String).filter(k => /^\d{1,2}\|(\d|\*)\|(\d{1,2}x\d{1,2}|\*)$/.test(k)))].slice(0, 500);
+      .map(String).filter(k => /^\d{1,2}\|(\d{1,2}|\*)\|(\d{1,2}x\d{1,2}|\*)$/.test(k)))].slice(0, 500);
     if (s.legacy && typeof s.legacy === 'object') cfg.legacy = s.legacy;   // old price table kept as a backup
     return cfg;
   }
@@ -409,7 +413,7 @@
   const api = {
     DEFAULT_PRICING, WEFT_LENGTHS, LACE_LENGTHS, GRADE_LABELS, FINISHES, TEXTURES, COLOUR_GROUPS,
     computeUnit, laceTable, sanitizePricing,
-    colourGroup, sanitizeBuiltConfig, buildPriceTable, quoteBuilt, builtKey, parseBuiltKey, laceLengthFor,
+    colourGroup, sanitizeBuiltConfig, buildPriceTable, quoteBuilt, builtKey, parseBuiltKey, laceLengthFor, BUNDLE_QTY_RANGE,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Pricing = api;
