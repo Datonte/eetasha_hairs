@@ -606,7 +606,7 @@
       }
       list.innerHTML = products.map(p => `
         <div class="admin-product-row">
-          <img class="admin-product-img" src="${escHtml(p.image_url || '')}" alt="${escHtml(p.name)}" onerror="this.style.background='var(--gray-200)'">
+          <img class="admin-product-img" src="${escHtml(p.image_url || '/images/placeholder.svg')}" alt="${escHtml(p.name)}" onerror="this.onerror=null;this.src='/images/placeholder.svg'">
           <div class="admin-product-info">
             <div class="admin-product-name">${escHtml(p.name)}</div>
             <div class="admin-product-cat">${escHtml(p.category || 'Uncategorised')}</div>
