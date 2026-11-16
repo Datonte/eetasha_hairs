@@ -252,7 +252,154 @@
     return out;
   }
 
-  const api = { DEFAULT_PRICING, WEFT_LENGTHS, LACE_LENGTHS, GRADE_LABELS, FINISHES, computeUnit, laceTable, sanitizePricing };
+  // ============================================================
+  //  PRODUCTS PRICED BY THIS ENGINE  (variant_type: 'built')
+  //  A product only stores WHICH options it offers; prices always come from
+  //  the private pricing settings, so changing a cost updates every product.
+  // ============================================================
+  const TEXTURES = ['Natural straight', 'Bone straight', 'Body wave', 'Wave', 'Curly'];
+  const COLOUR_NATURAL = 'Natural colour', COLOUR_MID = 'Colour #2–#18', COLOUR_HIGH = 'Colour #24 / #613 / #60 / Ash';
+  const COLOUR_GROUPS = [COLOUR_NATURAL, COLOUR_MID, COLOUR_HIGH];
+  const MAX_LACE_LENGTH = LACE_LENGTHS[LACE_LENGTHS.length - 1];
+
+  // Which supplier colour surcharge a colour code falls under
+  function colourGroup(code) {
+    const c = String(code || '').toUpperCase().trim();
+    if (c === '1B' || c === '1') return COLOUR_NATURAL;
+    if (/^(2|4|6|8|10|12|14|16|18)$/.test(c)) return COLOUR_MID;
+    return COLOUR_HIGH;   // #24, #613, #60, ash, ombres, fashion colours…
+  }
+  const laceLengthFor = len => Math.min(Number(len), MAX_LACE_LENGTH);   // 30" bundles → 28" lace
+  const allLaceSizes = pricing => Object.values((pricing || DEFAULT_PRICING).laces || {}).flatMap(k => Object.keys(k));
+
+  // Keep only known values in a product's option settings
+  function sanitizeBuiltConfig(input, pricing) {
+    const s = input && typeof input === 'object' ? input : {};
+    const p = pricing || DEFAULT_PRICING;
+    const kind = ['unit', 'bundles', 'lace'].includes(s.kind) ? s.kind : 'unit';
+    const pick = (list, allowed, fallback) => {
+      const out = (Array.isArray(list) ? list : []).filter(v => allowed.includes(v));
+      return out.length ? [...new Set(out)] : fallback;
+    };
+    const ints = list => (Array.isArray(list) ? list : []).map(Number).filter(Number.isFinite);
+    const laceSizes = allLaceSizes(p);
+    const lengthPool = kind === 'lace' ? LACE_LENGTHS : WEFT_LENGTHS;
+    const cfg = {
+      enabled: true,
+      variant_type: 'built',
+      kind,
+      weftList: Object.keys(p.weftLists || {}).includes(s.weftList) ? s.weftList : 'list1',
+      grade: Object.keys(GRADE_LABELS).includes(s.grade) ? s.grade : 'sdd',
+      lengths: pick(ints(s.lengths), lengthPool, lengthPool.filter(l => l >= 12)).sort((a, b) => a - b),
+      bundleCounts: kind === 'lace' ? [] : pick(ints(s.bundleCounts), [1, 2, 3, 4, 5, 6], kind === 'unit' ? [3, 4] : [1, 2, 3, 4]).sort((a, b) => a - b),
+      laces: kind === 'bundles' ? [] : pick(s.laces, laceSizes, laceSizes),
+      textures: pick(s.textures, TEXTURES, ['Natural straight']),
+      colourMode: s.colourMode === 'fixed' ? 'fixed' : 'choose',
+      colours: (Array.isArray(s.colours) ? s.colours : []).map(c => String(c).trim().slice(0, 20)).filter(Boolean).slice(0, 80),
+      fixedColour: null,
+      finishes: kind === 'unit' ? pick(s.finishes, Object.keys(FINISHES), Object.keys(FINISHES)) : [],
+    };
+    if (cfg.colourMode === 'fixed') {
+      const code = String(s.fixedColour?.code || '').trim().slice(0, 20);
+      const name = String(s.fixedColour?.name || code || 'Natural').trim().slice(0, 40);
+      cfg.fixedColour = { code: code || '1B', name };
+    }
+    if (s.legacy && typeof s.legacy === 'object') cfg.legacy = s.legacy;   // old price table kept as a backup
+    return cfg;
+  }
+
+  // Turn a customer's choices into an engine selection
+  function builtSelection(cfg, s) {
+    const colourCode = cfg.colourMode === 'fixed' ? cfg.fixedColour?.code : s.colour;
+    return {
+      weftList: cfg.weftList, grade: cfg.grade,
+      length: Number(s.length),
+      bundles: cfg.kind === 'lace' ? 0 : Number(s.bundles),
+      lace: cfg.kind === 'bundles' ? null : s.lace,
+      laceLength: cfg.kind === 'lace' ? Number(s.length) : laceLengthFor(s.length),
+      texture: s.texture,
+      colour: s.colourGroup || colourGroup(colourCode),
+      finish: cfg.kind === 'unit' ? s.finish : null,
+    };
+  }
+
+  // Colour groups a product can actually be sold in
+  function builtColourGroups(cfg) {
+    if (cfg.colourMode === 'fixed') return [colourGroup(cfg.fixedColour?.code)];
+    if (!cfg.colours.length) return COLOUR_GROUPS.slice();
+    return COLOUR_GROUPS.filter(g => cfg.colours.some(c => colourGroup(c) === g));
+  }
+
+  /**
+   * Every selling price for a product, as nested arrays:
+   * prices[length][bundleCount][lace][texture][colourGroup][finish] = £ or null.
+   * Contains ONLY selling prices — safe to send to customers.
+   */
+  function buildPriceTable(pricing, cfgIn) {
+    const cfg = sanitizeBuiltConfig(cfgIn, pricing);
+    const dims = {
+      lengths: cfg.lengths,
+      bundleCounts: cfg.kind === 'lace' ? [0] : cfg.bundleCounts,
+      laces: cfg.kind === 'bundles' ? [null] : cfg.laces,
+      textures: cfg.textures,
+      colourGroups: builtColourGroups(cfg),
+      finishes: cfg.kind === 'unit' ? cfg.finishes : [null],
+    };
+    let fromPrice = null, maxPrice = null;
+    const prices = dims.lengths.map(length => dims.bundleCounts.map(bundles => dims.laces.map(lace =>
+      dims.textures.map(texture => dims.colourGroups.map(colourGroupName => dims.finishes.map(finish => {
+        const r = computeUnit(pricing, builtSelection(cfg, { length, bundles, lace, texture, colourGroup: colourGroupName, finish }));
+        const v = r.error ? null : r.sellGbp;
+        if (v !== null) { fromPrice = fromPrice === null ? v : Math.min(fromPrice, v); maxPrice = maxPrice === null ? v : Math.max(maxPrice, v); }
+        return v;
+      }))))));
+    return { kind: cfg.kind, options: dims, prices, fromPrice, maxPrice };
+  }
+
+  // Price + description for one customer choice (used by the server at checkout)
+  function quoteBuilt(pricing, cfgIn, s) {
+    const cfg = sanitizeBuiltConfig(cfgIn, pricing);
+    const len = Number(s.length);
+    if (!cfg.lengths.includes(len)) return { error: 'That length is not available.' };
+    if (cfg.kind !== 'lace' && !cfg.bundleCounts.includes(Number(s.bundles))) return { error: 'That number of bundles is not available.' };
+    if (cfg.kind !== 'bundles' && !cfg.laces.includes(s.lace)) return { error: 'That closure/frontal is not available.' };
+    if (!cfg.textures.includes(s.texture)) return { error: 'That texture is not available.' };
+    if (cfg.kind === 'unit' && !cfg.finishes.includes(s.finish)) return { error: 'That option is not available.' };
+    let colourName;
+    if (cfg.colourMode === 'fixed') colourName = cfg.fixedColour.name;
+    else {
+      const code = String(s.colour || '').trim();
+      if (!code || (cfg.colours.length && !cfg.colours.includes(code))) return { error: 'Please choose an available colour.' };
+      colourName = code;
+    }
+    const r = computeUnit(pricing, builtSelection(cfg, s));
+    if (r.error || r.sellGbp === null) return { error: 'This option is not available right now.' };
+    const lace = cfg.kind === 'bundles' ? null : s.lace;
+    const laceKind = lace ? (laceTable(pricing, lace)?.kind || 'lace') : null;
+    const parts = [
+      `${len}"`,
+      cfg.kind === 'lace' ? null : `${s.bundles} bundle${Number(s.bundles) > 1 ? 's' : ''}`,
+      lace ? `${cfg.kind === 'lace' ? '' : `${laceLengthFor(len)}" `}${lace} ${laceKind}`.trim() : null,
+      s.texture,
+      colourName,
+      cfg.kind === 'unit' ? FINISHES[s.finish] : null,
+    ].filter(Boolean);
+    return { price: r.sellGbp, label: parts.join(' · ') };
+  }
+
+  // Cart key for a built item: B|length|bundles|lace|texture|colour|finish
+  const builtKey = s => ['B', s.length, s.bundles ?? 0, s.lace || '-', s.texture, s.colour || '-', s.finish || '-'].join('|');
+  function parseBuiltKey(key) {
+    const parts = String(key || '').split('|');
+    if (parts.length !== 7 || parts[0] !== 'B') return null;
+    return { length: Number(parts[1]), bundles: Number(parts[2]), lace: parts[3] === '-' ? null : parts[3], texture: parts[4], colour: parts[5] === '-' ? null : parts[5], finish: parts[6] === '-' ? null : parts[6] };
+  }
+
+  const api = {
+    DEFAULT_PRICING, WEFT_LENGTHS, LACE_LENGTHS, GRADE_LABELS, FINISHES, TEXTURES, COLOUR_GROUPS,
+    computeUnit, laceTable, sanitizePricing,
+    colourGroup, sanitizeBuiltConfig, buildPriceTable, quoteBuilt, builtKey, parseBuiltKey, laceLengthFor,
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Pricing = api;
 })(typeof window !== 'undefined' ? window : this);

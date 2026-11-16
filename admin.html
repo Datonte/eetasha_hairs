@@ -196,6 +196,16 @@
           <div id="prResult" style="margin-top:12px;background:var(--gold-bg);border-radius:var(--radius);padding:16px;"></div>
         </div>
 
+        <div class="admin-card" style="margin-top:24px;" id="prSwitchCard">
+          <h2 class="serif mb-1">Use these prices in your shop</h2>
+          <p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:12px;">Switch products to be priced from this page. Settings are suggested from each product's name — you can fine-tune any product later in <strong>Products → Edit</strong>. Each product keeps a backup of its old prices, so you can switch back at any time.</p>
+          <div id="prSwitchList" style="overflow-x:auto;"></div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;">
+            <button class="btn btn-primary btn-sm" onclick="switchProductsToPricing()">Switch ticked products</button>
+            <span id="prSwitchState" style="font-size:0.8rem;color:var(--gray-500);"></span>
+          </div>
+        </div>
+
         <div class="admin-card" style="margin-top:24px;" id="prSettings">
           <h2 class="serif mb-1">Your costs, markup &amp; rounding</h2>
           <p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:14px;">Everything it costs to get the hair to your customer, then how much you add on top.</p>
@@ -394,13 +404,43 @@
             <!-- Product Type -->
             <div class="form-group">
               <label class="form-label" style="margin-bottom:8px;">Variant Type</label>
-              <select id="pmVariantType" class="form-input" style="max-width:220px;" onchange="onVariantTypeChange()">
+              <select id="pmVariantType" class="form-input" style="max-width:320px;" onchange="onVariantTypeChange()">
+                <option value="built">★ Priced from the Pricing tab (recommended)</option>
                 <option value="bundle">Bundles (inches × bundles × colour)</option>
                 <option value="wig">Wig — HD Lace (inches × lace size)</option>
                 <option value="big-wig">Big Wig 32–40" (inches × lace size)</option>
                 <option value="closure">Closure (lace size × inches)</option>
                 <option value="frontal">Frontal (lace size × inches)</option>
               </select>
+            </div>
+            <!-- Priced from the Pricing tab: the product only chooses which options it offers -->
+            <div id="pmBuiltSection" style="display:none;margin-top:14px;">
+              <p style="font-size:0.8rem;color:var(--gray-500);margin-bottom:12px;">Prices are worked out automatically from your Pricing tab (supplier cost + your profit). Choose which options customers can pick for this product.</p>
+              <div class="grid-3" style="gap:12px;">
+                <div class="form-group"><label class="form-label">What is it?</label>
+                  <select id="pmBuiltKind" class="form-input" onchange="onBuiltKindChange()">
+                    <option value="unit">Wig / unit (bundles + closure or frontal)</option>
+                    <option value="bundles">Bundles only</option>
+                    <option value="lace">Closure or frontal only</option>
+                  </select></div>
+                <div class="form-group"><label class="form-label">Weft list</label><select id="pmBuiltList" class="form-input"></select></div>
+                <div class="form-group"><label class="form-label">Hair grade</label><select id="pmBuiltGrade" class="form-input"></select></div>
+              </div>
+              <div class="form-group" style="margin-top:10px;"><label class="form-label" style="margin-bottom:8px;">Lengths customers can choose</label><div id="pmBuiltLengths" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
+              <div class="form-group" style="margin-top:10px;" id="pmBuiltBundlesWrap"><label class="form-label" style="margin-bottom:8px;" id="pmBuiltBundlesLabel">Bundles per unit</label><div id="pmBuiltBundles" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
+              <div class="form-group" style="margin-top:10px;" id="pmBuiltLacesWrap"><label class="form-label" style="margin-bottom:8px;">Closures / frontals</label><div id="pmBuiltLaces" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
+              <div class="form-group" style="margin-top:10px;"><label class="form-label" style="margin-bottom:8px;">Texture <span style="font-size:0.75rem;color:var(--gray-400);">(tick one to fix it, or several to let customers choose)</span></label><div id="pmBuiltTextures" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
+              <div class="form-group" style="margin-top:10px;" id="pmBuiltFinishesWrap"><label class="form-label" style="margin-bottom:8px;">How it can be supplied</label><div id="pmBuiltFinishes" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
+              <div class="grid-3" style="gap:12px;margin-top:10px;">
+                <div class="form-group"><label class="form-label">Colour</label>
+                  <select id="pmBuiltColourMode" class="form-input" onchange="onBuiltColourModeChange()">
+                    <option value="choose">Customer chooses (from the colours ticked below)</option>
+                    <option value="fixed">Fixed colour (shown in the photo)</option>
+                  </select></div>
+                <div class="form-group pm-fixed-colour"><label class="form-label">Fixed colour code</label><select id="pmBuiltFixedCode" class="form-input"></select></div>
+                <div class="form-group pm-fixed-colour"><label class="form-label">Colour name shown</label><input id="pmBuiltFixedName" class="form-input" placeholder="e.g. Burgundy"></div>
+              </div>
+              <p style="font-size:0.75rem;color:var(--gray-400);margin-top:4px;">Colour price: 1B natural costs nothing extra; #2–#18 and #613 / blondes / fashion colours add your supplier's colour charge automatically.</p>
             </div>
             <!-- Inches grid (hidden for closure/frontal step1) -->
             <div class="form-group" style="margin-top:14px;" id="pmInchesSection">
@@ -540,9 +580,10 @@
     // =================== PRODUCTS ===================
     async function loadAdminProducts() {
       try {
-        const products = await API.get('/api/products');
+        const products = await API.get('/api/admin/products');   // full saved data, incl. old price-table backups
         State.products = products;  // keep local cache in sync
         renderAdminProducts(products);
+        renderSwitchList();
       } catch (err) {
         Toast.show('Failed to load products.', 'error');
       }
@@ -646,6 +687,8 @@
         featured:    document.getElementById('pmFeatured').checked,
         variants:    getVariantsFromModal(),
       };
+      const builtProduct = data.variants?.variant_type === 'built';
+      if (builtProduct && !data.price) data.price = 1;   // the server replaces this with the real "from" price
       if (!data.name || !data.price) { Toast.show('Name and price are required.', 'error'); return; }
 
       const btn = document.getElementById('saveProductBtn');
@@ -780,6 +823,7 @@
 
     // =================== PRICING (private supplier costs) ===================
     let _pricing = null;
+    let _pricingSaved = false;   // products can only be switched over once prices are saved
     let _laceLengthFollows = true;   // closure length follows bundle length until changed by hand
     const toGbp = usd => (usd === null || usd === undefined || usd === '' || !isFinite(Number(usd))) ? '' : `£${(Number(usd) * (Number(_pricing?.usdToGbp) || 0)).toFixed(2)}`;
     const getPath = (obj, path) => path.split('.').reduce((o, k) => o?.[k], obj);
@@ -792,6 +836,7 @@
       try {
         const r = await API.get('/api/admin/pricing');
         _pricing = r.pricing;
+        _pricingSaved = !!r.saved;
         document.getElementById('prMigrationBanner').classList.toggle('hidden', !r.needsMigration);
         document.getElementById('prSaveState').textContent = (!r.saved && !r.needsMigration) ? 'No prices saved yet — use "Import price file".' : '';
         renderPricing();
@@ -844,6 +889,7 @@
         Object.keys(sizes).map(size => ({ label: size, base: `laces.${kind}.${size}` }))
       )).join('');
       document.getElementById('prTables').innerHTML = weftHtml + laceHtml;
+      renderSwitchList();
       populateCalculator();
     }
 
@@ -1005,6 +1051,7 @@
       try {
         const r = await API.put('/api/admin/pricing', { pricing: _pricing });
         _pricing = r.pricing;
+        _pricingSaved = true;
         renderPricing();
         document.getElementById('prMigrationBanner').classList.add('hidden');
         state.textContent = `Saved ✓ ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
@@ -1253,8 +1300,200 @@
       return document.getElementById('pmVariantType')?.value || 'bundle';
     }
 
+    // =================== PRODUCTS PRICED FROM THE PRICING TAB ===================
+    let _editingLegacy = null;   // backup of a product's old price table, kept when it is switched over
+    const BUILT_FINISH_LABELS = { loose: 'Loose (bundles + lace)', wig: 'Made into a wig', customised: 'Customised wig', styled: 'Customised & styled' };
+    function _bGrid(id, items, attr, selected, fmt = v => v) {
+      document.getElementById(id).innerHTML = items.map(v => {
+        const on = selected.map(String).includes(String(v));
+        return `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:5px 10px;border-radius:6px;border:1.5px solid ${on ? 'var(--gold-dark)' : 'var(--gray-200)'};background:${on ? '#fff8e1' : '#fff'};font-size:0.82rem;font-weight:600;user-select:none;">
+          <input type="checkbox" data-${attr}="${escHtml(String(v))}" ${on ? 'checked' : ''} style="display:none;"
+            onchange="this.closest('label').style.borderColor=this.checked?'var(--gold-dark)':'var(--gray-200)';this.closest('label').style.background=this.checked?'#fff8e1':'#fff'">
+          ${escHtml(fmt(v))}</label>`;
+      }).join('');
+    }
+    const _bChecked = (id, attr) => [...document.querySelectorAll(`#${id} input[data-${attr}]:checked`)].map(el => el.dataset[attr]);
+    const _builtLaceSizes = () => Object.values((_pricing || Pricing.DEFAULT_PRICING).laces).flatMap(k => Object.keys(k));
+
+    function renderBuiltForm(cfgIn) {
+      const P = window.Pricing;
+      const cfg = P.sanitizeBuiltConfig(cfgIn || {}, _pricing || P.DEFAULT_PRICING);
+      document.getElementById('pmBuiltKind').value = cfg.kind;
+      fillSelect('pmBuiltList', Object.entries((_pricing || P.DEFAULT_PRICING).weftLists).map(([id, l]) => ({ value: id, label: l.label })), cfg.weftList);
+      document.getElementById('pmBuiltList').value = cfg.weftList;
+      fillSelect('pmBuiltGrade', Object.entries(P.GRADE_LABELS).map(([value, label]) => ({ value, label })), cfg.grade);
+      document.getElementById('pmBuiltGrade').value = cfg.grade;
+      _bGrid('pmBuiltLengths', cfg.kind === 'lace' ? P.LACE_LENGTHS : P.WEFT_LENGTHS, 'blen', cfg.lengths, v => `${v}"`);
+      _bGrid('pmBuiltBundles', [1, 2, 3, 4, 5, 6], 'bcount', cfg.bundleCounts.length ? cfg.bundleCounts : (cfg.kind === 'unit' ? [3, 4] : [1, 2, 3, 4]));
+      _bGrid('pmBuiltLaces', _builtLaceSizes(), 'blace', cfg.laces.length ? cfg.laces : _builtLaceSizes(), v => `${v} ${v.startsWith('13') ? 'frontal' : 'closure'}`);
+      _bGrid('pmBuiltTextures', P.TEXTURES, 'btex', cfg.textures);
+      _bGrid('pmBuiltFinishes', Object.keys(P.FINISHES), 'bfin', cfg.finishes.length ? cfg.finishes : Object.keys(P.FINISHES), v => BUILT_FINISH_LABELS[v] || v);
+      document.getElementById('pmBuiltColourMode').value = cfg.colourMode;
+      fillSelect('pmBuiltFixedCode', COLOUR_CATALOGUE_ADMIN.map(c => ({ value: c.code, label: c.code })), cfg.fixedColour?.code || '1B');
+      document.getElementById('pmBuiltFixedCode').value = cfg.fixedColour?.code || '1B';
+      document.getElementById('pmBuiltFixedName').value = cfg.fixedColour?.name || '';
+      renderColourCheckboxes(cfg.colours.length ? cfg.colours : COLOUR_CATALOGUE_ADMIN.map(c => c.code));
+      onBuiltKindChange(true);
+      onBuiltColourModeChange();
+    }
+    function onBuiltKindChange(keepLengths) {
+      const kind = document.getElementById('pmBuiltKind').value;
+      document.getElementById('pmBuiltBundlesWrap').style.display  = kind === 'lace' ? 'none' : '';
+      document.getElementById('pmBuiltBundlesLabel').textContent   = kind === 'bundles' ? 'Number of bundles customers can buy' : 'Bundles per unit';
+      document.getElementById('pmBuiltLacesWrap').style.display    = kind === 'bundles' ? 'none' : '';
+      document.getElementById('pmBuiltFinishesWrap').style.display = kind === 'unit' ? '' : 'none';
+      if (keepLengths !== true) {
+        const lens = kind === 'lace' ? Pricing.LACE_LENGTHS : Pricing.WEFT_LENGTHS;
+        _bGrid('pmBuiltLengths', lens, 'blen', lens.filter(l => l >= 12), v => `${v}"`);
+      }
+    }
+    function onBuiltColourModeChange() {
+      const fixed = document.getElementById('pmBuiltColourMode').value === 'fixed';
+      document.querySelectorAll('#pmBuiltSection .pm-fixed-colour').forEach(el => { el.style.display = fixed ? '' : 'none'; });
+      document.getElementById('pmColoursSection').style.display = fixed ? 'none' : '';
+    }
+    function getBuiltConfigFromModal() {
+      const cfg = {
+        enabled: true, variant_type: 'built',
+        kind: document.getElementById('pmBuiltKind').value,
+        weftList: document.getElementById('pmBuiltList').value,
+        grade: document.getElementById('pmBuiltGrade').value,
+        lengths: _bChecked('pmBuiltLengths', 'blen').map(Number),
+        bundleCounts: _bChecked('pmBuiltBundles', 'bcount').map(Number),
+        laces: _bChecked('pmBuiltLaces', 'blace'),
+        textures: _bChecked('pmBuiltTextures', 'btex'),
+        finishes: _bChecked('pmBuiltFinishes', 'bfin'),
+        colourMode: document.getElementById('pmBuiltColourMode').value,
+        colours: getSelectedColours(),
+        fixedColour: { code: document.getElementById('pmBuiltFixedCode').value, name: document.getElementById('pmBuiltFixedName').value.trim() || document.getElementById('pmBuiltFixedCode').value },
+      };
+      if (_editingLegacy) cfg.legacy = _editingLegacy;
+      return cfg;
+    }
+
+    // ---- One-click switch-over (Pricing tab) ----
+    // Suggest settings from a product's name, e.g. "Blonde Body Wave Wig" → wig, body wave, fixed blonde #613
+    function guessBuiltConfig(p) {
+      const name = String(p.name || '').toLowerCase();
+      const kind = /bundle/.test(name) ? 'bundles' : (/(closure|frontal)/.test(name) && !/(wig|bob)/.test(name) ? 'lace' : 'unit');
+      let textures;
+      if (/body ?wave/.test(name))          textures = ['Body wave'];
+      else if (/bone ?straight/.test(name)) textures = ['Bone straight'];
+      else if (/curl/.test(name))           textures = ['Curly'];
+      else if (/wav/.test(name))            textures = ['Wave'];
+      else if (/straight/.test(name))       textures = ['Natural straight'];
+      else                                  textures = Pricing.TEXTURES.slice();   // let the customer choose
+      const colourHints = [
+        [/brown[- ]?to[- ]?blonde|brown[- ]blonde/, 'T1B-27', 'Brown to blonde'],
+        [/highlight/, 'T1B-27', 'Highlight'],
+        [/blonde|613/, '613', 'Blonde #613'],
+        [/burgundy/, '99J', 'Burgundy'],
+        [/\bred\b/, 'RED', 'Red'],
+      ];
+      const hit = colourHints.find(([re]) => re.test(name));
+      const lengths = /\bbob\b/.test(name) ? [8, 10, 12, 14, 16] : (kind === 'lace' ? Pricing.LACE_LENGTHS : Pricing.WEFT_LENGTHS).filter(l => l >= 12);
+      return {
+        enabled: true, variant_type: 'built', kind, weftList: 'list1', grade: 'sdd', lengths,
+        bundleCounts: kind === 'unit' ? [3, 4] : (kind === 'bundles' ? [1, 2, 3, 4] : []),
+        laces: kind === 'bundles' ? [] : _builtLaceSizes(), textures,
+        finishes: kind === 'unit' ? Object.keys(Pricing.FINISHES) : [],
+        colourMode: hit ? 'fixed' : 'choose', colours: [], fixedColour: hit ? { code: hit[1], name: hit[2] } : null,
+      };
+    }
+    const doesNotFit = p => /braid/i.test(p.name || '');   // braided wigs aren't bundles + lace
+
+    function oldFromPrice(p) {
+      const v = p.variants?.variant_type === 'built' ? p.variants.legacy : p.variants;
+      const vals = v?.prices ? Object.values(v.prices).map(Number).filter(x => x > 0) : [];
+      return vals.length ? Math.min(...vals) : (Number(p.price) || null);
+    }
+
+    function renderSwitchList() {
+      const box = document.getElementById('prSwitchList');
+      if (!box || !_pricing || !State.products?.length) return;
+      const money = v => v === null || v === undefined ? '—' : `£${Number(v).toFixed(0)}`;
+      box.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
+        <thead><tr style="text-align:left;color:var(--gray-500);">
+          <th style="padding:6px;"></th><th style="padding:6px;">Product</th><th style="padding:6px;">Suggested settings</th>
+          <th style="padding:6px;text-align:right;">Old from</th><th style="padding:6px;text-align:right;">New from</th><th></th></tr></thead>
+        <tbody>${State.products.map(p => {
+          const switched = p.variants?.variant_type === 'built';
+          const cfg = switched ? p.variants : guessBuiltConfig(p);
+          const t = Pricing.buildPriceTable(_pricing, cfg);
+          const misfit = !switched && doesNotFit(p);
+          const what = { unit: 'Wig/unit', bundles: 'Bundles', lace: 'Closure/frontal' }[cfg.kind];
+          const colour = cfg.colourMode === 'fixed' ? (cfg.fixedColour?.name || cfg.fixedColour?.code) : 'customer chooses';
+          const lens = cfg.lengths?.length ? `${cfg.lengths[0]}–${cfg.lengths[cfg.lengths.length - 1]}"` : '';
+          return `<tr style="border-top:1px solid var(--gray-100);${misfit ? 'opacity:0.6;' : ''}">
+            <td style="padding:6px;">${switched ? '✓' : `<input type="checkbox" data-switch="${escHtml(p.id)}" ${misfit || t.fromPrice === null ? '' : 'checked'} style="accent-color:var(--gold-dark);">`}</td>
+            <td style="padding:6px;font-weight:600;">${escHtml(p.name)}${misfit ? '<div style="font-weight:400;color:var(--warning);">Braided wig — not bundles + lace, best left as it is</div>' : ''}</td>
+            <td style="padding:6px;color:var(--gray-600);">${what} · ${escHtml(cfg.textures.length > 1 ? 'any texture' : cfg.textures[0])} · ${escHtml(colour)} · ${lens}</td>
+            <td style="padding:6px;text-align:right;color:var(--gray-500);">${money(oldFromPrice(p))}</td>
+            <td style="padding:6px;text-align:right;font-weight:700;color:var(--gold-dark);">${money(t.fromPrice)}</td>
+            <td style="padding:6px;text-align:right;white-space:nowrap;">${switched
+              ? `<span style="color:var(--success);">Live</span>${p.variants.legacy ? ` · <a href="#" onclick="restoreOldPrices('${escHtml(p.id)}');return false;" style="color:var(--gray-500);text-decoration:underline;">restore old</a>` : ''}`
+              : ''}</td>
+          </tr>`;
+        }).join('')}</tbody></table>`;
+    }
+
+    function productBody(p, variants, price) {
+      return { name: p.name, price: price ?? (Number(p.price) || 1), category: p.category || 'Wigs', image_url: p.image_url || '',
+               description: p.description || '', in_stock: !!p.in_stock, featured: !!p.featured, variants };
+    }
+
+    async function switchProductsToPricing() {
+      const ids = [...document.querySelectorAll('#prSwitchList input[data-switch]:checked')].map(el => el.dataset.switch);
+      const state = document.getElementById('prSwitchState');
+      if (!ids.length) { Toast.show('Tick at least one product.', 'info'); return; }
+      if (!_pricingSaved || /Unsaved|Imported/.test(document.getElementById('prSaveState').textContent)) {
+        Toast.show('Save your prices first (gold "Save prices" button), then switch products.', 'error'); return;
+      }
+      if (!confirm(`Switch ${ids.length} product${ids.length > 1 ? 's' : ''} to your new prices? Customers will see the new prices straight away. Old prices are kept as a backup.`)) return;
+      let done = 0;
+      for (const id of ids) {
+        const p = State.products.find(x => String(x.id) === String(id));
+        if (!p) continue;
+        state.textContent = `Switching ${done + 1} of ${ids.length}…`;
+        const legacy = p.variants ? { ...p.variants, _price: p.price } : { enabled: false, _price: p.price };
+        try { await API.put(`/api/products/${id}`, productBody(p, { ...guessBuiltConfig(p), legacy })); done++; }
+        catch (err) { Toast.show(`${p.name}: ${err.message}`, 'error'); }
+      }
+      state.textContent = `${done} product${done !== 1 ? 's' : ''} switched ✓`;
+      Toast.show(`${done} product${done !== 1 ? 's' : ''} now use your new prices.`, 'success');
+      await loadAdminProducts();
+      renderSwitchList();
+    }
+
+    async function restoreOldPrices(id) {
+      const p = State.products.find(x => String(x.id) === String(id));
+      const legacy = p?.variants?.legacy;
+      if (!legacy) return;
+      if (!confirm(`Put "${p.name}" back to its old prices?`)) return;
+      const { _price, ...oldVariants } = legacy;
+      try {
+        await API.put(`/api/products/${id}`, productBody(p, oldVariants.enabled === false ? null : oldVariants, Number(_price) || Number(p.price) || 1));
+        Toast.show(`"${p.name}" is back on its old prices.`, 'success');
+        await loadAdminProducts();
+        renderSwitchList();
+      } catch (err) { Toast.show(err.message, 'error'); }
+    }
+
     function onVariantTypeChange() {
       const vt = _getVariantType();
+      const builtSection = document.getElementById('pmBuiltSection');
+      const oldParts = ['pmInchesSection', 'pmLaceSizesSection', 'pmAttachmentSection', 'pmHairTypeSection', 'pmPriceTableWrap'].map(id => document.getElementById(id));
+      const buildRow = document.getElementById('pmBuildHint')?.parentElement;
+      if (vt === 'built') {
+        builtSection.style.display = '';
+        oldParts.forEach(el => { if (el) el.style.display = 'none'; });
+        if (buildRow) buildRow.style.display = 'none';
+        if (!document.getElementById('pmBuiltLengths').children.length) renderBuiltForm({});
+        onBuiltColourModeChange();
+        return;
+      }
+      builtSection.style.display = 'none';
+      if (buildRow) buildRow.style.display = 'flex';
       const isBundle = vt === 'bundle';
       const isWig    = vt === 'wig' || vt === 'big-wig';
       // Colours available for ALL product types — admin decides which ones
@@ -1429,6 +1668,7 @@
     function getVariantsFromModal() {
       if (!document.getElementById('pmVariantsEnabled').checked) return null;
       const vt      = _getVariantType();
+      if (vt === 'built') return getBuiltConfigFromModal();
       const inches  = getSelectedInches();
       const laces   = getSelectedLaces();
       const colours = getSelectedColours();
@@ -1441,6 +1681,16 @@
 
     function loadVariantsIntoModal(variants) {
       const el = document.getElementById('pmVariantsEnabled');
+      _editingLegacy = variants?.variant_type === 'built' ? (variants.legacy || null) : null;
+      document.getElementById('pmBuiltLengths').innerHTML = '';
+      if (variants?.variant_type === 'built') {
+        el.checked = true;
+        document.getElementById('pmVariantsConfig').style.display = 'block';
+        document.getElementById('pmVariantType').value = 'built';
+        renderBuiltForm(variants);
+        onVariantTypeChange();
+        return;
+      }
       if (!variants?.enabled) {
         el.checked = false;
         document.getElementById('pmVariantsConfig').style.display = 'none';

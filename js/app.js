@@ -386,13 +386,16 @@ function renderFooter() {
 function productCardHTML(p) {
   const { currency } = State.settings;
   const desc = escHtml(p.description || '');
-  const hasVariants = p.variants?.enabled && p.variants?.prices && Object.keys(p.variants.prices).length > 0;
-  const minPrice = hasVariants
-    ? Math.min(...Object.values(p.variants.prices))
-    : p.price;
-  const priceDisplay = hasVariants
-    ? `<span style="font-size:0.7rem;font-weight:500;color:var(--gray-400);">from </span>${currency}${minPrice.toFixed(2)}`
-    : `${currency}${Number(p.price).toFixed(2)}`;
+  const isBuilt = p.variants?.variant_type === 'built';
+  const hasVariants = isBuilt || (p.variants?.enabled && p.variants?.prices && Object.keys(p.variants.prices).length > 0);
+  const minPrice = isBuilt
+    ? (p.fromPrice ?? null)
+    : hasVariants ? Math.min(...Object.values(p.variants.prices)) : p.price;
+  const priceDisplay = minPrice === null
+    ? `<span style="font-size:0.8rem;color:var(--gray-400);">Price on request</span>`
+    : hasVariants
+      ? `<span style="font-size:0.7rem;font-weight:500;color:var(--gray-400);">from </span>${currency}${Number(minPrice).toFixed(2)}`
+      : `${currency}${Number(p.price).toFixed(2)}`;
 
   let btn = '';
   if (!p.in_stock) {
@@ -513,8 +516,190 @@ function resolveColourCodes(v) {
 // ============================================================
 //  VARIANT SELECTION MODAL
 // ============================================================
+// ============================================================
+//  OPTION PICKER FOR PRODUCTS PRICED FROM THE PRICING SETTINGS
+//  The server sends selling prices only (never costs). Every choice shows
+//  its price straight away, and options that can't be bought are hidden.
+// ============================================================
+// Must match colourGroup() in js/pricing.js — 0 natural, 1 #2–#18, 2 #24/#613/blondes/fashion
+function colourGroupIndex(code) {
+  const c = String(code || '').toUpperCase().trim();
+  if (c === '1B' || c === '1') return 0;
+  if (/^(2|4|6|8|10|12|14|16|18)$/.test(c)) return 1;
+  return 2;
+}
+const COLOUR_GROUP_TITLES = ['Natural', 'Colours #2–#18', '#613, blondes & fashion colours'];
+const FINISH_LABELS = {
+  loose:      'Bundles + closure/frontal (loose)',
+  wig:        'Made into a wig',
+  customised: 'Customised wig, straight',
+  styled:     'Customised wig, styled (body wave, curls)',
+};
+const _priceTables = {};
+
+async function openBuiltPicker(p) {
+  const { currency } = State.settings;
+  const cfg = p.variants;
+  document.getElementById('_variantModal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = '_variantModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.55);display:flex;align-items:flex-end;justify-content:center;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:92vh;overflow-y:auto;padding:24px 20px 28px;">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:8px;">
+        <img src="${escHtml(p.image_url || '')}" alt="" style="width:56px;height:64px;object-fit:cover;border-radius:8px;background:var(--gray-100);" onerror="this.style.background='var(--gray-200)'">
+        <div style="flex:1;"><div style="font-weight:700;">${escHtml(p.name)}</div><div style="font-size:0.8rem;color:var(--gray-400);">${escHtml(p.category || '')}</div></div>
+        <button data-close style="background:none;border:none;cursor:pointer;font-size:22px;color:var(--gray-400);padding:4px;">✕</button>
+      </div>
+      <div id="bpBody"><p style="text-align:center;color:var(--gray-400);padding:30px 0;">Loading prices…</p></div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal || e.target.closest('[data-close]')) modal.remove(); });
+
+  let table;
+  try { table = _priceTables[p.id] || (_priceTables[p.id] = await API.get(`/api/products/${encodeURIComponent(p.id)}/prices`)); }
+  catch (err) { modal.querySelector('#bpBody').innerHTML = `<p style="text-align:center;color:var(--gray-500);padding:30px 0;">${escHtml(err.message)}</p>`; return; }
+
+  const o = table.options;
+  const allowedColours = cfg.colourMode === 'fixed' ? [] :
+    (cfg.colours?.length ? COLOUR_CATALOGUE.filter(c => cfg.colours.includes(c.code)) : COLOUR_CATALOGUE)
+      .filter(c => o.colourGroups.length > 0);
+  // colour group name → index in the price table
+  const groupPos = gi => o.colourGroups.indexOf(['Natural colour', 'Colour #2–#18', 'Colour #24 / #613 / #60 / Ash'][gi]);
+
+  const s = { li: 0, bi: 0, lai: 0, ti: 0, colour: null, fi: 0 };
+  const priceAt = (li, bi, lai, ti, gpos, fi) => table.prices?.[li]?.[bi]?.[lai]?.[ti]?.[gpos]?.[fi] ?? null;
+  const gposOf = () => cfg.colourMode === 'fixed' ? 0 : groupPos(colourGroupIndex(s.colour));
+  const anyPrice = arr => Array.isArray(arr) ? arr.some(anyPrice) : arr !== null && arr !== undefined;
+  const current = () => priceAt(s.li, s.bi, s.lai, s.ti, gposOf(), s.fi);
+
+  // Sensible starting choices so a price shows straight away
+  const startIdx = (list, wanted) => Math.max(0, list.indexOf(wanted));
+  s.li  = startIdx(o.lengths, 20);
+  s.bi  = startIdx(o.bundleCounts, 3);
+  s.lai = startIdx(o.laces, '13x4');
+  if (cfg.colourMode !== 'fixed') s.colour = (allowedColours.find(c => c.code === '1B') || allowedColours[0])?.code || '1B';
+
+  // Keep every choice valid: if a choice has no price, move to the nearest one that does
+  function repair() {
+    const okLen = li => anyPrice(table.prices[li]);
+    if (!okLen(s.li)) s.li = o.lengths.findIndex((_, i) => okLen(i));
+    const okB = bi => anyPrice(table.prices[s.li]?.[bi]);
+    if (!okB(s.bi)) s.bi = o.bundleCounts.findIndex((_, i) => okB(i));
+    const okL = lai => anyPrice(table.prices[s.li]?.[s.bi]?.[lai]);
+    if (!okL(s.lai)) s.lai = o.laces.findIndex((_, i) => okL(i));
+    const okT = ti => anyPrice(table.prices[s.li]?.[s.bi]?.[s.lai]?.[ti]);
+    if (!okT(s.ti)) s.ti = o.textures.findIndex((_, i) => okT(i));
+    if (cfg.colourMode !== 'fixed' && groupPos(colourGroupIndex(s.colour)) < 0) s.colour = allowedColours.find(c => groupPos(colourGroupIndex(c.code)) >= 0)?.code || s.colour;
+    if (current() === null) { const fi = o.finishes.findIndex((_, i) => priceAt(s.li, s.bi, s.lai, s.ti, gposOf(), i) !== null); if (fi >= 0) s.fi = fi; }
+  }
+
+  const money = v => `${currency}${Number(v).toFixed(2)}`;
+  const btn = (label, selected, onclick, disabled, sub) =>
+    `<button class="variant-opt-btn${selected ? ' selected' : ''}" ${disabled ? 'disabled' : ''} onclick="${onclick}" style="display:inline-flex;flex-direction:column;align-items:center;line-height:1.2;">${label}${sub ? `<span style="font-size:0.66rem;font-weight:500;opacity:0.75;margin-top:2px;">${sub}</span>` : ''}</button>`;
+  const lowest = arr => { let m = null; (function walk(a) { if (Array.isArray(a)) a.forEach(walk); else if (a !== null && a !== undefined) m = m === null ? a : Math.min(m, a); })(arr); return m; };
+
+  function render() {
+    repair();
+    const step = (n, title, html) => `<div style="margin-bottom:16px;"><div class="variant-step-label">${n}. ${title}</div><div class="variant-opts-row">${html}</div></div>`;
+    let n = 1, html = '';
+    const isLace = table.kind === 'lace', isBundles = table.kind === 'bundles', isUnit = table.kind === 'unit';
+
+    html += step(n++, isLace ? 'Length of hair' : 'Length', o.lengths.map((l, i) => {
+      const from = lowest(table.prices[i]);
+      return btn(`${l}"`, i === s.li, `_bp.set('li',${i})`, from === null, from !== null ? `from ${currency}${Math.round(from)}` : '');
+    }).join(''));
+
+    if (!isLace && o.bundleCounts.length > 1) {
+      html += step(n++, isBundles ? 'Number of bundles' : 'Bundles', o.bundleCounts.map((b, i) =>
+        btn(`${b} bundle${b > 1 ? 's' : ''}`, i === s.bi, `_bp.set('bi',${i})`, !anyPrice(table.prices[s.li]?.[i]))).join(''));
+    }
+    if (!isBundles) {
+      html += step(n++, isLace ? 'Closure / frontal size' : 'Closure or frontal', o.laces.map((la, i) => {
+        const v = lowest(table.prices[s.li]?.[s.bi]?.[i]);
+        return btn(la, i === s.lai, `_bp.set('lai',${i})`, v === null, la.startsWith('13') ? 'frontal' : 'closure');
+      }).join(''));
+    }
+    if (o.textures.length > 1) {
+      html += step(n++, 'Texture', o.textures.map((t, i) => {
+        const v = priceAt(s.li, s.bi, s.lai, i, gposOf(), s.fi), base = priceAt(s.li, s.bi, s.lai, 0, gposOf(), s.fi);
+        return btn(escHtml(t), i === s.ti, `_bp.set('ti',${i})`, v === null, v !== null && base !== null && v > base ? `+${currency}${Math.round(v - base)}` : '');
+      }).join(''));
+    }
+
+    if (cfg.colourMode === 'fixed') {
+      html += `<div style="margin-bottom:16px;"><div class="variant-step-label">${n++}. Colour</div><div style="font-weight:600;">${escHtml(cfg.fixedColour?.name || '')}</div></div>`;
+    } else {
+      const base = priceAt(s.li, s.bi, s.lai, s.ti, groupPos(0) >= 0 ? groupPos(0) : 0, s.fi);
+      html += `<div style="margin-bottom:16px;"><div class="variant-step-label">${n++}. Colour</div>` +
+        [0, 1, 2].map(gi => {
+          const cols = allowedColours.filter(c => colourGroupIndex(c.code) === gi);
+          if (!cols.length || groupPos(gi) < 0) return '';
+          const v = priceAt(s.li, s.bi, s.lai, s.ti, groupPos(gi), s.fi);
+          const extra = v !== null && base !== null && v > base ? ` <span style="color:var(--gold-dark);">+${currency}${Math.round(v - base)}</span>` : '';
+          return `<div style="font-size:0.75rem;color:var(--gray-500);margin:8px 0 6px;">${COLOUR_GROUP_TITLES[gi]}${extra}</div>
+            <div class="colour-swatch-grid">${cols.map(c => `
+              <span class="colour-swatch-wrap" onclick="_bp.colour('${c.code.replace(/'/g, "\\'")}')">
+                <span class="colour-swatch-chip${s.colour === c.code ? ' selected' : ''}" style="background:${c.bg};"></span>
+                <span class="colour-swatch-label">${escHtml(c.code)}</span>
+              </span>`).join('')}</div>`;
+        }).join('') + `</div>`;
+    }
+
+    if (isUnit) {
+      html += `<div style="margin-bottom:16px;"><div class="variant-step-label">${n++}. How would you like it?</div>` +
+        o.finishes.map((f, i) => {
+          const v = priceAt(s.li, s.bi, s.lai, s.ti, gposOf(), i);
+          if (v === null) return '';
+          return `<label style="display:flex;align-items:center;gap:10px;padding:11px 12px;margin-bottom:6px;border:1.5px solid ${i === s.fi ? 'var(--gold-dark)' : 'var(--gray-200)'};border-radius:var(--radius);cursor:pointer;background:${i === s.fi ? 'var(--gold-bg)' : '#fff'};">
+            <input type="radio" name="bpFinish" ${i === s.fi ? 'checked' : ''} onchange="_bp.set('fi',${i})" style="accent-color:var(--gold-dark);">
+            <span style="flex:1;font-size:0.88rem;">${escHtml(FINISH_LABELS[f] || f)}</span>
+            <strong style="color:var(--gold-dark);">${money(v)}</strong>
+          </label>`;
+        }).join('') + `</div>`;
+    }
+
+    const price = current();
+    html += `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:6px 0 14px;">
+        <span style="font-size:0.85rem;color:var(--gray-500);">Price</span>
+        <span style="font-family:var(--font-head);font-size:1.4rem;color:var(--gold-dark);font-weight:700;">${price !== null ? money(price) : '—'}</span>
+      </div>
+      <button class="btn btn-primary btn-full" ${price === null ? 'disabled' : ''} onclick="_bp.add()">Add to Bag</button>`;
+    modal.querySelector('#bpBody').innerHTML = html;
+  }
+
+  function label() {
+    const len = o.lengths[s.li], la = o.laces[s.lai];
+    return [
+      `${len}"`,
+      table.kind === 'lace' ? null : `${o.bundleCounts[s.bi]} bundle${o.bundleCounts[s.bi] > 1 ? 's' : ''}`,
+      table.kind === 'bundles' ? null : `${table.kind === 'lace' ? '' : `${Math.min(len, 28)}" `}${la} ${la.startsWith('13') ? 'frontal' : 'closure'}`.trim(),
+      o.textures[s.ti],
+      cfg.colourMode === 'fixed' ? cfg.fixedColour?.name : s.colour,
+      table.kind === 'unit' ? FINISH_LABELS[o.finishes[s.fi]] : null,
+    ].filter(Boolean).join(' · ');
+  }
+
+  window._bp = {
+    set(k, v) { s[k] = v; render(); },
+    colour(c) { s.colour = c; render(); },
+    add() {
+      const price = current();
+      if (price === null) return;
+      const key = ['B', o.lengths[s.li], table.kind === 'lace' ? 0 : o.bundleCounts[s.bi], table.kind === 'bundles' ? '-' : o.laces[s.lai],
+                   o.textures[s.ti], cfg.colourMode === 'fixed' ? '-' : s.colour, table.kind === 'unit' ? o.finishes[s.fi] : '-'].join('|');
+      Store.addToCart(p.id, 1, { key, label: label(), price });
+      modal.remove();
+      openCart();
+    },
+  };
+  render();
+}
+
 function openVariantModal(productId) {
   const p = Store.getProduct(productId);
+  if (p?.variants?.variant_type === 'built') return openBuiltPicker(p);
   if (!p || !p.variants?.enabled) return;
   const v = p.variants;
   const { currency } = State.settings;

@@ -636,13 +636,54 @@ app.get('/api/admin/stats', requireAdmin, async (req, res) => {
 });
 
 // ============================================================
+//  PRICING FOR "BUILT" PRODUCTS  (prices come from the private Pricing settings)
+// ============================================================
+let _pricingCache = { at: 0, value: null };
+async function getPricing() {
+  if (Date.now() - _pricingCache.at < 60 * 1000) return _pricingCache.value;
+  const { data, error } = await supabase.from('settings').select('pricing').eq('id', 1).single();
+  const value = (!error && data?.pricing) ? Pricing.sanitizePricing(data.pricing) : null;
+  _pricingCache = { at: Date.now(), value };
+  return value;
+}
+const isBuilt = p => p?.variants?.variant_type === 'built';
+// Price tables are cached per product + settings, so the shop stays fast
+const _tableCache = new Map();
+function priceTableFor(product, pricing) {
+  if (!pricing || !isBuilt(product)) return null;
+  const key = `${product.id}:${_pricingCache.at}:${JSON.stringify(product.variants)}`;
+  if (!_tableCache.has(key)) {
+    if (_tableCache.size > 500) _tableCache.clear();
+    _tableCache.set(key, Pricing.buildPriceTable(pricing, product.variants));
+  }
+  return _tableCache.get(key);
+}
+// What customers receive: built products get "from" prices; old price tables are not needed by the shop
+function publicProduct(p, pricing) {
+  if (!isBuilt(p)) return p;
+  const t = priceTableFor(p, pricing);
+  const { legacy, ...variants } = p.variants;
+  return { ...p, variants, fromPrice: t?.fromPrice ?? null, maxPrice: t?.maxPrice ?? null };
+}
+// Clean the options an admin saves for a product; built products get their price set to the "from" price
+async function normaliseVariants(variants, fallbackPrice) {
+  if (!variants || typeof variants !== 'object') return { variants: null, price: fallbackPrice };
+  if (variants.variant_type !== 'built') return { variants, price: fallbackPrice };
+  const pricing = await getPricing();
+  const cfg = Pricing.sanitizeBuiltConfig(variants, pricing || Pricing.DEFAULT_PRICING);
+  const t = pricing ? Pricing.buildPriceTable(pricing, cfg) : null;
+  return { variants: cfg, price: t?.fromPrice || fallbackPrice };
+}
+
+// ============================================================
 //  PRODUCTS
 // ============================================================
 app.get('/api/products', async (req, res) => {
   try {
     const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    res.json(data);
+    const pricing = (data || []).some(isBuilt) ? await getPricing() : null;
+    res.json((data || []).map(p => publicProduct(p, pricing)));
   } catch {
     res.status(500).json({ error: 'Failed to load products.' });
   }
@@ -652,9 +693,34 @@ app.get('/api/products/:id', async (req, res) => {
   try {
     const { data, error } = await supabase.from('products').select('*').eq('id', req.params.id).single();
     if (error || !data) return res.status(404).json({ error: 'Product not found.' });
-    res.json(data);
+    res.json(publicProduct(data, isBuilt(data) ? await getPricing() : null));
   } catch {
     res.status(404).json({ error: 'Product not found.' });
+  }
+});
+
+// Every selling price for a built product (no costs) — used by the option picker
+app.get('/api/products/:id/prices', async (req, res) => {
+  try {
+    const { data: p } = await supabase.from('products').select('id, variants').eq('id', req.params.id).single();
+    if (!p || !isBuilt(p)) return res.status(404).json({ error: 'No price list for this product.' });
+    const table = priceTableFor(p, await getPricing());
+    if (!table) return res.status(503).json({ error: 'Prices are being updated — please try again shortly.' });
+    res.set('Cache-Control', 'public, max-age=0, s-maxage=60');
+    res.json(table);
+  } catch {
+    res.status(500).json({ error: 'Failed to load prices.' });
+  }
+});
+
+// Admin: the full saved product, including the backup of its old price table
+app.get('/api/admin/products', requireAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data || []);
+  } catch {
+    res.status(500).json({ error: 'Failed to load products.' });
   }
 });
 
@@ -667,12 +733,13 @@ app.post('/api/products', requireAdmin, [
 ], async (req, res) => {
   if (!valid(req, res)) return;
   try {
-    const { name, price, category, image_url, description, in_stock, featured, variants } = req.body;
+    const { name, price, category, image_url, description, in_stock, featured } = req.body;
+    const norm = await normaliseVariants(req.body.variants, parseFloat(price));
     const { data, error } = await supabase.from('products').insert({
-      name: clean(name), price: parseFloat(price), category: clean(category),
+      name: clean(name), price: norm.price, category: clean(category),
       image_url: clean(image_url || ''), description: clean(description || ''),
       in_stock: !!in_stock, featured: !!featured,
-      variants: variants && typeof variants === 'object' ? variants : null,
+      variants: norm.variants,
     }).select().single();
     if (error) throw error;
     res.status(201).json(data);
@@ -690,12 +757,13 @@ app.put('/api/products/:id', requireAdmin, [
 ], async (req, res) => {
   if (!valid(req, res)) return;
   try {
-    const { name, price, category, image_url, description, in_stock, featured, variants } = req.body;
+    const { name, price, category, image_url, description, in_stock, featured } = req.body;
+    const norm = await normaliseVariants(req.body.variants, parseFloat(price));
     const { data, error } = await supabase.from('products').update({
-      name: clean(name), price: parseFloat(price), category: clean(category),
+      name: clean(name), price: norm.price, category: clean(category),
       image_url: clean(image_url || ''), description: clean(description || ''),
       in_stock: !!in_stock, featured: !!featured,
-      variants: variants && typeof variants === 'object' ? variants : null,
+      variants: norm.variants,
     }).eq('id', req.params.id).select().single();
     if (error || !data) return res.status(404).json({ error: 'Product not found.' });
     res.json(data);
@@ -744,6 +812,22 @@ app.post('/api/orders', orderLimiter, optionalUser, [
       if (!product) return res.status(400).json({ error: 'One or more products were not found.' });
       if (!product.in_stock) return res.status(400).json({ error: `"${product.name}" is out of stock — coming back soon.` });
       const qty = parseInt(item.qty);
+
+      // Products priced from the Pricing settings: work out the price and description here
+      if (isBuilt(product)) {
+        const pricing = await getPricing();
+        const choice  = Pricing.parseBuiltKey(item.variantKey);
+        if (!pricing || !choice) return res.status(400).json({ error: `Please select options for "${product.name}".` });
+        const q = Pricing.quoteBuilt(pricing, product.variants, choice);
+        if (q.error) return res.status(400).json({ error: `"${product.name}": ${q.error}` });
+        subtotal += q.price * qty;
+        orderItems.push({
+          product_id: product.id, product_name: product.name,
+          price: q.price, quantity: qty,
+          variant: String(item.variantKey), variant_label: q.label,
+        });
+        continue;
+      }
 
       // Optional wig styling is encoded on the cart line as "<variantKey>|styled"
       const rawKey  = item.variantKey ? String(item.variantKey) : null;
@@ -979,6 +1063,7 @@ app.put('/api/admin/pricing', requireAdmin, async (req, res) => {
     const { error } = await supabase.from('settings').update({ pricing: clean }).eq('id', 1);
     if (isMissingPricingColumn(error)) return res.status(409).json({ error: PRICING_MIGRATION_MSG, needsMigration: true });
     if (error) throw error;
+    _pricingCache = { at: Date.now(), value: clean };   // new prices take effect straight away
     res.json({ ok: true, pricing: clean });
   } catch (err) {
     console.error('Pricing save error:', err.message);
@@ -1072,6 +1157,10 @@ function slugify(s) {
 }
 function productPath(p) { return `/product/${slugify(p.name)}-${p.id}`; }
 function priceInfo(p) {
+  if (isBuilt(p)) {
+    if (p.fromPrice) return { low: Number(p.fromPrice), high: Number(p.maxPrice || p.fromPrice), hasRange: true };
+    return { low: Number(p.price), high: Number(p.price), hasRange: true };
+  }
   const v = p.variants;
   if (v?.enabled && v.prices && Object.keys(v.prices).length) {
     const unavailable = new Set(v.unavailable || []);
@@ -1150,7 +1239,8 @@ app.get('/product/:slug', async (req, res) => {
   }));
   if (!m) return notFound();
   try {
-    const { data: p } = await supabase.from('products').select('*').eq('id', m[1].toLowerCase()).single();
+    const { data: raw } = await supabase.from('products').select('*').eq('id', m[1].toLowerCase()).single();
+    const p = raw ? publicProduct(raw, isBuilt(raw) ? await getPricing() : null) : null;
     if (!p) return notFound();
     const canonicalPath = productPath(p);
     if (req.path !== canonicalPath) return res.redirect(301, canonicalPath);
@@ -1226,7 +1316,7 @@ app.get('/product/:slug', async (req, res) => {
       const p  = Store.getProduct(id);
       const box = document.getElementById('pdAction');
       if (p) {
-        const hasVariants = p.variants?.enabled && p.variants?.prices && Object.keys(p.variants.prices).length > 0;
+        const hasVariants = p.variants?.variant_type === 'built' || (p.variants?.enabled && p.variants?.prices && Object.keys(p.variants.prices).length > 0);
         if (!p.in_stock)              box.innerHTML = '<button class="btn btn-secondary" disabled>Out of stock – coming back soon</button>';
         else if (hasVariants)         box.innerHTML = '<button class="btn btn-primary" id="pdBtn">Select Options</button>';
         else                          box.innerHTML = '<button class="btn btn-primary" id="pdBtn">Add to Bag</button>';
