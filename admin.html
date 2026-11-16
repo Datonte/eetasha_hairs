@@ -431,6 +431,11 @@
               <div class="form-group" style="margin-top:10px;" id="pmBuiltLacesWrap"><label class="form-label" style="margin-bottom:8px;">Closures / frontals</label><div id="pmBuiltLaces" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
               <div class="form-group" style="margin-top:10px;"><label class="form-label" style="margin-bottom:8px;">Texture <span style="font-size:0.75rem;color:var(--gray-400);">(tick one to fix it, or several to let customers choose)</span></label><div id="pmBuiltTextures" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
               <div class="form-group" style="margin-top:10px;" id="pmBuiltFinishesWrap"><label class="form-label" style="margin-bottom:8px;">How it can be supplied</label><div id="pmBuiltFinishes" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
+              <div class="form-group" style="margin-top:14px;">
+                <label class="form-label" style="margin-bottom:4px;">Switch off combinations this product doesn't come in</label>
+                <p style="font-size:0.75rem;color:var(--gray-400);margin-bottom:8px;">Untick a box — e.g. 12" × 4 bundles — and customers won't see it. Ticked = available.</p>
+                <div id="pmBuiltCombos" style="display:grid;gap:14px;"></div>
+              </div>
               <div class="grid-3" style="gap:12px;margin-top:10px;">
                 <div class="form-group"><label class="form-label">Colour</label>
                   <select id="pmBuiltColourMode" class="form-input" onchange="onBuiltColourModeChange()">
@@ -475,7 +480,7 @@
             </div>
             <div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
               <button type="button" class="btn btn-secondary btn-sm" onclick="buildVariantPriceTable()">Build Price Table</button>
-              <span style="font-size:0.78rem;color:var(--gray-400);" id="pmBuildHint">Select options first, then build to enter prices.</span>
+              <span style="font-size:0.78rem;color:var(--gray-400);" id="pmBuildHint">Select options first, then build to enter prices. Untick a box (or a whole row) if this product doesn't come in that option — customers won't see it.</span>
             </div>
             <div id="pmPriceTableWrap" style="display:none;margin-top:16px;overflow-x:auto;border:1px solid var(--gray-200);border-radius:8px;">
               <table id="pmPriceTable" style="border-collapse:collapse;font-size:0.82rem;width:100%;"></table>
@@ -1335,7 +1340,43 @@
       renderColourCheckboxes(cfg.colours.length ? cfg.colours : COLOUR_CATALOGUE_ADMIN.map(c => c.code));
       onBuiltKindChange(true);
       onBuiltColourModeChange();
+      document.getElementById('pmBuiltCombos').innerHTML = '';   // don't carry ticks over from another product
+      _builtExcluded = new Set(cfg.excluded || []);
+      renderBuiltCombos();
     }
+    // ---- Switch off individual combinations (length × bundles, length × closure/frontal) ----
+    let _builtExcluded = new Set();
+    function _syncBuiltExcluded() {
+      document.querySelectorAll('#pmBuiltCombos input[data-excl]').forEach(cb => {
+        if (cb.checked) _builtExcluded.delete(cb.dataset.excl); else _builtExcluded.add(cb.dataset.excl);
+      });
+    }
+    function renderBuiltCombos() {
+      _syncBuiltExcluded();
+      const kind   = document.getElementById('pmBuiltKind').value;
+      const lens   = _bChecked('pmBuiltLengths', 'blen').map(Number).sort((a, b) => a - b);
+      const counts = _bChecked('pmBuiltBundles', 'bcount').map(Number).sort((a, b) => a - b);
+      const laces  = _bChecked('pmBuiltLaces', 'blace');
+      const grid = (title, cols, colLabel, keyOf) => {
+        if (!lens.length || !cols.length) return '';
+        const th = 'padding:5px 8px;background:var(--gray-100);font-size:0.72rem;color:var(--gray-500);text-align:center;white-space:nowrap;';
+        return `<div><div style="font-size:0.8rem;font-weight:600;margin-bottom:6px;">${title}</div>
+          <div style="overflow-x:auto;"><table style="border-collapse:collapse;">
+            <thead><tr><th style="${th}text-align:left;">Length</th>${cols.map(c => `<th style="${th}">${escHtml(colLabel(c))}</th>`).join('')}</tr></thead>
+            <tbody>${lens.map(l => `<tr><td style="padding:4px 8px;font-weight:600;font-size:0.8rem;">${l}"</td>${cols.map(c => {
+              const k = keyOf(l, c);
+              return `<td style="text-align:center;padding:4px 8px;"><input type="checkbox" data-excl="${escHtml(k)}" ${_builtExcluded.has(k) ? '' : 'checked'} style="width:17px;height:17px;accent-color:var(--gold-dark);cursor:pointer;"></td>`;
+            }).join('')}</tr>`).join('')}</tbody></table></div></div>`;
+      };
+      document.getElementById('pmBuiltCombos').innerHTML =
+        (kind !== 'lace'    ? grid('Length × bundles', counts, c => `${c} bundle${c > 1 ? 's' : ''}`, (l, c) => `${l}|${c}|*`) : '') +
+        (kind !== 'bundles' ? grid(kind === 'lace' ? 'Length × size' : 'Length × closure / frontal', laces, c => c, (l, c) => `${l}|*|${c}`) : '');
+    }
+    // Rebuild the grids whenever lengths, bundle counts, closures or the product kind change
+    document.getElementById('pmBuiltSection').addEventListener('change', e => {
+      if (e.target.closest('#pmBuiltLengths, #pmBuiltBundles, #pmBuiltLaces') || e.target.id === 'pmBuiltKind') renderBuiltCombos();
+    });
+
     function onBuiltKindChange(keepLengths) {
       const kind = document.getElementById('pmBuiltKind').value;
       document.getElementById('pmBuiltBundlesWrap').style.display  = kind === 'lace' ? 'none' : '';
@@ -1366,6 +1407,7 @@
         colourMode: document.getElementById('pmBuiltColourMode').value,
         colours: getSelectedColours(),
         fixedColour: { code: document.getElementById('pmBuiltFixedCode').value, name: document.getElementById('pmBuiltFixedName').value.trim() || document.getElementById('pmBuiltFixedCode').value },
+        excluded: (_syncBuiltExcluded(), [..._builtExcluded]),
       };
       if (_editingLegacy) cfg.legacy = _editingLegacy;
       return cfg;
@@ -1574,13 +1616,43 @@
       return out;
     }
 
+    // Options switched off for this product (customers never see them; no price needed)
+    let _ptOff = new Set();
+    function _readUnavailable() {
+      return [...document.querySelectorAll('#pmPriceTable input[data-avail]:not(:checked)')].map(el => el.dataset.avail);
+    }
     function _priceInput(key, prices) {
       const val = (prices[key] !== undefined && prices[key] !== '') ? prices[key] : '';
-      return `<td style="padding:5px 6px;text-align:center;">
-        <input type="number" class="form-input" data-vkey="${escHtml(key)}" value="${val}"
-          placeholder="0.00" step="0.01" min="0"
-          style="width:78px;text-align:center;padding:5px 4px;font-size:0.82rem;">
+      const off = _ptOff.has(key);
+      return `<td style="padding:5px 6px;text-align:center;white-space:nowrap;">
+        <div class="pt-cell${off ? ' pt-off' : ''}">
+          <input type="checkbox" data-avail="${escHtml(key)}" ${off ? '' : 'checked'} onchange="togglePriceCell(this)" title="Untick if this product doesn't come in this option">
+          <input type="number" class="form-input" data-vkey="${escHtml(key)}" value="${val}" ${off ? 'disabled' : ''}
+            placeholder="${off ? 'off' : '0.00'}" step="0.01" min="0"
+            style="width:78px;text-align:center;padding:5px 4px;font-size:0.82rem;">
+        </div>
       </td>`;
+    }
+    // Row label with a tick that switches the whole row on/off (e.g. 12" × 4 bundles)
+    function _rowLabel(text, keys) {
+      const on = keys.some(k => !_ptOff.has(k));
+      return `<td style="padding:7px 12px;font-weight:600;white-space:nowrap;font-size:0.82rem;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;" title="Untick to switch this whole row off">
+          <input type="checkbox" data-rowtoggle ${on ? 'checked' : ''} onchange="togglePriceRow(this)" style="accent-color:var(--gold-dark);">${text}
+        </label></td>`;
+    }
+    function togglePriceCell(cb) {
+      const cell = cb.closest('.pt-cell'), input = cell.querySelector('input[data-vkey]');
+      input.disabled = !cb.checked;
+      input.placeholder = cb.checked ? '0.00' : 'off';
+      cell.classList.toggle('pt-off', !cb.checked);
+      const row = cb.closest('tr'), rowCb = row.querySelector('input[data-rowtoggle]');
+      if (rowCb) rowCb.checked = [...row.querySelectorAll('input[data-avail]')].some(x => x.checked);
+    }
+    function togglePriceRow(cb) {
+      const on = cb.checked;   // read once: updating each box also updates this row tick
+      cb.closest('tr').querySelectorAll('input[data-avail]').forEach(x => { x.checked = on; togglePriceCell(x); });
+      cb.checked = on;
     }
 
     function _renderPriceTableBundle(inches, colourCodes, prices) {
@@ -1593,7 +1665,7 @@
       for (const inch of inches) {
         for (const bun of (inch >= 30 ? [3,4,5] : [3,4])) {
           html += `<tr style="border-bottom:1px solid var(--gray-100);">
-            <td style="padding:7px 12px;font-weight:600;white-space:nowrap;font-size:0.82rem;">${inch}&quot; &times; ${bun} bun</td>
+            ${_rowLabel(`${inch}&quot; &times; ${bun} bun`, tiers.map(t => `${inch}-${bun}-${t}`))}
             ${tiers.map(t => _priceInput(`${inch}-${bun}-${t}`, prices)).join('')}
           </tr>`;
         }
@@ -1619,7 +1691,7 @@
       </tr></thead><tbody>`;
       for (const inch of inches) {
         html += `<tr style="border-bottom:1px solid var(--gray-100);">
-          <td style="padding:7px 12px;font-weight:600;white-space:nowrap;font-size:0.82rem;">${inch}&quot;</td>
+          ${_rowLabel(`${inch}&quot;`, cols.map(c => c.key(inch)))}
           ${cols.map(c => _priceInput(c.key(inch), prices)).join('')}
         </tr>`;
       }
@@ -1633,7 +1705,7 @@
       </tr></thead><tbody>`;
       for (const ls of laceSizes) {
         html += `<tr style="border-bottom:1px solid var(--gray-100);">
-          <td style="padding:7px 12px;font-weight:600;white-space:nowrap;font-size:0.82rem;">${escHtml(ls)}</td>
+          ${_rowLabel(escHtml(ls), inches.map(i => `${ls}-${i}`))}
           ${inches.map(i => _priceInput(`${ls}-${i}`, prices)).join('')}
         </tr>`;
       }
@@ -1648,6 +1720,7 @@
       const prices  = _readCurrentPriceInputs();
       const wrap    = document.getElementById('pmPriceTableWrap');
       const table   = document.getElementById('pmPriceTable');
+      _ptOff = new Set(_readUnavailable());   // keep anything already switched off when rebuilding
 
       if (vt === 'bundle') {
         if (!inches.length)  { Toast.show('Select at least one inch size.', 'error'); return; }
@@ -1673,7 +1746,7 @@
       const laces   = getSelectedLaces();
       const colours = getSelectedColours();
       const prices  = _readCurrentPriceInputs();
-      const base    = { enabled: true, variant_type: vt, prices, unavailable: [], colours };
+      const base    = { enabled: true, variant_type: vt, prices, unavailable: _readUnavailable(), colours };
       if (vt === 'bundle')                  return { ...base, inches };
       if (vt === 'wig' || vt === 'big-wig') return { ...base, inches, lace_sizes: laces, attachment_types: getSelectedAttachments(), hair_types: getSelectedHairTypes() };
       return { ...base, lace_sizes: laces, inches }; // closure / frontal
@@ -1714,6 +1787,7 @@
       const colourCodes  = _expandColours(variants.colours || []);
       renderColourCheckboxes(colourCodes);
       const prices      = variants.prices || {};
+      _ptOff            = new Set(variants.unavailable || []);
       const inches      = variants.inches || [];
       const laces       = variants.lace_sizes || [];
       const attachTypes = variants.attachment_types || [];

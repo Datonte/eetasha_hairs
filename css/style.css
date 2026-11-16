@@ -689,3 +689,8 @@ body.page-ready { opacity: 1; transition: opacity 0.22s ease; }
 #pdSocial .social-cta { grid-template-columns: 1fr; padding: 20px; }
 #pdSocial .social-cta-buttons { min-width: 0; }
 #pdSocial .social-cta-buttons .btn { width: 100%; }
+
+/* Admin price tables: switch an option off */
+.pt-cell { display: inline-flex; align-items: center; gap: 6px; }
+.pt-cell input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--gold-dark); cursor: pointer; flex-shrink: 0; }
+.pt-cell.pt-off input[type="number"] { background: var(--gray-100); color: var(--gray-400); text-decoration: line-through; }

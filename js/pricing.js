@@ -304,8 +304,17 @@
       const name = String(s.fixedColour?.name || code || 'Natural').trim().slice(0, 40);
       cfg.fixedColour = { code: code || '1B', name };
     }
+    // Combinations this product doesn't come in: "length|bundles|*" (e.g. 12" × 4 bundles)
+    // or "length|*|lace" (e.g. 12" with a 13x6 frontal). Customers never see them.
+    cfg.excluded = [...new Set((Array.isArray(s.excluded) ? s.excluded : [])
+      .map(String).filter(k => /^\d{1,2}\|(\d|\*)\|(\d{1,2}x\d{1,2}|\*)$/.test(k)))].slice(0, 500);
     if (s.legacy && typeof s.legacy === 'object') cfg.legacy = s.legacy;   // old price table kept as a backup
     return cfg;
+  }
+  function isExcluded(cfg, length, bundles, lace) {
+    const ex = cfg.excluded;
+    if (!ex || !ex.length) return false;
+    return ex.includes(`${length}|${bundles}|*`) || (!!lace && ex.includes(`${length}|*|${lace}`));
   }
 
   // Turn a customer's choices into an engine selection
@@ -348,6 +357,7 @@
     let fromPrice = null, maxPrice = null;
     const prices = dims.lengths.map(length => dims.bundleCounts.map(bundles => dims.laces.map(lace =>
       dims.textures.map(texture => dims.colourGroups.map(colourGroupName => dims.finishes.map(finish => {
+        if (isExcluded(cfg, length, bundles, lace)) return null;   // switched off for this product
         const r = computeUnit(pricing, builtSelection(cfg, { length, bundles, lace, texture, colourGroup: colourGroupName, finish }));
         const v = r.error ? null : r.sellGbp;
         if (v !== null) { fromPrice = fromPrice === null ? v : Math.min(fromPrice, v); maxPrice = maxPrice === null ? v : Math.max(maxPrice, v); }
@@ -365,6 +375,7 @@
     if (cfg.kind !== 'bundles' && !cfg.laces.includes(s.lace)) return { error: 'That closure/frontal is not available.' };
     if (!cfg.textures.includes(s.texture)) return { error: 'That texture is not available.' };
     if (cfg.kind === 'unit' && !cfg.finishes.includes(s.finish)) return { error: 'That option is not available.' };
+    if (isExcluded(cfg, len, cfg.kind === 'lace' ? 0 : Number(s.bundles), cfg.kind === 'bundles' ? null : s.lace)) return { error: 'That combination is not available for this product.' };
     let colourName;
     if (cfg.colourMode === 'fixed') colourName = cfg.fixedColour.name;
     else {

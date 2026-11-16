@@ -656,7 +656,8 @@ async function openBuiltPicker(p) {
   }
 
   const money = v => `${currency}${Number(v).toFixed(2)}`;
-  const btn = (label, selected, onclick, disabled, sub) =>
+  // Options with no price (not sold, or switched off in the admin) are simply not shown
+  const btn = (label, selected, onclick, disabled, sub) => disabled ? '' :
     `<button class="variant-opt-btn${selected ? ' selected' : ''}" ${disabled ? 'disabled' : ''} onclick="${onclick}" style="display:inline-flex;flex-direction:column;align-items:center;line-height:1.2;">${label}${sub ? `<span style="font-size:0.66rem;font-weight:500;opacity:0.75;margin-top:2px;">${sub}</span>` : ''}</button>`;
   const lowest = arr => { let m = null; (function walk(a) { if (Array.isArray(a)) a.forEach(walk); else if (a !== null && a !== undefined) m = m === null ? a : Math.min(m, a); })(arr); return m; };
 
@@ -774,6 +775,11 @@ function openVariantModal(productId) {
   const stylingFee  = Number(State.settings.wigStylingFee) || 10;
   const canStyle    = vtype === 'wig' || vtype === 'big-wig';
 
+  // Only options that have a price and haven't been switched off in the admin are shown
+  const offKeys  = new Set(v.unavailable || []);
+  const liveKeys = Object.keys(v.prices || {}).filter(k => k && !offKeys.has(k) && v.prices[k] !== null && v.prices[k] !== '' && isFinite(Number(v.prices[k])));
+  const hasKey   = prefix => liveKeys.some(k => k === String(prefix) || k.startsWith(prefix + '-'));
+
   const laceSizes   = v.lace_sizes || [];
   const inchList    = (v.inches || []).slice().sort((a,b) => a-b);
   const colourList  = v.colours || [];
@@ -817,22 +823,27 @@ function openVariantModal(productId) {
   // ── Render ────────────────────────────────────────────────────
   function render() {
     const price = currentPrice();
+    if (!liveKeys.length) {
+      modal.querySelector('#vmStep1Btns').innerHTML = `<p style="font-size:0.85rem;color:var(--gray-500);">This item can't be ordered online right now — message us on WhatsApp or Instagram and we'll help.</p>`;
+      modal.querySelector('#vmAddBtn').disabled = true;
+      return;
+    }
 
     // Step 1 — always inches (bundle/wig/big-wig) OR lace size (closure/frontal)
     if (vtype === 'closure' || vtype === 'frontal') {
-      modal.querySelector('#vmStep1Btns').innerHTML = laceSizes.map(ls =>
+      modal.querySelector('#vmStep1Btns').innerHTML = laceSizes.filter(ls => hasKey(ls)).map(ls =>
         `<button class="variant-opt-btn${selLace===ls?' selected':''}" onclick="_vmSel1('${ls}')">${ls}</button>`
       ).join('');
       const s2 = modal.querySelector('#vmStep2Wrap');
       if (selLace) {
         s2.style.display = '';
-        modal.querySelector('#vmStep2Btns').innerHTML = inchList.map(i =>
+        modal.querySelector('#vmStep2Btns').innerHTML = inchList.filter(i => hasKey(`${selLace}-${i}`)).map(i =>
           `<button class="variant-opt-btn${selInches===i?' selected':''}" onclick="_vmSel2(${i})">${i}"</button>`
         ).join('');
       } else { s2.style.display = 'none'; }
     } else {
       // inches first
-      modal.querySelector('#vmStep1Btns').innerHTML = inchList.map(i =>
+      modal.querySelector('#vmStep1Btns').innerHTML = inchList.filter(i => hasKey(i)).map(i =>
         `<button class="variant-opt-btn${selInches===i?' selected':''}" onclick="_vmSel1(${i})">${i}"</button>`
       ).join('');
 
@@ -840,12 +851,12 @@ function openVariantModal(productId) {
       if (selInches) {
         s2.style.display = '';
         if (vtype === 'bundle') {
-          modal.querySelector('#vmStep2Btns').innerHTML = bundleOpts(selInches).map(b =>
+          modal.querySelector('#vmStep2Btns').innerHTML = bundleOpts(selInches).filter(b => hasKey(`${selInches}-${b}`)).map(b =>
             `<button class="variant-opt-btn${selBundles===b?' selected':''}" onclick="_vmSel2(${b})">${b} Bundles</button>`
           ).join('');
         } else {
           // wig / big-wig → lace sizes
-          modal.querySelector('#vmStep2Btns').innerHTML = laceSizes.map(ls =>
+          modal.querySelector('#vmStep2Btns').innerHTML = laceSizes.filter(ls => hasKey(`${selInches}-${ls}`)).map(ls =>
             `<button class="variant-opt-btn${selLace===ls?' selected':''}" onclick="_vmSel2('${ls}')">${ls}</button>`
           ).join('');
         }
@@ -870,7 +881,7 @@ function openVariantModal(productId) {
     const show2c = (vtype === 'wig' || vtype === 'big-wig') && selLace && hasHair && attachResolved;
     if (show2c) {
       s2c.style.display = '';
-      modal.querySelector('#vmStep2cBtns').innerHTML = (v.hair_types || []).map(h =>
+      modal.querySelector('#vmStep2cBtns').innerHTML = (v.hair_types || []).filter(h => hasKey(`${selInches}-${selLace}-${h}`)).map(h =>
         `<button class="variant-opt-btn${selHairType===h?' selected':''}" onclick="_vmSel2c('${h}')">${h}</button>`
       ).join('');
     } else { s2c.style.display = 'none'; }
@@ -883,7 +894,8 @@ function openVariantModal(productId) {
       || ((vtype === 'closure' || vtype === 'frontal') && selInches);
     if (showColour) {
       s3.style.display = '';
-      const availableCols = resolveColourCodes(v);
+      // Bundles are priced by colour group, so hide colours whose group is switched off for this length/bundles
+      const availableCols = resolveColourCodes(v).filter(c => vtype !== 'bundle' || hasKey(`${selInches}-${selBundles}-${colourTier(c.code)}`));
       modal.querySelector('#vmStep3Btns').innerHTML = availableCols.map(c =>
         `<span class="colour-swatch-wrap" onclick="_vmSel3('${c.code.replace(/'/g,"\\'")}')">
            <span class="colour-swatch-chip${selColour===c.code?' selected':''}" style="background:${c.bg};"></span>
