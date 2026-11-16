@@ -627,3 +627,40 @@ body.page-ready { opacity: 1; transition: opacity 0.22s ease; }
   .hero-collage { grid-template-columns: repeat(2, 1fr); }
   .hero-collage img:nth-child(n+3) { display: none; }
 }
+
+/* ============= Mobile polish ============= */
+/* Bigger tap areas: bag & menu icons, bag quantity and remove buttons */
+.nav-actions button { min-width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+.cart-item-qty button { width: 32px; height: 32px; }
+.cart-item-remove { padding: 6px; margin: -6px -6px 0 0; }
+.country-change-btn { padding: 8px 4px; }
+@media (max-width: 768px) {
+  .nav-actions { gap: 4px; }
+  /* Banner: an even, darker shade so the heading never clashes with the photos */
+  .hero .hero-overlay { background: linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.72) 35%, rgba(0,0,0,0.78) 100%); }
+  .hero-content h1, .hero-content p { text-shadow: 0 2px 14px rgba(0,0,0,0.75); }
+  /* Checkout: show the order summary first, so customers see the total before ordering */
+  .checkout-grid > :last-child { order: -1; }
+  .checkout-summary { position: static; }
+  /* Admin bottom bar: every section visible side by side (was one per screen width) */
+  .admin-nav-item { width: auto; flex: 1 0 auto; min-width: 60px; padding: 8px 8px; }
+  /* Small labels: readable on phones */
+  .section-subtitle, .label { font-size: 0.7rem; }
+  .product-card-category { font-size: 0.68rem; }
+}
+@media (max-width: 480px) {
+  /* Two products per row on phones (was one huge card per screen) */
+  #shopGrid, #featuredGrid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  #shopGrid .product-card-body, #featuredGrid .product-card-body { padding: 10px; }
+  #shopGrid .product-card-name, #featuredGrid .product-card-name { font-size: 0.88rem; line-height: 1.3; }
+  #shopGrid .product-card-price, #featuredGrid .product-card-price { font-size: 0.95rem; }
+  #shopGrid .btn-sm, #featuredGrid .btn-sm { font-size: 0.62rem; padding: 11px 6px; letter-spacing: 0.04em; }
+  #shopGrid .product-card-stock, #featuredGrid .product-card-stock { font-size: 0.68rem; line-height: 1.3; }
+  /* Category filters: one swipeable row instead of several wrapped rows */
+  #shopFilters { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; scrollbar-width: none; }
+  #shopFilters::-webkit-scrollbar { display: none; }
+  .filter-btn { flex-shrink: 0; }
+}
+/* Admin: let the main area shrink to the screen so wide tables scroll inside their box */
+.admin-main { min-width: 0; }
+.admin-card select, .admin-card input, .admin-card textarea { max-width: 100%; }

@@ -1289,7 +1289,7 @@ app.get('/product/:slug', async (req, res) => {
     <div class="container">
       <nav class="pd-crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <a href="/shop">Shop</a> / <span>${escHtml(p.name)}</span></nav>
       <div class="pd">
-        <div class="pd-img">${p.image_url ? `<img src="${escHtml(p.image_url)}" alt="${escHtml(p.name)}">` : ''}</div>
+        <div class="pd-img"><img src="${escHtml(p.image_url || '/images/placeholder.svg')}" alt="${escHtml(p.name)}" onerror="this.onerror=null;this.src='/images/placeholder.svg'"></div>
         <div class="pd-info">
           <div class="product-card-category">${escHtml(p.category || 'Hair')}</div>
           <h1 class="serif">${escHtml(p.name)}</h1>

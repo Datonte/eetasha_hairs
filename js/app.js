@@ -189,7 +189,7 @@ function renderCartSidebar() {
     const vk = item.variantKey ? JSON.stringify(item.variantKey) : 'null';
     return `
       <div class="cart-item">
-        <img class="cart-item-img" src="${escHtml(p.image_url || '')}" alt="${escHtml(p.name)}" onerror="this.style.background='var(--gray-200)'">
+        <img class="cart-item-img" src="${escHtml(p.image_url || '/images/placeholder.svg')}" alt="${escHtml(p.name)}" onerror="this.onerror=null;this.src='/images/placeholder.svg'">
         <div class="cart-item-info">
           <div class="cart-item-name">${escHtml(p.name)}</div>
           ${item.variantLabel ? `<div style="font-size:0.72rem;color:var(--gray-500);margin-bottom:2px;">${escHtml(item.variantLabel)}</div>` : ''}
@@ -409,7 +409,7 @@ function productCardHTML(p) {
   return `
     <div class="product-card" ontouchstart="this.classList.toggle('desc-open')">
       <a class="product-card-img-wrap" href="${productUrl(p)}" style="display:block;">
-        <img class="product-card-img" src="${escHtml(p.image_url || '')}" alt="${escHtml(p.name)}" onerror="this.style.background='var(--gray-200)'" loading="lazy">
+        <img class="product-card-img" src="${escHtml(p.image_url || '/images/placeholder.svg')}" alt="${escHtml(p.name)}" onerror="this.onerror=null;this.src='/images/placeholder.svg'" loading="lazy">
         ${desc ? `<div class="product-card-overlay"><p class="product-card-overlay-text">${desc}</p></div>` : ''}
       </a>
       <div class="product-card-body">
@@ -547,7 +547,7 @@ async function openBuiltPicker(p) {
   modal.innerHTML = `
     <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:92vh;overflow-y:auto;padding:24px 20px 28px;">
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:8px;">
-        <img src="${escHtml(p.image_url || '')}" alt="" style="width:56px;height:64px;object-fit:cover;border-radius:8px;background:var(--gray-100);" onerror="this.style.background='var(--gray-200)'">
+        <img src="${escHtml(p.image_url || '/images/placeholder.svg')}" alt="" style="width:56px;height:64px;object-fit:cover;border-radius:8px;background:var(--gray-100);" onerror="this.onerror=null;this.src='/images/placeholder.svg'">
         <div style="flex:1;"><div style="font-weight:700;">${escHtml(p.name)}</div><div style="font-size:0.8rem;color:var(--gray-400);">${escHtml(p.category || '')}</div></div>
         <button data-close style="background:none;border:none;cursor:pointer;font-size:22px;color:var(--gray-400);padding:4px;">✕</button>
       </div>
@@ -862,7 +862,7 @@ function openVariantModal(productId) {
   modal.innerHTML = `
     <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:92vh;overflow-y:auto;padding:24px 20px 32px;">
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
-        <img src="${escHtml(p.image_url||'')}" alt="" style="width:56px;height:64px;object-fit:cover;border-radius:8px;background:var(--gray-100);" onerror="this.style.background='var(--gray-200)'">
+        <img src="${escHtml(p.image_url||'')}" alt="" style="width:56px;height:64px;object-fit:cover;border-radius:8px;background:var(--gray-100);" onerror="this.onerror=null;this.src='/images/placeholder.svg'">
         <div style="flex:1;">
           <div style="font-weight:700;font-size:1rem;">${escHtml(p.name)}</div>
           <div style="font-size:0.8rem;color:var(--gray-400);">${escHtml(p.category||'')}</div>
