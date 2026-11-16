@@ -455,6 +455,24 @@
   <script src="js/app.js"></script>
   <script>
     // =================== AUTH ===================
+    // Admin logins last 12 hours. If one expires while the page is open, any admin
+    // request fails — send the user back to the login screen instead of showing a
+    // confusing error, and keep unsaved prices so they save after logging back in.
+    let _pendingPricingSave = null;
+    const isAdminExpired = err => /admin access required/i.test(err?.message || '');
+    function adminSessionExpired() {
+      if (document.getElementById('adminDash').classList.contains('hidden')) return;   // already on login screen
+      document.getElementById('adminLogin').classList.remove('hidden');
+      document.getElementById('adminDash').classList.add('hidden');
+      document.getElementById('adminHeaderLogout').classList.add('hidden');
+      Toast.show('Your admin login has expired. Please log in again.', 'info');
+    }
+    const _apiReq = API._req;
+    API._req = async (...args) => {
+      try { return await _apiReq(...args); }
+      catch (err) { if (isAdminExpired(err)) adminSessionExpired(); throw err; }
+    };
+
     async function adminAuth(e) {
       e.preventDefault();
       const btn = document.getElementById('adminLoginBtn');
@@ -489,6 +507,14 @@
         return;
       }
       await Promise.all([loadAdminStats(), loadAdminProducts(), loadAdminOrders(), loadSettings(), loadDeliveryOptions(), loadPricing()]);
+      // Prices that couldn't be saved because the login had expired: save them now
+      if (_pendingPricingSave) {
+        _pricing = _pendingPricingSave;
+        _pendingPricingSave = null;
+        renderPricing();
+        switchTab('pricing', document.querySelector('.admin-nav-item[onclick*="pricing"]'));
+        await savePricing();
+      }
     }
 
     // =================== TAB ===================
@@ -984,6 +1010,13 @@
         state.textContent = `Saved ✓ ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
         Toast.show('Prices saved.', 'success');
       } catch (err) {
+        if (isAdminExpired(err)) {
+          // Keep the prices; they'll be saved automatically after logging back in
+          _pendingPricingSave = _pricing;
+          state.textContent = 'Not saved yet — log in again';
+          Toast.show('Log in again and your prices will be saved automatically.', 'info');
+          return;
+        }
         state.textContent = '';
         if (/one-time update/i.test(err.message)) document.getElementById('prMigrationBanner').classList.remove('hidden');
         Toast.show(err.message, 'error');
