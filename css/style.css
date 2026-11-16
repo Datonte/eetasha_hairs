@@ -664,3 +664,28 @@ body.page-ready { opacity: 1; transition: opacity 0.22s ease; }
 /* Admin: let the main area shrink to the screen so wide tables scroll inside their box */
 .admin-main { min-width: 0; }
 .admin-card select, .admin-card input, .admin-card textarea { max-width: 100%; }
+
+/* ============= Instagram & WhatsApp ============= */
+.social-links a { width: 40px; height: 40px; }
+.btn-instagram, .btn-whatsapp { color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: none; }
+.btn-instagram { background: linear-gradient(45deg, #f58529 0%, #dd2a7b 50%, #8134af 100%); }
+.btn-whatsapp  { background: #25D366; }
+.btn-instagram:hover, .btn-whatsapp:hover { color: #fff; filter: brightness(1.06); transform: translateY(-1px); }
+.social-cta {
+  background: var(--gold-bg); border: 1px solid #efe3c8; border-radius: var(--radius-lg);
+  padding: 28px; display: grid; grid-template-columns: 1fr auto; gap: 18px 28px; align-items: center;
+}
+.social-cta h3 { font-size: 1.35rem; margin-bottom: 6px; }
+.social-cta p { color: var(--gray-600); font-size: 0.92rem; line-height: 1.7; max-width: 560px; }
+.social-cta-buttons { display: flex; flex-direction: column; gap: 10px; min-width: 250px; }
+.social-cta-handle { grid-column: 1 / -1; font-size: 0.78rem; color: var(--gray-500); letter-spacing: 0.05em; }
+.picker-social { font-size: 0.78rem; color: var(--gray-500); text-align: center; margin-top: 12px; line-height: 1.6; }
+.picker-social a { color: var(--gold-dark); text-decoration: underline; }
+@media (max-width: 768px) {
+  .social-cta { grid-template-columns: 1fr; padding: 20px; }
+  .social-cta-buttons { min-width: 0; }
+  .social-cta-buttons .btn { width: 100%; }
+}
+#pdSocial .social-cta { grid-template-columns: 1fr; padding: 20px; }
+#pdSocial .social-cta-buttons { min-width: 0; }
+#pdSocial .social-cta-buttons .btn { width: 100%; }

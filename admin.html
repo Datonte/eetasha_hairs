@@ -803,8 +803,8 @@
               <span class="order-date">${formatDate(o.created_at)}</span>
               <div style="display:flex;gap:8px;align-items:center;">
                 <span class="order-total serif">${formatCurrency(o.total)}</span>
-                ${o.customer_phone ? `<a href="https://wa.me/${o.customer_phone.replace(/[^0-9]/g,'')}" target="_blank" rel="noopener" class="btn btn-sm" style="background:#25D366;color:white;padding:6px 10px;">
-                  <span class="material-symbols-outlined" style="font-size:14px;">chat</span>
+                ${o.customer_phone ? `<a href="https://wa.me/${o.customer_phone.replace(/[^0-9]/g,'')}" target="_blank" rel="noopener" class="btn btn-sm" title="Message on WhatsApp" aria-label="Message on WhatsApp" style="background:#25D366;color:white;padding:8px 10px;">
+                  ${brandIcon('whatsapp', 16)}
                 </a>` : ''}
               </div>
             </div>

@@ -1302,6 +1302,7 @@ app.get('/product/:slug', async (req, res) => {
             <li><span class="material-symbols-outlined">verified</span>Premium quality hair, carefully selected</li>
             <li><span class="material-symbols-outlined">support_agent</span>Personal help on WhatsApp</li>
           </ul>
+          <div id="pdSocial" style="margin-top:24px;"></div>
         </div>
       </div>
     </div>
@@ -1315,6 +1316,7 @@ app.get('/product/:slug', async (req, res) => {
       const id = document.getElementById('productPage').dataset.productId;
       const p  = Store.getProduct(id);
       const box = document.getElementById('pdAction');
+      document.getElementById('pdSocial').innerHTML = socialCtaHTML({ productName: p?.name || document.querySelector('h1')?.textContent || '' });
       if (p) {
         const hasVariants = p.variants?.variant_type === 'built' || (p.variants?.enabled && p.variants?.prices && Object.keys(p.variants.prices).length > 0);
         if (!p.in_stock)              box.innerHTML = '<button class="btn btn-secondary" disabled>Out of stock – coming back soon</button>';

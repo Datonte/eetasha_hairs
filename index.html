@@ -112,6 +112,11 @@
     </div>
   </section>
 
+  <!-- More photos & videos on Instagram / enquiries -->
+  <section class="section" style="padding-bottom:0;">
+    <div class="container" id="socialCta"></div>
+  </section>
+
   <!-- CTA -->
   <section class="section text-center">
     <div class="container" style="max-width:600px;">
@@ -140,6 +145,9 @@
         grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--gray-400);padding:40px;">No products available yet.</div>';
       } else {
         grid.innerHTML = featured.slice(0, 3).map(productCardHTML).join('');
+      }
+      {
+        document.getElementById('socialCta').innerHTML = socialCtaHTML();
       }
       document.body.classList.add('page-ready');
     });
