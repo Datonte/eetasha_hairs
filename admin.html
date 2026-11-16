@@ -187,7 +187,8 @@
             <div class="form-group"><label class="form-label">Closure / frontal length</label><select class="form-input" id="prLaceLength"></select></div>
             <div class="form-group"><label class="form-label">Texture</label><select class="form-input" id="prTexture"></select></div>
             <div class="form-group"><label class="form-label">Colour</label><select class="form-input" id="prColour"></select></div>
-            <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end;gap:6px;">
+            <div class="form-group" id="prFinishWrap"><label class="form-label">How it's supplied</label><select class="form-input" id="prFinish"></select></div>
+            <div class="form-group pr-percent-only" style="display:flex;flex-direction:column;justify-content:flex-end;gap:6px;">
               <label style="display:flex;gap:8px;align-items:center;font-size:0.85rem;cursor:pointer;"><input type="checkbox" id="prWigMaking" style="accent-color:var(--gold-dark);"> Wig-making</label>
               <label style="display:flex;gap:8px;align-items:center;font-size:0.85rem;cursor:pointer;"><input type="checkbox" id="prStyling" style="accent-color:var(--gold-dark);"> Styling</label>
             </div>
@@ -210,17 +211,45 @@
             <div class="form-group"><label class="form-label">Packaging per order (£)</label><input type="number" step="0.01" min="0" class="form-input" data-path="costs.packagingGbp" placeholder="e.g. 2"></div>
           </div>
 
-          <div class="form-label" style="margin:10px 0 8px;">Markup on your real cost</div>
+          <div class="form-label" style="margin:10px 0 8px;">How to set prices</div>
           <div class="grid-3" style="gap:12px;">
-            <div class="form-group"><label class="form-label">Bundles only (%)</label><input type="number" step="1" min="0" class="form-input" data-path="markups.bundles" placeholder="e.g. 125"></div>
-            <div class="form-group"><label class="form-label">Closures / frontals only (%)</label><input type="number" step="1" min="0" class="form-input" data-path="markups.lace" placeholder="e.g. 70"></div>
-            <div class="form-group"><label class="form-label">Units &amp; wigs (bundles + lace) (%)</label><input type="number" step="1" min="0" class="form-input" data-path="markups.units" placeholder="e.g. 70"></div>
+            <div class="form-group"><select class="form-input" data-path="profitMode">
+              <option value="fixed">Fixed profit in £ (by what the customer buys)</option>
+              <option value="percent">Percentage markup</option>
+            </select></div>
           </div>
 
-          <div class="form-label" style="margin:10px 0 8px;">Services &amp; rounding</div>
+          <div class="pr-fixed-only">
+            <div class="form-label" style="margin:10px 0 4px;">Your profit per unit (bundles + closure/frontal)</div>
+            <p style="font-size:0.75rem;color:var(--gray-400);margin-bottom:8px;">Same profit for every length. Added on top of your real cost.</p>
+            <div class="grid-3" style="gap:12px;">
+              <div class="form-group"><label class="form-label">Loose, not customised (£)</label><input type="number" step="1" min="0" class="form-input" data-path="profits.loose" placeholder="e.g. 130"></div>
+              <div class="form-group"><label class="form-label">Made into a wig (£)</label><input type="number" step="1" min="0" class="form-input" data-path="profits.wig" placeholder="e.g. 140"></div>
+              <div class="form-group"><label class="form-label">Customised wig, straight (£)</label><input type="number" step="1" min="0" class="form-input" data-path="profits.customised" placeholder="e.g. 155"></div>
+              <div class="form-group"><label class="form-label">Customised wig, styled (£)</label><input type="number" step="1" min="0" class="form-input" data-path="profits.styled" placeholder="e.g. 180"></div>
+              <div class="form-group"><label class="form-label">These profits are for … bundles</label><input type="number" step="1" min="1" max="10" class="form-input" data-path="profits.baseBundles"></div>
+              <div class="form-group"><label class="form-label">Each extra bundle (£)</label><input type="number" step="1" min="0" class="form-input" data-path="profits.extraBundle" placeholder="e.g. 15"></div>
+            </div>
+            <div class="form-label" style="margin:10px 0 8px;">Your profit on single items</div>
+            <div class="grid-3" style="gap:12px;">
+              <div class="form-group"><label class="form-label">Bundles on their own, per bundle (£)</label><input type="number" step="1" min="0" class="form-input" data-path="profits.perBundle" placeholder="e.g. 40"></div>
+              <div class="form-group"><label class="form-label">Closure or frontal on its own (£)</label><input type="number" step="1" min="0" class="form-input" data-path="profits.laceOnly" placeholder="e.g. 50"></div>
+            </div>
+          </div>
+
+          <div class="pr-percent-only">
+            <div class="form-label" style="margin:10px 0 8px;">Markup on your real cost</div>
+            <div class="grid-3" style="gap:12px;">
+              <div class="form-group"><label class="form-label">Bundles only (%)</label><input type="number" step="1" min="0" class="form-input" data-path="markups.bundles" placeholder="e.g. 125"></div>
+              <div class="form-group"><label class="form-label">Closures / frontals only (%)</label><input type="number" step="1" min="0" class="form-input" data-path="markups.lace" placeholder="e.g. 70"></div>
+              <div class="form-group"><label class="form-label">Units &amp; wigs (bundles + lace) (%)</label><input type="number" step="1" min="0" class="form-input" data-path="markups.units" placeholder="e.g. 70"></div>
+            </div>
+          </div>
+
+          <div class="form-label" style="margin:10px 0 8px;">Rounding</div>
           <div class="grid-3" style="gap:12px;">
-            <div class="form-group"><label class="form-label">Wig-making (£)</label><input type="number" step="0.01" min="0" class="form-input" data-path="wigMakingGbp"></div>
-            <div class="form-group"><label class="form-label">Styling (£)</label><input type="number" step="0.01" min="0" class="form-input" data-path="stylingGbp"></div>
+            <div class="form-group pr-percent-only"><label class="form-label">Wig-making (£)</label><input type="number" step="0.01" min="0" class="form-input" data-path="wigMakingGbp"></div>
+            <div class="form-group pr-percent-only"><label class="form-label">Styling (£)</label><input type="number" step="0.01" min="0" class="form-input" data-path="stylingGbp"></div>
             <div class="form-group"><label class="form-label">Round selling prices</label>
               <select class="form-input" data-path="rounding">
                 <option value="x9">Up to £…9 (e.g. £249, £319)</option>
@@ -817,7 +846,16 @@
       fillSelect('prLaceLength', P.LACE_LENGTHS.map(l => ({ value: l, label: `${l}"` })), 20);
       fillSelect('prTexture', Object.keys(p.addons.texture).map(n => ({ value: n, label: n })));
       fillSelect('prColour', Object.keys(p.addons.colour).map(n => ({ value: n, label: n })));
+      fillSelect('prFinish', Object.entries(P.FINISHES).map(([value, label]) => ({ value, label })), 'loose');
+      applyModeVisibility();
       updateCalculator();
+    }
+
+    // Show the fixed-profit or the percentage settings, depending on the chosen mode
+    function applyModeVisibility() {
+      const fixed = (_pricing?.profitMode || 'fixed') === 'fixed';
+      document.querySelectorAll('#tabPricing .pr-fixed-only').forEach(el => { el.style.display = fixed ? '' : 'none'; });
+      document.querySelectorAll('#tabPricing .pr-percent-only').forEach(el => { el.style.display = fixed ? 'none' : ''; });
     }
 
     function updateCalculator() {
@@ -828,8 +866,11 @@
         lace: v('prLace') || null, laceLength: Number(v('prLaceLength')),
         texture: v('prTexture'), colour: v('prColour'),
         wigMaking: document.getElementById('prWigMaking').checked, styling: document.getElementById('prStyling').checked,
+        finish: v('prFinish'),
       };
       document.getElementById('prLaceLength').disabled = !sel.lace;
+      const fixedMode = (_pricing.profitMode || 'fixed') === 'fixed';
+      document.getElementById('prFinishWrap').style.display = fixedMode && sel.bundles > 0 && sel.lace ? '' : 'none';
       const r = window.Pricing.computeUnit(_pricing, sel);
       const box = document.getElementById('prResult');
       if (r.error) { box.innerHTML = `<p style="color:var(--error);font-size:0.88rem;margin:0;">${escHtml(r.error)} <span style="color:var(--gray-500);">Fill it in below if your supplier sells it.</span></p>`; return; }
@@ -854,7 +895,9 @@
         ${r.sellGbp !== null ? `
           <div style="margin-top:14px;padding-top:12px;border-top:2px solid var(--gold);">
             <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
-              <span style="font-size:0.9rem;">Selling price <span style="color:var(--gray-500);font-size:0.8rem;">(${r.markupPercent}% ${catLabel} markup${r.servicesGbp ? ` + ${gbp(r.servicesGbp)} services` : ''}, card fees built in, rounded)</span></span>
+              <span style="font-size:0.9rem;">Selling price <span style="color:var(--gray-500);font-size:0.8rem;">(${r.mode === 'fixed'
+                ? `${gbp(r.targetProfitGbp)} profit${r.finish ? ` · ${escHtml(window.Pricing.FINISHES[r.finish])}` : ''}`
+                : `${r.markupPercent}% ${catLabel} markup${r.servicesGbp ? ` + ${gbp(r.servicesGbp)} services` : ''}`}, card fees built in, rounded)</span></span>
               <strong style="font-size:1.4rem;color:var(--gold-dark);">${gbp(r.sellGbp)}</strong>
             </div>
             <div style="display:flex;justify-content:space-between;font-size:0.82rem;color:var(--gray-600);margin-top:6px;">
@@ -862,8 +905,25 @@
             <div style="display:flex;justify-content:space-between;font-size:0.95rem;font-weight:700;margin-top:4px;color:${r.profitGbp >= 0 ? 'var(--success)' : 'var(--error)'};">
               <span>Your profit${r.servicesGbp ? ' (incl. your service fees)' : ''}</span><span>${gbp(r.profitGbp)}</span></div>
             <div style="font-size:0.72rem;color:var(--gray-400);margin-top:4px;">Before UK delivery to the customer, which they pay separately (or is free over £400).</div>
-          </div>`
-          : `<p style="margin:12px 0 0;font-size:0.9rem;color:var(--gray-500);">Set your ${catLabel} markup below to see the selling price.</p>`}`;
+          </div>
+          ${r.mode === 'fixed' && r.category === 'units' ? customerPreview(sel) : ''}`
+          : `<p style="margin:12px 0 0;font-size:0.9rem;color:var(--gray-500);">Set your ${r.mode === 'fixed' ? `profit for ${catLabel}` : `${catLabel} markup`} below to see the selling price.</p>`}`;
+    }
+
+    // What the customer would see for this unit: one price per way it can be supplied
+    function customerPreview(sel) {
+      const P = window.Pricing;
+      const rows = Object.keys(P.FINISHES).map(f => ({ f, r: P.computeUnit(_pricing, { ...sel, finish: f }) }))
+        .filter(x => x.r.sellGbp !== null);
+      if (!rows.length) return '';
+      const base = rows[0].r.sellGbp;
+      return `<div style="margin-top:14px;background:#fff;border-radius:var(--radius);padding:12px 14px;">
+        <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--gray-500);margin-bottom:8px;">What the customer sees · "How would you like it?"</div>
+        ${rows.map(({ f, r }) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:0.85rem;${f === sel.finish ? 'font-weight:700;' : ''}">
+            <span>${f === sel.finish ? '●' : '○'} ${escHtml(P.FINISHES[f])}</span>
+            <span>£${r.sellGbp.toFixed(2)}${r.sellGbp > base ? ` <span style="color:var(--gray-400);font-weight:400;">(+£${(r.sellGbp - base).toFixed(0)})</span>` : ''} <span style="color:var(--success);font-weight:400;font-size:0.75rem;">profit £${r.profitGbp.toFixed(0)}</span></span>
+          </div>`).join('')}
+      </div>`;
     }
 
     document.getElementById('tabPricing').addEventListener('input', e => {
@@ -880,6 +940,7 @@
         const hint = t.nextElementSibling;
         if (!isText && hint?.classList.contains('pr-gbp')) hint.textContent = toGbp(t.value === '' ? null : t.value);
         if (path.endsWith('.label')) populateCalculator();
+        if (path === 'profitMode') applyModeVisibility();
         document.getElementById('prSaveState').textContent = 'Unsaved changes';
       }
       updateCalculator();

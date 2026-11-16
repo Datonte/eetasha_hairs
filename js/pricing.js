@@ -37,7 +37,22 @@
       cardFeeFixedGbp: 0.20,
       packagingGbp: null,            // per order (branded bag, tag, mailer)
     },
-    // Markup on the landed cost, by what is being sold (filled in on the Pricing tab)
+    // How the selling price is set:
+    //  'fixed'   → real cost + a fixed £ profit that depends on what the customer buys
+    //  'percent' → real cost × (1 + markup %)
+    profitMode: 'fixed',
+    // Fixed £ profit per order type (filled in on the Pricing tab — kept out of public code)
+    profits: {
+      loose: null,          // bundles + closure/frontal, sent loose (not customised)
+      wig: null,            // made into a wig
+      customised: null,     // customised wig, straight
+      styled: null,         // customised wig, styled (body wave, curls)
+      baseBundles: 3,       // the profits above are for this many bundles…
+      extraBundle: null,    // …plus this much for each extra bundle
+      perBundle: null,      // bundles on their own, per bundle
+      laceOnly: null,       // a closure or frontal on its own
+    },
+    // Markup on the landed cost, by what is being sold (used when profitMode = 'percent')
     markups: { bundles: null, lace: null, units: null },
     rounding: 'x9',                  // 'x9' → £249, £319 · 'pound' → whole pounds · 'none'
     weftLists: {
@@ -56,6 +71,13 @@
   };
 
   const GRADE_LABELS = { single: 'Single drawn', double: 'Double drawn', sdd: 'Super double drawn' };
+  // How a bundles + closure/frontal unit is supplied (fixed-profit mode)
+  const FINISHES = {
+    loose:      'Bundles + closure/frontal (loose)',
+    wig:        'Made into a wig',
+    customised: 'Customised wig, straight',
+    styled:     'Customised wig, styled (body wave, curls)',
+  };
   const money = n => Math.round(n * 100) / 100;
 
   // Find a lace (closure or frontal) price table by size, e.g. '5x5' or '13x6'
@@ -125,20 +147,45 @@
 
     // ── Selling price ──
     const category = bundles > 0 && lacePieces ? 'units' : (bundles > 0 ? 'bundles' : 'lace');
-    const rawMarkup = p.markups?.[category];
-    const markup = rawMarkup === null || rawMarkup === undefined || rawMarkup === '' || !isFinite(Number(rawMarkup)) ? null : Number(rawMarkup);
-    const wigMakingGbp = sel.wigMaking ? n(p.wigMakingGbp) : 0;
-    const stylingGbp   = sel.styling   ? n(p.stylingGbp)   : 0;
-    const servicesGbp  = money(wigMakingGbp + stylingGbp);
+    const isNum = v => v !== null && v !== undefined && v !== '' && isFinite(Number(v));
+    const mode = p.profitMode === 'percent' ? 'percent' : 'fixed';
+    const finish = category === 'units' ? (FINISHES[sel.finish] ? sel.finish : 'loose') : null;
 
-    let sellGbp = null, cardFeeGbp = null, profitGbp = null;
-    if (markup !== null) {
-      const beforeFees = landedGbp * (1 + markup / 100) + servicesGbp;
-      const pct = n(c.cardFeePercent) / 100, fixed = n(c.cardFeeFixedGbp);
-      let price = pct < 1 ? (beforeFees + fixed) / (1 - pct) : beforeFees;   // card fee paid out of the price
+    // Card fees come out of the price, so gross the price up to cover them, then round
+    const pct = n(c.cardFeePercent) / 100, fixed = n(c.cardFeeFixedGbp);
+    const finishPrice = beforeFees => {
+      let price = pct < 1 ? (beforeFees + fixed) / (1 - pct) : beforeFees;
       if (p.rounding === 'x9')         price = Math.ceil((price + 1) / 10) * 10 - 1;   // 343.20 → 349
       else if (p.rounding === 'pound') price = Math.ceil(price);
-      sellGbp    = money(price);
+      return money(price);
+    };
+
+    let markup = null, targetProfitGbp = null, wigMakingGbp = 0, stylingGbp = 0, servicesGbp = 0, beforeFees = null;
+    if (mode === 'fixed') {
+      const pr = p.profits || {};
+      let target = null;
+      if (category === 'units') {
+        const base  = Math.max(1, Math.floor(n(pr.baseBundles) || 3));
+        const extra = Math.max(0, bundles - base) * n(pr.extraBundle);
+        if (isNum(pr[finish])) target = Number(pr[finish]) + extra;
+      } else if (category === 'bundles') {
+        if (isNum(pr.perBundle)) target = Number(pr.perBundle) * bundles;
+      } else if (isNum(pr.laceOnly)) {
+        target = Number(pr.laceOnly);
+      }
+      if (target !== null) { targetProfitGbp = money(target); beforeFees = landedGbp + target; }
+    } else {
+      const rawMarkup = p.markups?.[category];
+      markup = isNum(rawMarkup) ? Number(rawMarkup) : null;
+      wigMakingGbp = sel.wigMaking ? n(p.wigMakingGbp) : 0;
+      stylingGbp   = sel.styling   ? n(p.stylingGbp)   : 0;
+      servicesGbp  = money(wigMakingGbp + stylingGbp);
+      if (markup !== null) beforeFees = landedGbp * (1 + markup / 100) + servicesGbp;
+    }
+
+    let sellGbp = null, cardFeeGbp = null, profitGbp = null;
+    if (beforeFees !== null) {
+      sellGbp    = finishPrice(beforeFees);
       cardFeeGbp = money(sellGbp * pct + fixed);
       profitGbp  = money(sellGbp - landedGbp - cardFeeGbp);
     }
@@ -146,7 +193,8 @@
     return {
       pieces, lines, costUsd: money(usd), costGbp,
       inboundGbp, dutyGbp, vatGbp, packagingGbp, landedGbp,
-      category, markupPercent: markup, wigMakingGbp, stylingGbp, servicesGbp,
+      category, mode, finish, targetProfitGbp,
+      markupPercent: markup, wigMakingGbp, stylingGbp, servicesGbp,
       sellGbp, cardFeeGbp, profitGbp,
     };
   }
@@ -172,6 +220,15 @@
       for (const k of Object.keys(out.markups)) out.markups[k] = num(src.markupPercent, 1000);
     }
     out.rounding = ['x9', 'pound', 'none'].includes(src.rounding) ? src.rounding : DEFAULT_PRICING.rounding;
+    out.profitMode = ['fixed', 'percent'].includes(src.profitMode) ? src.profitMode : DEFAULT_PRICING.profitMode;
+    for (const k of Object.keys(out.profits)) {
+      if (k === 'baseBundles') {
+        const b = Math.floor(Number(src.profits?.baseBundles));
+        out.profits.baseBundles = b >= 1 && b <= 10 ? b : DEFAULT_PRICING.profits.baseBundles;
+      } else {
+        out.profits[k] = num(src.profits?.[k], 5000);
+      }
+    }
 
     for (const listId of Object.keys(out.weftLists)) {
       const s = src.weftLists?.[listId];
@@ -195,7 +252,7 @@
     return out;
   }
 
-  const api = { DEFAULT_PRICING, WEFT_LENGTHS, LACE_LENGTHS, GRADE_LABELS, computeUnit, laceTable, sanitizePricing };
+  const api = { DEFAULT_PRICING, WEFT_LENGTHS, LACE_LENGTHS, GRADE_LABELS, FINISHES, computeUnit, laceTable, sanitizePricing };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Pricing = api;
 })(typeof window !== 'undefined' ? window : this);
