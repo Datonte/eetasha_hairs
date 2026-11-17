@@ -61,14 +61,41 @@
   <div id="siteFooter"></div>
   <script src="js/app.js"></script>
   <script>
-    let activeFilter = 'All';
+    // Filters: All (shown in sections, one per category), each category, plus "Ready to ship" and "On sale"
+    const READY = 'Ready to ship', SALE = 'On sale';
+    const SPECIAL = {
+      [READY]: p => p.in_stock && dispatchInfo(p)?.mode === 'ready',
+      [SALE]:  p => salePercent(p) > 0,
+    };
+    let activeFilter = new URLSearchParams(location.search).get('cat') || 'All';
+
+    const attr = s => escHtml(s).replace(/"/g, '&quot;');
+    const categories = () => [...new Set(Store.getProducts().map(p => p.category).filter(Boolean))];
 
     function renderShop() {
       const products = Store.getProducts();
-      const filtered = activeFilter === 'All' ? products : products.filter(p => p.category === activeFilter);
       const grid     = document.getElementById('shopGrid');
       const empty    = document.getElementById('shopEmpty');
 
+      if (activeFilter === 'All' && categories().length > 1) {
+        // One section per category, like a collection page
+        grid.className = '';
+        grid.innerHTML = categories().map(c => {
+          const list = products.filter(p => p.category === c);
+          return `<section class="shop-section">
+            <div class="shop-section-head"><h2 class="serif">${escHtml(c)}</h2>
+              <button data-cat="${attr(c)}" onclick="setFilter(this.dataset.cat, true)">See all ${list.length}</button></div>
+            <div class="grid-3">${list.map(productCardHTML).join('')}</div>
+          </section>`;
+        }).join('');
+        empty.classList.add('hidden');
+        return;
+      }
+
+      const filtered = activeFilter === 'All' ? products
+        : SPECIAL[activeFilter] ? products.filter(SPECIAL[activeFilter])
+        : products.filter(p => p.category === activeFilter);
+      grid.className = 'grid-3';
       if (filtered.length === 0) {
         grid.innerHTML = '';
         empty.classList.remove('hidden');
@@ -79,16 +106,22 @@
     }
 
     function renderFilters() {
-      const categories = ['All', ...new Set(Store.getProducts().map(p => p.category).filter(Boolean))];
-      document.getElementById('shopFilters').innerHTML = categories.map(c =>
-        `<button class="filter-btn ${c === activeFilter ? 'active' : ''}" onclick="setFilter('${escHtml(c)}')">${escHtml(c)}</button>`
+      const products = Store.getProducts();
+      const extras = Object.keys(SPECIAL).filter(k => products.some(SPECIAL[k]));
+      document.getElementById('shopFilters').innerHTML = ['All', ...categories(), ...extras].map(c =>
+        `<button class="filter-btn ${c === activeFilter ? 'active' : ''}" data-cat="${attr(c)}" onclick="setFilter(this.dataset.cat)">${escHtml(c)}</button>`
       ).join('');
     }
 
-    function setFilter(cat) {
+    function setFilter(cat, scroll) {
       activeFilter = cat;
+      // Keep the choice in the address, so a link like /shop?cat=Wigs opens that section
+      const url = new URL(location.href);
+      if (cat === 'All') url.searchParams.delete('cat'); else url.searchParams.set('cat', cat);
+      history.replaceState(null, '', url);
       renderFilters();
       renderShop();
+      if (scroll) window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     document.addEventListener('DOMContentLoaded', async () => {

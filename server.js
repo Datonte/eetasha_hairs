@@ -659,11 +659,39 @@ function priceTableFor(product, pricing) {
   return _tableCache.get(key);
 }
 // What customers receive: built products get "from" prices; old price tables are not needed by the shop
+// Prices are sent as normal; `details.salePercent` tells the shop to show them reduced
+// (Pricing.applySale), and the order route applies exactly the same reduction.
 function publicProduct(p, pricing) {
+  p = { ...p, details: cleanDetails(p.details) };
   if (!isBuilt(p)) return p;
   const t = priceTableFor(p, pricing);
-  const { legacy, ...variants } = p.variants;
+  const { legacy, ...variants } = Pricing.sanitizeBuiltConfig(p.variants, pricing || Pricing.DEFAULT_PRICING);
   return { ...p, variants, fromPrice: t?.fromPrice ?? null, maxPrice: t?.maxPrice ?? null };
+}
+// Per-product extras: sale % and dispatch time ("ready to ship" / "made to order")
+function cleanDetails(d) {
+  const o = d && typeof d === 'object' ? d : {};
+  const out = {};
+  const pct = Pricing.salePercentOf(o);
+  if (pct) out.salePercent = pct;
+  if (o.dispatch === 'ready' || o.dispatch === 'made') out.dispatch = o.dispatch;
+  const days = clean(String(o.madeDays || '')).slice(0, 20);
+  if (days) out.madeDays = days;
+  return out;
+}
+// The `details` column is added by supabase-shop-extras-migration.sql. Until that has been run,
+// products still save (without the extras) and the admin is told what to do.
+const isMissingColumn = (err, col) => !!err && (err.code === '42703' || err.code === 'PGRST204') && new RegExp(col, 'i').test(err.message || '');
+const EXTRAS_MIGRATION_MSG = 'Saved — but the sale and dispatch settings need a one-time database update first: run supabase-shop-extras-migration.sql in the Supabase SQL Editor.';
+async function saveProductRow(row, id) {
+  const run = r => (id ? supabase.from('products').update(r).eq('id', id) : supabase.from('products').insert(r)).select().single();
+  let { data, error } = await run(row);
+  if (error && 'details' in row && isMissingColumn(error, 'details')) {
+    const { details, ...rest } = row;
+    ({ data, error } = await run(rest));
+    if (!error && data) data = { ...data, _notice: EXTRAS_MIGRATION_MSG };
+  }
+  return { data, error };
 }
 // Clean the options an admin saves for a product; built products get their price set to the "from" price
 async function normaliseVariants(variants, fallbackPrice) {
@@ -735,12 +763,14 @@ app.post('/api/products', requireAdmin, [
   try {
     const { name, price, category, image_url, description, in_stock, featured } = req.body;
     const norm = await normaliseVariants(req.body.variants, parseFloat(price));
-    const { data, error } = await supabase.from('products').insert({
+    const row = {
       name: clean(name), price: norm.price, category: clean(category),
       image_url: clean(image_url || ''), description: clean(description || ''),
       in_stock: !!in_stock, featured: !!featured,
       variants: norm.variants,
-    }).select().single();
+    };
+    if (req.body.details !== undefined) row.details = cleanDetails(req.body.details);
+    const { data, error } = await saveProductRow(row);
     if (error) throw error;
     res.status(201).json(data);
   } catch {
@@ -759,12 +789,15 @@ app.put('/api/products/:id', requireAdmin, [
   try {
     const { name, price, category, image_url, description, in_stock, featured } = req.body;
     const norm = await normaliseVariants(req.body.variants, parseFloat(price));
-    const { data, error } = await supabase.from('products').update({
+    const row = {
       name: clean(name), price: norm.price, category: clean(category),
       image_url: clean(image_url || ''), description: clean(description || ''),
       in_stock: !!in_stock, featured: !!featured,
       variants: norm.variants,
-    }).eq('id', req.params.id).select().single();
+    };
+    // Only touch the extras when the admin form sends them (bulk price switches leave them alone)
+    if (req.body.details !== undefined) row.details = cleanDetails(req.body.details);
+    const { data, error } = await saveProductRow(row, req.params.id);
     if (error || !data) return res.status(404).json({ error: 'Product not found.' });
     res.json(data);
   } catch {
@@ -812,6 +845,8 @@ app.post('/api/orders', orderLimiter, optionalUser, [
       if (!product) return res.status(400).json({ error: 'One or more products were not found.' });
       if (!product.in_stock) return res.status(400).json({ error: `"${product.name}" is out of stock — coming back soon.` });
       const qty = parseInt(item.qty);
+      const salePct = Pricing.salePercentOf(product.details);
+      const saleNote = salePct ? ` · ${salePct}% off` : '';
 
       // Products priced from the Pricing settings: work out the price and description here
       if (isBuilt(product)) {
@@ -819,12 +854,13 @@ app.post('/api/orders', orderLimiter, optionalUser, [
         const choice  = Pricing.parseBuiltKey(item.variantKey);
         if (!pricing || !choice) return res.status(400).json({ error: `Please select options for "${product.name}".` });
         const q = Pricing.quoteBuilt(pricing, product.variants, choice);
-        if (q.error) return res.status(400).json({ error: `"${product.name}": ${q.error}` });
-        subtotal += q.price * qty;
+        if (q.error) return res.status(400).json({ error: `"${product.name}": ${q.error} Please remove it from your bag and choose again.` });
+        const price = Pricing.applySale(q.price, salePct);
+        subtotal += price * qty;
         orderItems.push({
           product_id: product.id, product_name: product.name,
-          price: q.price, quantity: qty,
-          variant: String(item.variantKey), variant_label: q.label,
+          price, quantity: qty,
+          variant: String(item.variantKey), variant_label: q.label + saleNote,
         });
         continue;
       }
@@ -846,13 +882,15 @@ app.post('/api/orders', orderLimiter, optionalUser, [
       } else {
         unitPrice = product.price;
       }
-      unitPrice = Number(unitPrice) + (styled ? WIG_STYLING_FEE : 0);
+      // The sale reduces the hair price; the styling fee stays the same
+      unitPrice = Pricing.applySale(unitPrice, salePct) + (styled ? WIG_STYLING_FEE : 0);
 
       subtotal += unitPrice * qty;
+      const label = item.variantLabel ? clean(item.variantLabel) : '';
       orderItems.push({
         product_id: product.id, product_name: product.name,
         price: unitPrice, quantity: qty,
-        variant: rawKey, variant_label: item.variantLabel ? clean(item.variantLabel) : null,
+        variant: rawKey, variant_label: (label + saleNote).replace(/^ · /, '') || null,
       });
     }
     subtotal = Math.round(subtotal * 100) / 100;
@@ -990,6 +1028,7 @@ app.get('/api/settings', async (req, res) => {
       deliveryOptions: deliveryOptionsFrom(data),
       freeUkDeliveryOver: FREE_UK_DELIVERY_OVER,
       wigStylingFee:   WIG_STYLING_FEE,
+      payInThree:      !!data.shop_options?.payInThree,
     });
   } catch {
     res.status(500).json({ error: 'Failed to load settings.' });
@@ -1032,8 +1071,14 @@ app.put('/api/settings', requireAdmin, [
         active:  !!o.active,
       }));
     }
-    await supabase.from('settings').update(updates).eq('id', 1);
-    res.json({ ok: true });
+    if (Object.keys(updates).length) await supabase.from('settings').update(updates).eq('id', 1);
+    // Saved on its own so the other settings still save before the database update has been run
+    let notice;
+    if (req.body.payInThree !== undefined) {
+      const { error } = await supabase.from('settings').update({ shop_options: { payInThree: !!req.body.payInThree } }).eq('id', 1);
+      if (isMissingColumn(error, 'shop_options')) notice = 'Saved — but "Pay in 3" needs a one-time database update first: run supabase-shop-extras-migration.sql in the Supabase SQL Editor.';
+    }
+    res.json({ ok: true, notice });
   } catch {
     res.status(500).json({ error: 'Failed to save settings.' });
   }
@@ -1112,8 +1157,8 @@ app.post('/api/create-checkout-session', async (req, res) => {
       });
     }
 
-    const sess = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+    const sessionFor = methods => stripe.checkout.sessions.create({
+      payment_method_types: methods,
       line_items:           lineItems,
       mode:                 'payment',
       success_url: `${origin}/checkout-success?session_id={CHECKOUT_SESSION_ID}&order_id=${order.id}`,
@@ -1122,6 +1167,15 @@ app.post('/api/create-checkout-session', async (req, res) => {
       metadata: { orderId: order.id, orderNumber: order.order_number },
       expires_at: Math.floor(Date.now() / 1000) + 60 * 60,   // abandoned checkouts expire after 1 hour
     });
+    // "Pay in 3" = Klarna, which must also be switched on in the Stripe dashboard.
+    // If Stripe refuses it (not switched on there yet), the customer can still pay by card.
+    const { data: shopSettings } = await supabase.from('settings').select('*').eq('id', 1).single();
+    let sess;
+    if (shopSettings?.shop_options?.payInThree) {
+      try { sess = await sessionFor(['card', 'klarna']); }
+      catch (err) { console.error('Klarna not available, card only:', err.message); }
+    }
+    if (!sess) sess = await sessionFor(['card']);
 
     await supabase.from('orders').update({ stripe_session_id: sess.id }).eq('id', orderId);
     res.json({ url: sess.url });
@@ -1156,19 +1210,78 @@ function slugify(s) {
   return String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'product';
 }
 function productPath(p) { return `/product/${slugify(p.name)}-${p.id}`; }
+// Lowest / highest price a customer pays (after any sale), plus the pre-sale "from" price
 function priceInfo(p) {
-  if (isBuilt(p)) {
-    if (p.fromPrice) return { low: Number(p.fromPrice), high: Number(p.maxPrice || p.fromPrice), hasRange: true };
-    return { low: Number(p.price), high: Number(p.price), hasRange: true };
-  }
-  const v = p.variants;
-  if (v?.enabled && v.prices && Object.keys(v.prices).length) {
-    const unavailable = new Set(v.unavailable || []);
-    const vals = Object.entries(v.prices).filter(([k]) => !unavailable.has(k)).map(([, x]) => Number(x)).filter(x => x > 0);
-    if (vals.length) return { low: Math.min(...vals), high: Math.max(...vals), hasRange: true };
-  }
-  return { low: Number(p.price), high: Number(p.price), hasRange: false };
+  const base = (() => {
+    if (isBuilt(p)) {
+      if (p.fromPrice) return { low: Number(p.fromPrice), high: Number(p.maxPrice || p.fromPrice), hasRange: true };
+      return { low: Number(p.price), high: Number(p.price), hasRange: true };
+    }
+    const v = p.variants;
+    if (v?.enabled && v.prices && Object.keys(v.prices).length) {
+      const unavailable = new Set(v.unavailable || []);
+      const vals = Object.entries(v.prices).filter(([k]) => !unavailable.has(k)).map(([, x]) => Number(x)).filter(x => x > 0);
+      if (vals.length) return { low: Math.min(...vals), high: Math.max(...vals), hasRange: true };
+    }
+    return { low: Number(p.price), high: Number(p.price), hasRange: false };
+  })();
+  const pct = Pricing.salePercentOf(p.details);
+  return { ...base, low: Pricing.applySale(base.low, pct), high: Pricing.applySale(base.high, pct), wasLow: pct ? base.low : null, pct };
 }
+// "Ready to ship" / "Made to order" line. Units made into wigs default to made to order.
+function dispatchInfo(p) {
+  const d = p.details || {};
+  const mode = d.dispatch || (isBuilt(p) && p.variants?.kind === 'unit' ? 'made' : null);
+  if (mode === 'ready') return { mode, title: 'Ready to ship', text: 'Dispatched in 1–2 working days' };
+  if (mode === 'made')  return { mode, title: 'Made to order', text: `Dispatched in ${d.madeDays || '5–10'} working days` };
+  return null;
+}
+
+// Fold-out guides on every product page (plain HTML, so Google can read them too)
+const PRODUCT_GUIDES_HTML = `
+  <div class="pd-guides" id="guides">
+    <details>
+      <summary>Length guide</summary>
+      <p>Lengths are measured with the hair pulled straight. Wavy and curly hair looks shorter than straight hair of the same length.</p>
+      <table class="pd-guide-table">
+        <tr><td>10–12"</td><td>Chin to neck</td></tr>
+        <tr><td>14–16"</td><td>Shoulders to collarbone</td></tr>
+        <tr><td>18–20"</td><td>Chest to bra strap</td></tr>
+        <tr><td>22–24"</td><td>Mid-back</td></tr>
+        <tr><td>26–30"</td><td>Lower back to waist</td></tr>
+      </table>
+    </details>
+    <details>
+      <summary>How many bundles do I need?</summary>
+      <p>Each bundle weighs about 100g.</p>
+      <ul><li>Up to 16": 3 bundles</li><li>18–22": 3–4 bundles</li><li>24" and longer: 4–5 bundles for a full look</li></ul>
+      <p>Not sure? Message us and we'll help you choose.</p>
+    </details>
+    <details>
+      <summary>Closure or frontal? HD or transparent lace?</summary>
+      <p><strong>Closure</strong> (4x4, 5x5, 2x6): covers the parting area only. It's easier to look after and good for a middle or side part.</p>
+      <p><strong>Frontal</strong> (13x4, 13x6): lace from ear to ear, so you can part your hair anywhere and wear it pulled back. 13x6 gives a deeper parting space.</p>
+      <p><strong>HD lace</strong> is very thin and melts into all skin tones, but needs gentle handling. <strong>Transparent lace</strong> is a little stronger and suits light to medium skin tones.</p>
+    </details>
+    <details>
+      <summary>Cap size guide</summary>
+      <p>Measure around your head along your hairline: from your forehead, above your ears, around the back of your neck and back to the front.</p>
+      <table class="pd-guide-table">
+        <tr><td>Small</td><td>21"</td></tr>
+        <tr><td>Medium</td><td>22" (most people)</td></tr>
+        <tr><td>Large</td><td>23"</td></tr>
+      </table>
+      <p>If you're unsure, choose Medium, or message us your measurement.</p>
+    </details>
+    <details>
+      <summary>Delivery</summary>
+      <p>Tracked delivery in the UK (free on orders over £400, next-day available) and tracked express delivery to Europe, the USA and worldwide. Wigs made, coloured or styled for you are made to order. <a href="/delivery">Delivery prices and times</a></p>
+    </details>
+    <details>
+      <summary>Returns</summary>
+      <p>For hygiene reasons, worn hair and wigs made to your order can't be returned. Unworn items with the tag and hygiene seal still on can be returned within 14 days of delivery. <a href="/returns">Read the full returns policy</a></p>
+    </details>
+  </div>`;
 function productDescription(p) {
   const d = String(p.description || '').trim();
   return d || `${p.name} from ${BRAND}. Premium ${String(p.category || 'hair').toLowerCase()} — luxury quality with tracked UK and worldwide delivery.`;
@@ -1222,6 +1335,19 @@ const PRODUCT_PAGE_STYLE = `<style>
   .pd-perks { margin-top: 28px; border-top: 1px solid var(--gray-200); padding-top: 20px; display: grid; gap: 10px; font-size: 0.88rem; color: var(--gray-600); }
   .pd-perks li { display: flex; gap: 10px; align-items: center; }
   .pd-perks .material-symbols-outlined { color: var(--gold-dark); font-size: 20px; }
+  .pd-stock span { font-weight: 500; color: var(--gray-500); }
+  .pd-guides { margin-top: 24px; border-top: 1px solid var(--gray-200); }
+  .pd-guides details { border-bottom: 1px solid var(--gray-200); }
+  .pd-guides summary { cursor: pointer; padding: 14px 0; font-weight: 600; font-size: 0.9rem; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+  .pd-guides summary::-webkit-details-marker { display: none; }
+  .pd-guides summary::after { content: '+'; font-size: 1.2rem; color: var(--gold-dark); }
+  .pd-guides details[open] summary::after { content: '−'; }
+  .pd-guides p, .pd-guides li { font-size: 0.86rem; color: var(--gray-600); line-height: 1.7; margin-bottom: 10px; }
+  .pd-guides ul { padding-left: 18px; margin-bottom: 10px; list-style: disc; }
+  .pd-guides a { color: var(--gold-dark); text-decoration: underline; }
+  .pd-guide-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 0.86rem; }
+  .pd-guide-table td { padding: 7px 0; border-bottom: 1px solid var(--gray-100); color: var(--gray-600); }
+  .pd-guide-table td:first-child { font-weight: 600; color: var(--gray-800, #333); width: 40%; }
   @media (max-width: 768px) { .pd { grid-template-columns: 1fr; gap: 24px; } }
 </style>`;
 
@@ -1251,6 +1377,9 @@ app.get('/product/:slug', async (req, res) => {
     const price     = priceInfo(p);
     const money     = n => `£${Number(n).toFixed(2)}`;
     const availability = p.in_stock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';
+    const dispatch     = dispatchInfo(p);
+    const { data: shopSettings } = await supabase.from('settings').select('*').eq('id', 1).single();
+    const payInThree   = !!shopSettings?.shop_options?.payInThree;
 
     const ld = {
       '@context': 'https://schema.org',
@@ -1293,8 +1422,9 @@ app.get('/product/:slug', async (req, res) => {
         <div class="pd-info">
           <div class="product-card-category">${escHtml(p.category || 'Hair')}</div>
           <h1 class="serif">${escHtml(p.name)}</h1>
-          <div class="pd-price">${price.hasRange ? `<small>from </small>${money(price.low)}` : money(price.low)}</div>
-          <p class="pd-stock ${p.in_stock ? 'in' : 'out'}">${p.in_stock ? 'In stock' : 'Out of stock – coming back soon'}</p>
+          <div class="pd-price">${price.hasRange ? `<small>from </small>` : ''}${money(price.low)}${price.pct ? ` <s class="price-was">${money(price.wasLow)}</s> <span class="sale-badge">${price.pct}% off</span>` : ''}</div>
+          ${payInThree && p.in_stock ? `<p class="pay-in-3">Or pay in 3 interest-free instalments with Klarna</p>` : ''}
+          <p class="pd-stock ${p.in_stock ? 'in' : 'out'}">${!p.in_stock ? 'Out of stock – coming back soon' : dispatch ? `${dispatch.title} · <span>${escHtml(dispatch.text)}</span>` : 'In stock'}</p>
           <div class="pd-desc">${escHtml(desc)}</div>
           <div id="pdAction"><a href="/shop" class="btn btn-primary">Shop the collection</a></div>
           <ul class="pd-perks">
@@ -1302,6 +1432,7 @@ app.get('/product/:slug', async (req, res) => {
             <li><span class="material-symbols-outlined">verified</span>Premium quality hair, carefully selected</li>
             <li><span class="material-symbols-outlined">support_agent</span>Personal help on WhatsApp</li>
           </ul>
+          ${PRODUCT_GUIDES_HTML}
           <div id="pdSocial" style="margin-top:24px;"></div>
         </div>
       </div>

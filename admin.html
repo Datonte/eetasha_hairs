@@ -141,6 +141,16 @@
               <label class="form-label">Delivery Fee (£)</label>
               <input type="number" class="form-input" id="setDeliveryFee" placeholder="5.99" step="0.01" min="0">
             </div>
+            <h3 class="serif mt-3 mb-2" style="font-size:1.1rem;">Pay in 3 (Klarna)</h3>
+            <div class="form-group" style="display:flex;align-items:flex-start;gap:12px;">
+              <label class="toggle" style="flex-shrink:0;">
+                <input type="checkbox" id="setPayInThree">
+                <span class="toggle-track"></span>
+                <span class="toggle-thumb"></span>
+              </label>
+              <span style="font-size:0.85rem;line-height:1.6;"><strong>Offer "Pay in 3 interest-free instalments"</strong><br>
+                <span style="color:var(--gray-500);">First switch on Klarna in your Stripe dashboard (Settings → Payment methods → Klarna). You are paid in full straight away; the customer pays Klarna back in instalments. Until Klarna is on in Stripe, customers simply pay by card.</span></span>
+            </div>
             <button type="submit" class="btn btn-primary mt-2">Save Settings</button>
           </form>
         </div>
@@ -389,6 +399,27 @@
           </div>
         </div>
 
+        <!-- Dispatch time + sale -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:8px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Dispatch</label>
+            <select class="form-input" id="pmDispatch" onchange="document.getElementById('pmDaysWrap').style.display = this.value === 'made' ? '' : 'none'">
+              <option value="">Automatic (wigs: made to order)</option>
+              <option value="ready">Ready to ship (1–2 working days)</option>
+              <option value="made">Made to order</option>
+            </select>
+          </div>
+          <div class="form-group" id="pmDaysWrap" style="margin-bottom:0;display:none;">
+            <label class="form-label">Made to order: working days</label>
+            <input type="text" class="form-input" id="pmMadeDays" placeholder="5–10" maxlength="20">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Sale: % off <span style="font-weight:400;color:var(--gray-400);">(leave empty for no sale)</span></label>
+            <input type="number" class="form-input" id="pmSale" min="0" max="90" step="1" placeholder="e.g. 15">
+          </div>
+        </div>
+        <p style="font-size:0.75rem;color:var(--gray-400);margin-bottom:18px;">On sale, every price for this product is reduced by that % at checkout, and customers see the old price crossed out.</p>
+
         <!-- Variants Section -->
         <div style="margin-top:20px;border-top:1px solid var(--gray-200);padding-top:18px;">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;flex-wrap:wrap;">
@@ -435,6 +466,8 @@
               <div class="form-group" style="margin-top:10px;" id="pmBuiltLacesWrap"><label class="form-label" style="margin-bottom:8px;">Closures / frontals</label><div id="pmBuiltLaces" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
               <div class="form-group" style="margin-top:10px;"><label class="form-label" style="margin-bottom:8px;">Texture <span style="font-size:0.75rem;color:var(--gray-400);">(tick one to fix it, or several to let customers choose)</span></label><div id="pmBuiltTextures" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
               <div class="form-group" style="margin-top:10px;" id="pmBuiltFinishesWrap"><label class="form-label" style="margin-bottom:8px;">How it can be supplied</label><div id="pmBuiltFinishes" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
+              <div class="form-group" style="margin-top:10px;" id="pmBuiltCapsWrap"><label class="form-label" style="margin-bottom:8px;">Cap sizes customers can choose <span style="font-size:0.75rem;color:var(--gray-400);">(free choice, shown when it is made into a wig)</span></label><div id="pmBuiltCaps" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
+              <div class="form-group" style="margin-top:10px;" id="pmBuiltLaceTypesWrap"><label class="form-label" style="margin-bottom:8px;">Lace type customers can choose <span style="font-size:0.75rem;color:var(--gray-400);">(free choice; leave both unticked to not ask)</span></label><div id="pmBuiltLaceTypes" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
               <div class="form-group" style="margin-top:14px;">
                 <label class="form-label" style="margin-bottom:4px;">Switch off combinations this product doesn't come in</label>
                 <p style="font-size:0.75rem;color:var(--gray-400);margin-bottom:8px;">Untick a box — e.g. 12" × 4 bundles — and customers won't see it. Ticked = available.</p>
@@ -672,12 +705,31 @@
       document.getElementById('pmDesc').value     = product?.description || '';
       document.getElementById('pmInStock').checked  = product ? !!product.in_stock : true;
       document.getElementById('pmFeatured').checked = product ? !!product.featured  : false;
+      setDetailsInModal(product?.details || {});
       loadVariantsIntoModal(product?.variants || null);
       updateImagePreview();
       document.getElementById('productModal').classList.add('open');
     }
 
     function closeProductModal() { document.getElementById('productModal').classList.remove('open'); clearModalState(); }
+
+    // Sale % and dispatch time (saved in the product's "details")
+    function setDetailsInModal(d) {
+      document.getElementById('pmDispatch').value = d.dispatch || '';
+      document.getElementById('pmMadeDays').value = d.madeDays || '';
+      document.getElementById('pmSale').value     = d.salePercent || '';
+      document.getElementById('pmDaysWrap').style.display = d.dispatch === 'made' ? '' : 'none';
+    }
+    function getDetailsFromModal() {
+      const d = {};
+      const dispatch = document.getElementById('pmDispatch').value;
+      if (dispatch) d.dispatch = dispatch;
+      const days = document.getElementById('pmMadeDays').value.trim();
+      if (dispatch === 'made' && days) d.madeDays = days;
+      const pct = Math.round(Number(document.getElementById('pmSale').value));
+      if (pct > 0 && pct <= 90) d.salePercent = pct;
+      return d;
+    }
 
     function editProduct(id) {
       const p = State.products.find(x => String(x.id) === String(id));
@@ -695,7 +747,10 @@
         in_stock:    document.getElementById('pmInStock').checked,
         featured:    document.getElementById('pmFeatured').checked,
         variants:    getVariantsFromModal(),
+        details:     getDetailsFromModal(),
       };
+      const salePct = document.getElementById('pmSale').value.trim();
+      if (salePct && !data.details.salePercent) { Toast.show('Sale % must be a whole number from 1 to 90 (or empty).', 'error'); return; }
       const builtProduct = data.variants?.variant_type === 'built';
       if (builtProduct && !data.price) data.price = 1;   // the server replaces this with the real "from" price
       if (!data.name || !data.price) { Toast.show('Name and price are required.', 'error'); return; }
@@ -703,13 +758,9 @@
       const btn = document.getElementById('saveProductBtn');
       btn.disabled = true; btn.textContent = 'Saving…';
       try {
-        if (id) {
-          await API.put(`/api/products/${id}`, data);
-          Toast.show('Product updated.', 'success');
-        } else {
-          await API.post('/api/products', data);
-          Toast.show('Product added!', 'success');
-        }
+        const saved = id ? await API.put(`/api/products/${id}`, data) : await API.post('/api/products', data);
+        if (saved?._notice) Toast.show(saved._notice, 'info');
+        else Toast.show(id ? 'Product updated.' : 'Product added!', 'success');
         closeProductModal();
         await loadAdminProducts();
         await loadAdminStats();
@@ -1127,6 +1178,7 @@
         document.getElementById('setSortCode').value     = s.sortCode      || '';
         document.getElementById('setAccountNumber').value= s.accountNumber || '';
         document.getElementById('setDeliveryFee').value  = s.deliveryFee   ?? 5.99;
+        document.getElementById('setPayInThree').checked = !!s.payInThree;
       } catch {}
       restoreSettingsState(); // overlay any unsaved local edits on top of DB values
     }
@@ -1134,17 +1186,19 @@
     async function saveSettings(e) {
       e.preventDefault();
       try {
-        await API.put('/api/settings', {
-          whatsapp:      document.getElementById('setWhatsapp').value.trim(),
+        const res = await API.put('/api/settings', {
+          whatsapp:    document.getElementById('setWhatsapp').value.trim(),
           instagram:     document.getElementById('setInstagram').value.trim(),
           bankName:      document.getElementById('setBankName').value.trim(),
           accountName:   document.getElementById('setAccountName').value.trim(),
           sortCode:      document.getElementById('setSortCode').value.trim(),
           accountNumber: document.getElementById('setAccountNumber').value.trim(),
           deliveryFee:   parseFloat(document.getElementById('setDeliveryFee').value) || 0,
+          payInThree:    document.getElementById('setPayInThree').checked,
         });
         clearSettingsState();
-        Toast.show('Settings saved!', 'success');
+        if (res?.notice) Toast.show(res.notice, 'info');
+        else Toast.show('Settings saved!', 'success');
       } catch (err) { Toast.show(err.message, 'error'); }
     }
 
@@ -1337,6 +1391,8 @@
       _bGrid('pmBuiltLaces', _builtLaceSizes(), 'blace', cfg.laces.length ? cfg.laces : _builtLaceSizes(), v => `${v} ${v.startsWith('13') ? 'frontal' : 'closure'}`);
       _bGrid('pmBuiltTextures', P.TEXTURES, 'btex', cfg.textures);
       _bGrid('pmBuiltFinishes', Object.keys(P.FINISHES), 'bfin', cfg.finishes.length ? cfg.finishes : Object.keys(P.FINISHES), v => BUILT_FINISH_LABELS[v] || v);
+      _bGrid('pmBuiltCaps', Object.keys(P.CAP_SIZES), 'bcap', cfg.kind === 'unit' ? cfg.capSizes : Object.keys(P.CAP_SIZES), v => P.CAP_SIZES[v]);
+      _bGrid('pmBuiltLaceTypes', P.LACE_TYPES, 'bltype', cfg.laceTypes, v => v + ' lace');
       document.getElementById('pmBuiltColourMode').value = cfg.colourMode;
       fillSelect('pmBuiltFixedCode', COLOUR_CATALOGUE_ADMIN.map(c => ({ value: c.code, label: c.code })), cfg.fixedColour?.code || '1B');
       document.getElementById('pmBuiltFixedCode').value = cfg.fixedColour?.code || '1B';
@@ -1398,6 +1454,8 @@
       document.getElementById('pmBuiltBundlesLabel').textContent   = kind === 'bundles' ? 'Number of bundles customers can buy' : 'Bundles per unit';
       document.getElementById('pmBuiltLacesWrap').style.display    = kind === 'bundles' ? 'none' : '';
       document.getElementById('pmBuiltFinishesWrap').style.display = kind === 'unit' ? '' : 'none';
+      document.getElementById('pmBuiltCapsWrap').style.display      = kind === 'unit' ? '' : 'none';
+      document.getElementById('pmBuiltLaceTypesWrap').style.display = kind === 'bundles' ? 'none' : '';
       if (keepLengths !== true) {
         const lens = kind === 'lace' ? Pricing.LACE_LENGTHS : Pricing.WEFT_LENGTHS;
         _bGrid('pmBuiltLengths', lens, 'blen', lens.filter(l => l >= 12), v => `${v}"`);
@@ -1420,6 +1478,8 @@
         laces: _bChecked('pmBuiltLaces', 'blace'),
         textures: _bChecked('pmBuiltTextures', 'btex'),
         finishes: _bChecked('pmBuiltFinishes', 'bfin'),
+        capSizes: _bChecked('pmBuiltCaps', 'bcap'),
+        laceTypes: _bChecked('pmBuiltLaceTypes', 'bltype'),
         colourMode: document.getElementById('pmBuiltColourMode').value,
         colours: getSelectedColours(),
         fixedColour: { code: document.getElementById('pmBuiltFixedCode').value, name: document.getElementById('pmBuiltFixedName').value.trim() || document.getElementById('pmBuiltFixedCode').value },
@@ -1838,6 +1898,7 @@
           inStock:  document.getElementById('pmInStock').checked,
           featured: document.getElementById('pmFeatured').checked,
           variants: getVariantsFromModal(),
+          details:  getDetailsFromModal(),
         }));
       } catch {}
     }
@@ -1859,6 +1920,7 @@
         document.getElementById('pmDesc').value     = s.desc     || '';
         document.getElementById('pmInStock').checked  = s.inStock  ?? true;
         document.getElementById('pmFeatured').checked = s.featured ?? false;
+        setDetailsInModal(s.details || {});
         document.getElementById('productModalTitle').textContent = s.id ? 'Edit Product' : 'Add Product';
         loadVariantsIntoModal(s.variants || null);
         updateImagePreview();

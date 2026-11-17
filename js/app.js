@@ -149,7 +149,7 @@ const Store = {
   getCartTotal() {
     return _getRawCart().reduce((sum, item) => {
       const p = this.getProduct(item.productId);
-      const price = item.variantPrice ?? (p ? p.price : 0);
+      const price = item.variantPrice ?? (p ? productPrice(p) : 0);
       return sum + (price * item.qty);
     }, 0);
   },
@@ -185,7 +185,7 @@ function renderCartSidebar() {
   container.innerHTML = cart.map(item => {
     const p = Store.getProduct(item.productId);
     if (!p) return '';
-    const unitPrice = item.variantPrice ?? p.price;
+    const unitPrice = item.variantPrice ?? productPrice(p);
     const vk = item.variantKey ? JSON.stringify(item.variantKey) : 'null';
     return `
       <div class="cart-item">
@@ -444,6 +444,34 @@ function renderFooter() {
 // ============================================================
 //  PRODUCT CARD
 // ============================================================
+// Sale: whole-percent off, to the penny — must match applySale() in js/pricing.js
+function salePercent(p) {
+  const n = Math.round(Number(p?.details?.salePercent));
+  return Number.isFinite(n) && n > 0 && n <= 90 ? n : 0;
+}
+function salePrice(p, price) {
+  const pct = salePercent(p);
+  return pct ? Math.round(Number(price) * (100 - pct)) / 100 : Number(price);
+}
+function productPrice(p) { return salePrice(p, p.price); }
+// "Ready to ship" / "Made to order" — must match dispatchInfo() in server.js
+function dispatchInfo(p) {
+  const d = p?.details || {};
+  const mode = d.dispatch || (p?.variants?.variant_type === 'built' && p.variants.kind === 'unit' ? 'made' : null);
+  if (mode === 'ready') return { mode, title: 'Ready to ship', text: 'Dispatched in 1–2 working days' };
+  if (mode === 'made')  return { mode, title: 'Made to order', text: `Dispatched in ${d.madeDays || '5–10'} working days` };
+  return null;
+}
+// Price with the old price crossed out when the product is on sale
+function priceWithSaleHTML(p, original) {
+  const { currency } = State.settings;
+  const now = salePrice(p, original);
+  return `${currency}${now.toFixed(2)}${salePercent(p) ? ` <s class="price-was">${currency}${Number(original).toFixed(2)}</s>` : ''}`;
+}
+function payInThreeHTML() {
+  return State.settings.payInThree ? `<p class="pay-in-3">Or pay in 3 interest-free instalments with Klarna</p>` : '';
+}
+
 function productCardHTML(p) {
   const { currency } = State.settings;
   const desc = escHtml(p.description || '');
@@ -455,8 +483,10 @@ function productCardHTML(p) {
   const priceDisplay = minPrice === null
     ? `<span style="font-size:0.8rem;color:var(--gray-400);">Price on request</span>`
     : hasVariants
-      ? `<span style="font-size:0.7rem;font-weight:500;color:var(--gray-400);">from </span>${currency}${Number(minPrice).toFixed(2)}`
-      : `${currency}${Number(p.price).toFixed(2)}`;
+      ? `<span style="font-size:0.7rem;font-weight:500;color:var(--gray-400);">from </span>${priceWithSaleHTML(p, minPrice)}`
+      : priceWithSaleHTML(p, p.price);
+  const pct = salePercent(p);
+  const dispatch = p.in_stock ? dispatchInfo(p) : null;
 
   let btn = '';
   if (!p.in_stock) {
@@ -471,12 +501,14 @@ function productCardHTML(p) {
     <div class="product-card" ontouchstart="this.classList.toggle('desc-open')">
       <a class="product-card-img-wrap" href="${productUrl(p)}" style="display:block;">
         <img class="product-card-img" src="${escHtml(p.image_url || '/images/placeholder.svg')}" alt="${escHtml(p.name)}" onerror="this.onerror=null;this.src='/images/placeholder.svg'" loading="lazy">
+        ${pct ? `<span class="sale-badge sale-badge-card">${pct}% off</span>` : ''}
         ${desc ? `<div class="product-card-overlay"><p class="product-card-overlay-text">${desc}</p></div>` : ''}
       </a>
       <div class="product-card-body">
         <div class="product-card-category">${escHtml(p.category || 'Hair')}</div>
         <a class="product-card-name" href="${productUrl(p)}" style="display:block;">${escHtml(p.name)}</a>
         <div class="product-card-price">${priceDisplay}</div>
+        ${dispatch ? `<div class="dispatch-tag dispatch-${dispatch.mode}">${dispatch.title}</div>` : ''}
         ${btn}
       </div>
     </div>`;
@@ -628,8 +660,11 @@ async function openBuiltPicker(p) {
   // colour group name → index in the price table
   const groupPos = gi => o.colourGroups.indexOf(['Natural colour', 'Colour #2–#18', 'Colour #24 / #613 / #60 / Ash'][gi]);
 
-  const s = { li: 0, bi: 0, lai: 0, ti: 0, colour: null, fi: 0 };
-  const priceAt = (li, bi, lai, ti, gpos, fi) => table.prices?.[li]?.[bi]?.[lai]?.[ti]?.[gpos]?.[fi] ?? null;
+  const capSizes  = cfg.capSizes || [];
+  const laceTypes = table.kind === 'bundles' ? [] : (cfg.laceTypes || []);
+  const s = { li: 0, bi: 0, lai: 0, ti: 0, colour: null, fi: 0, cap: capSizes.includes('M') ? 'M' : capSizes[0] || null, laceType: laceTypes[0] || null };
+  // Prices in the table are before any sale; the customer sees (and pays) the sale price
+  const priceAt = (li, bi, lai, ti, gpos, fi) => { const v = table.prices?.[li]?.[bi]?.[lai]?.[ti]?.[gpos]?.[fi]; return v === null || v === undefined ? null : salePrice(p, v); };
   const gposOf = () => cfg.colourMode === 'fixed' ? 0 : groupPos(colourGroupIndex(s.colour));
   const anyPrice = arr => Array.isArray(arr) ? arr.some(anyPrice) : arr !== null && arr !== undefined;
   const current = () => priceAt(s.li, s.bi, s.lai, s.ti, gposOf(), s.fi);
@@ -668,7 +703,8 @@ async function openBuiltPicker(p) {
     const isLace = table.kind === 'lace', isBundles = table.kind === 'bundles', isUnit = table.kind === 'unit';
 
     html += step(n++, isLace ? 'Length of hair' : 'Length', o.lengths.map((l, i) => {
-      const from = lowest(table.prices[i]);
+      let from = lowest(table.prices[i]);
+      if (from !== null) from = salePrice(p, from);
       return btn(`${l}"`, i === s.li, `_bp.set('li',${i})`, from === null, from !== null ? `from ${currency}${Math.round(from)}` : '');
     }).join(''));
 
@@ -684,10 +720,10 @@ async function openBuiltPicker(p) {
           <button type="button" onclick="_bp.step(1)" ${canUp ? '' : 'disabled'} aria-label="One more bundle">+</button>
           ${total !== null ? `<span class="bp-each">${money(total / qty)} per bundle</span>` : ''}
         </div>
-        <div style="font-size:0.72rem;color:var(--gray-400);margin-top:6px;">Choose ${o.bundleCounts[0]}–${o.bundleCounts[o.bundleCounts.length - 1]} bundles</div></div>`;
+        <div style="font-size:0.72rem;color:var(--gray-400);margin-top:6px;">${qty} bundle${qty > 1 ? 's' : ''} = ${qty * 100}g · choose ${o.bundleCounts[0]}–${o.bundleCounts[o.bundleCounts.length - 1]} bundles</div></div>`;
     } else if (!isLace && o.bundleCounts.length > 1) {
       html += step(n++, isBundles ? 'Number of bundles' : 'Bundles', o.bundleCounts.map((b, i) =>
-        btn(`${b} bundle${b > 1 ? 's' : ''}`, i === s.bi, `_bp.set('bi',${i})`, !anyPrice(table.prices[s.li]?.[i]))).join(''));
+        btn(`${b} bundle${b > 1 ? 's' : ''}`, i === s.bi, `_bp.set('bi',${i})`, !anyPrice(table.prices[s.li]?.[i]), `${b * 100}g`)).join(''));
     }
     if (!isBundles) {
       html += step(n++, isLace ? 'Closure / frontal size' : 'Closure or frontal', o.laces.map((la, i) => {
@@ -695,9 +731,12 @@ async function openBuiltPicker(p) {
         return btn(la, i === s.lai, `_bp.set('lai',${i})`, v === null, la.startsWith('13') ? 'frontal' : 'closure');
       }).join(''));
     }
+    if (laceTypes.length) {
+      html += step(n++, 'Lace type', laceTypes.map(t => btn(escHtml(t), t === s.laceType, `_bp.pick('laceType','${t}')`, false, t === 'HD' ? 'melts into all skin tones' : 'stronger, light–medium skin')).join(''));
+    }
     if (o.textures.length > 1) {
       html += step(n++, 'Texture', o.textures.map((t, i) => {
-        const v = priceAt(s.li, s.bi, s.lai, i, gposOf(), s.fi), base = priceAt(s.li, s.bi, s.lai, 0, gposOf(), s.fi);
+        const v = priceAt(s.li, s.bi, s.lai, i, gposOf(), s.fi), base = lowest(o.textures.map((_, j) => priceAt(s.li, s.bi, s.lai, j, gposOf(), s.fi)));
         return btn(escHtml(t), i === s.ti, `_bp.set('ti',${i})`, v === null, v !== null && base !== null && v > base ? `+${currency}${Math.round(v - base)}` : '');
       }).join(''));
     }
@@ -734,31 +773,46 @@ async function openBuiltPicker(p) {
         }).join('') + `</div>`;
     }
 
+    // Cap size: only when the hair is made into a wig
+    if (needsCap()) {
+      html += step(n++, 'Cap size', capSizes.map(c => btn({ S: 'Small', M: 'Medium', L: 'Large' }[c], c === s.cap, `_bp.pick('cap','${c}')`, false, { S: '21"', M: '22" · most people', L: '23"' }[c])).join(''));
+    }
+
     const price = current();
+    const raw = table.prices?.[s.li]?.[s.bi]?.[s.lai]?.[s.ti]?.[gposOf()]?.[s.fi];
+    const dispatch = dispatchInfo(p);
     html += `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin:6px 0 14px;">
-        <span style="font-size:0.85rem;color:var(--gray-500);">Price</span>
-        <span style="font-family:var(--font-head);font-size:1.4rem;color:var(--gold-dark);font-weight:700;">${price !== null ? money(price) : '—'}</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:6px 0 4px;">
+        <span style="font-size:0.85rem;color:var(--gray-500);">Price${salePercent(p) ? ` <span class="sale-badge">${salePercent(p)}% off</span>` : ''}</span>
+        <span style="font-family:var(--font-head);font-size:1.4rem;color:var(--gold-dark);font-weight:700;">${price !== null ? `${salePercent(p) ? `<s class="price-was">${money(raw)}</s> ` : ''}${money(price)}` : '—'}</span>
       </div>
-      <button class="btn btn-primary btn-full" ${price === null ? 'disabled' : ''} onclick="_bp.add()">Add to Bag</button>
+      ${payInThreeHTML()}
+      ${dispatch ? `<p class="picker-dispatch"><strong>${dispatch.title}</strong> · ${escHtml(dispatch.text)}</p>` : ''}
+      <button class="btn btn-primary btn-full" style="margin-top:10px;" ${price === null ? 'disabled' : ''} onclick="_bp.add()">Add to Bag</button>
+      <p class="picker-guide-link"><a href="${productUrl(p)}#guides" onclick="document.getElementById('_variantModal')?.remove()">Length, lace &amp; cap size guide</a></p>
       ${pickerSocialLine(p.name)}`;
     modal.querySelector('#bpBody').innerHTML = html;
   }
 
+  function needsCap() { return table.kind === 'unit' && capSizes.length > 0 && o.finishes[s.fi] !== 'loose'; }
+
+  // Same wording as quoteBuilt() in js/pricing.js (the server's version goes on the order)
   function label() {
-    const len = o.lengths[s.li], la = o.laces[s.lai];
+    const len = o.lengths[s.li], la = o.laces[s.lai], b = o.bundleCounts[s.bi];
     return [
       `${len}"`,
-      table.kind === 'lace' ? null : `${o.bundleCounts[s.bi]} bundle${o.bundleCounts[s.bi] > 1 ? 's' : ''}`,
-      table.kind === 'bundles' ? null : `${table.kind === 'lace' ? '' : `${Math.min(len, 28)}" `}${la} ${la.startsWith('13') ? 'frontal' : 'closure'}`.trim(),
+      table.kind === 'lace' ? null : `${b} bundle${b > 1 ? 's' : ''} (${b * 100}g)`,
+      table.kind === 'bundles' ? null : `${table.kind === 'lace' ? '' : `${Math.min(len, 28)}" `}${la}${laceTypes.length ? ` ${s.laceType}` : ''} ${la.startsWith('13') ? 'frontal' : 'closure'}`.trim(),
       o.textures[s.ti],
       cfg.colourMode === 'fixed' ? cfg.fixedColour?.name : s.colour,
       table.kind === 'unit' ? FINISH_LABELS[o.finishes[s.fi]] : null,
+      needsCap() ? { S: 'Small cap (21")', M: 'Medium cap (22")', L: 'Large cap (23")' }[s.cap] : null,
     ].filter(Boolean).join(' · ');
   }
 
   window._bp = {
     set(k, v) { s[k] = v; render(); },
+    pick(k, v) { s[k] = v; render(); },
     colour(c) { s.colour = c; render(); },
     // − / + bundle counter: move to the next count that has a price
     step(dir) {
@@ -778,7 +832,8 @@ async function openBuiltPicker(p) {
       const price = current();
       if (price === null) return;
       const key = ['B', o.lengths[s.li], table.kind === 'lace' ? 0 : o.bundleCounts[s.bi], table.kind === 'bundles' ? '-' : o.laces[s.lai],
-                   o.textures[s.ti], cfg.colourMode === 'fixed' ? '-' : s.colour, table.kind === 'unit' ? o.finishes[s.fi] : '-'].join('|');
+                   o.textures[s.ti], cfg.colourMode === 'fixed' ? '-' : s.colour, table.kind === 'unit' ? o.finishes[s.fi] : '-',
+                   needsCap() ? s.cap : '-', laceTypes.length ? s.laceType : '-'].join('|');
       Store.addToCart(p.id, 1, { key, label: label(), price });
       modal.remove();
       openCart();
@@ -831,7 +886,7 @@ function openVariantModal(productId) {
     return null;
   }
   function buildLabel() {
-    if (vtype === 'bundle')  return `${selInches}" · ${selBundles} Bundle${selBundles>1?'s':''} · ${selColour}`;
+    if (vtype === 'bundle')  return `${selInches}" · ${selBundles} Bundle${selBundles>1?'s':''} (${selBundles * 100}g) · ${selColour}`;
     if (vtype === 'wig' || vtype === 'big-wig') {
       const parts = [`${selInches}" · ${selLace} HD Lace`];
       if (selAttachment) parts.push(selAttachment);
@@ -844,7 +899,8 @@ function openVariantModal(productId) {
   }
   function currentPrice() {
     const k = buildKey();
-    return k !== null ? (v.prices?.[k] ?? null) : null;
+    const raw = k !== null ? (v.prices?.[k] ?? null) : null;
+    return raw === null || raw === '' ? null : salePrice(p, raw);   // the server applies the same sale
   }
 
   // ── Render ────────────────────────────────────────────────────
@@ -879,7 +935,7 @@ function openVariantModal(productId) {
         s2.style.display = '';
         if (vtype === 'bundle') {
           modal.querySelector('#vmStep2Btns').innerHTML = bundleOpts(selInches).filter(b => hasKey(`${selInches}-${b}`)).map(b =>
-            `<button class="variant-opt-btn${selBundles===b?' selected':''}" onclick="_vmSel2(${b})">${b} Bundles</button>`
+            `<button class="variant-opt-btn${selBundles===b?' selected':''}" onclick="_vmSel2(${b})">${b} Bundles <span style="font-size:0.7rem;opacity:0.75;">(${b * 100}g)</span></button>`
           ).join('');
         } else {
           // wig / big-wig → lace sizes
@@ -937,6 +993,8 @@ function openVariantModal(productId) {
 
     const total = price !== null ? price + (canStyle && selStyling ? stylingFee : 0) : null;
     modal.querySelector('#vmPrice').textContent = total !== null ? `${currency}${total.toFixed(2)}` : '—';
+    const saleTag = modal.querySelector('#vmSale');
+    if (saleTag) saleTag.textContent = salePercent(p) ? `${salePercent(p)}% off` : '';
     modal.querySelector('#vmAddBtn').disabled = price === null || !selColour;
   }
 
@@ -1005,12 +1063,15 @@ function openVariantModal(productId) {
         </label>
       </div>` : ''}
 
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <span style="font-size:0.85rem;color:var(--gray-500);">Price</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <span style="font-size:0.85rem;color:var(--gray-500);">Price ${salePercent(p) ? `<span class="sale-badge" id="vmSale"></span>` : ''}</span>
         <span id="vmPrice" style="font-family:var(--font-head);font-size:1.3rem;color:var(--gold-dark);font-weight:700;">—</span>
       </div>
+      ${payInThreeHTML()}
+      ${dispatchInfo(p) ? `<p class="picker-dispatch"><strong>${dispatchInfo(p).title}</strong> · ${escHtml(dispatchInfo(p).text)}</p>` : ''}
 
-      <button id="vmAddBtn" disabled class="btn btn-primary btn-full" onclick="_vmAddToCart('${productId}')">Add to Bag</button>
+      <button id="vmAddBtn" disabled class="btn btn-primary btn-full" style="margin-top:12px;" onclick="_vmAddToCart('${productId}')">Add to Bag</button>
+      <p class="picker-guide-link"><a href="${productUrl(p)}#guides" onclick="document.getElementById('_variantModal')?.remove()">Length, lace &amp; cap size guide</a></p>
       ${pickerSocialLine(p.name)}
     </div>`;
 

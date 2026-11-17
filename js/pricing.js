@@ -262,6 +262,17 @@
   const COLOUR_GROUPS = [COLOUR_NATURAL, COLOUR_MID, COLOUR_HIGH];
   const MAX_LACE_LENGTH = LACE_LENGTHS[LACE_LENGTHS.length - 1];
   const BUNDLE_QTY_RANGE = Array.from({ length: 40 }, (_, i) => i + 1);   // bundles on their own: 1–40
+  // Free choices that tell us how to make the piece (they don't change the price)
+  const CAP_SIZES  = { S: 'Small cap (21")', M: 'Medium cap (22")', L: 'Large cap (23")' };
+  const LACE_TYPES = ['HD', 'Transparent'];
+  const GRAMS_PER_BUNDLE = 100;
+  const bundleText = n => `${n} bundle${Number(n) > 1 ? 's' : ''} (${Number(n) * GRAMS_PER_BUNDLE}g)`;
+  // Sale price: whole-percent off, to the penny. Shared by the shop and the server so they always agree.
+  const salePercentOf = details => {
+    const n = Math.round(Number(details?.salePercent));
+    return Number.isFinite(n) && n > 0 && n <= 90 ? n : 0;
+  };
+  const applySale = (price, pct) => (pct ? Math.round(Number(price) * (100 - pct)) / 100 : Number(price));
 
   // Which supplier colour surcharge a colour code falls under
   function colourGroup(code) {
@@ -302,6 +313,11 @@
       colours: (Array.isArray(s.colours) ? s.colours : []).map(c => String(c).trim().slice(0, 20)).filter(Boolean).slice(0, 80),
       fixedColour: null,
       finishes: kind === 'unit' ? pick(s.finishes, Object.keys(FINISHES), Object.keys(FINISHES)) : [],
+      // Cap size: units made into wigs (all three sizes unless the admin says otherwise)
+      capSizes: kind !== 'unit' ? [] : Array.isArray(s.capSizes)
+        ? Object.keys(CAP_SIZES).filter(c => s.capSizes.includes(c)) : Object.keys(CAP_SIZES),
+      // Lace type (HD / Transparent): off unless the admin turns it on
+      laceTypes: kind === 'bundles' ? [] : LACE_TYPES.filter(t => (Array.isArray(s.laceTypes) ? s.laceTypes : []).includes(t)),
     };
     if (cfg.colourMode === 'fixed') {
       const code = String(s.fixedColour?.code || '').trim().slice(0, 20);
@@ -387,33 +403,41 @@
       if (!code || (cfg.colours.length && !cfg.colours.includes(code))) return { error: 'Please choose an available colour.' };
       colourName = code;
     }
+    const needsCap = cfg.kind === 'unit' && s.finish !== 'loose' && cfg.capSizes.length > 0;
+    if (needsCap && !cfg.capSizes.includes(s.cap)) return { error: 'Please choose a cap size.' };
+    if (cfg.laceTypes.length && !cfg.laceTypes.includes(s.laceType)) return { error: 'Please choose a lace type.' };
     const r = computeUnit(pricing, builtSelection(cfg, s));
     if (r.error || r.sellGbp === null) return { error: 'This option is not available right now.' };
     const lace = cfg.kind === 'bundles' ? null : s.lace;
     const laceKind = lace ? (laceTable(pricing, lace)?.kind || 'lace') : null;
+    const laceType = cfg.laceTypes.length ? ` ${s.laceType}` : '';
     const parts = [
       `${len}"`,
-      cfg.kind === 'lace' ? null : `${s.bundles} bundle${Number(s.bundles) > 1 ? 's' : ''}`,
-      lace ? `${cfg.kind === 'lace' ? '' : `${laceLengthFor(len)}" `}${lace} ${laceKind}`.trim() : null,
+      cfg.kind === 'lace' ? null : bundleText(s.bundles),
+      lace ? `${cfg.kind === 'lace' ? '' : `${laceLengthFor(len)}" `}${lace}${laceType} ${laceKind}`.trim() : null,
       s.texture,
       colourName,
       cfg.kind === 'unit' ? FINISHES[s.finish] : null,
+      needsCap ? CAP_SIZES[s.cap] : null,
     ].filter(Boolean);
     return { price: r.sellGbp, label: parts.join(' · ') };
   }
 
-  // Cart key for a built item: B|length|bundles|lace|texture|colour|finish
-  const builtKey = s => ['B', s.length, s.bundles ?? 0, s.lace || '-', s.texture, s.colour || '-', s.finish || '-'].join('|');
+  // Cart key for a built item: B|length|bundles|lace|texture|colour|finish|cap|laceType
+  // (older carts have the first 7 parts only)
+  const builtKey = s => ['B', s.length, s.bundles ?? 0, s.lace || '-', s.texture, s.colour || '-', s.finish || '-', s.cap || '-', s.laceType || '-'].join('|');
   function parseBuiltKey(key) {
     const parts = String(key || '').split('|');
-    if (parts.length !== 7 || parts[0] !== 'B') return null;
-    return { length: Number(parts[1]), bundles: Number(parts[2]), lace: parts[3] === '-' ? null : parts[3], texture: parts[4], colour: parts[5] === '-' ? null : parts[5], finish: parts[6] === '-' ? null : parts[6] };
+    if ((parts.length !== 7 && parts.length !== 9) || parts[0] !== 'B') return null;
+    const opt = i => (parts[i] === undefined || parts[i] === '-') ? null : parts[i];
+    return { length: Number(parts[1]), bundles: Number(parts[2]), lace: opt(3), texture: parts[4], colour: opt(5), finish: opt(6), cap: opt(7), laceType: opt(8) };
   }
 
   const api = {
     DEFAULT_PRICING, WEFT_LENGTHS, LACE_LENGTHS, GRADE_LABELS, FINISHES, TEXTURES, COLOUR_GROUPS,
     computeUnit, laceTable, sanitizePricing,
     colourGroup, sanitizeBuiltConfig, buildPriceTable, quoteBuilt, builtKey, parseBuiltKey, laceLengthFor, BUNDLE_QTY_RANGE,
+    CAP_SIZES, LACE_TYPES, GRAMS_PER_BUNDLE, bundleText, salePercentOf, applySale,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Pricing = api;
