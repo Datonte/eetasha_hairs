@@ -141,7 +141,7 @@
               <label class="form-label">Delivery Fee (£)</label>
               <input type="number" class="form-input" id="setDeliveryFee" placeholder="5.99" step="0.01" min="0">
             </div>
-            <h3 class="serif mt-3 mb-2" style="font-size:1.1rem;">Pay in 3 (Klarna)</h3>
+            <h3 class="serif mt-3 mb-2" style="font-size:1.1rem;">Pay later (Klarna &amp; Clearpay)</h3>
             <div class="form-group" style="display:flex;align-items:flex-start;gap:12px;">
               <label class="toggle" style="flex-shrink:0;">
                 <input type="checkbox" id="setPayInThree">
@@ -150,6 +150,15 @@
               </label>
               <span style="font-size:0.85rem;line-height:1.6;"><strong>Offer "Pay in 3 interest-free instalments"</strong><br>
                 <span style="color:var(--gray-500);">First switch on Klarna in your Stripe dashboard (Settings → Payment methods → Klarna). You are paid in full straight away; the customer pays Klarna back in instalments. Until Klarna is on in Stripe, customers simply pay by card.</span></span>
+            </div>
+            <div class="form-group" style="display:flex;align-items:flex-start;gap:12px;">
+              <label class="toggle" style="flex-shrink:0;">
+                <input type="checkbox" id="setClearpay">
+                <span class="toggle-track"></span>
+                <span class="toggle-thumb"></span>
+              </label>
+              <span style="font-size:0.85rem;line-height:1.6;"><strong>Offer Clearpay "Pay in 4" (UK orders only)</strong><br>
+                <span style="color:var(--gray-500);">First switch on Clearpay in your Stripe dashboard (Settings → Payment methods → Afterpay / Clearpay). The customer pays in 4 parts over 6 weeks; you are paid in full straight away. It shows on UK orders whose address includes a postcode. Clearpay has a maximum order size, so very large orders get card (or Klarna) instead.</span></span>
             </div>
             <button type="submit" class="btn btn-primary mt-2">Save Settings</button>
           </form>
@@ -812,7 +821,7 @@
     // Payment badge: what the shop owner needs to know before dispatching
     function paymentBadge(o) {
       const base = 'display:inline-block;padding:3px 9px;border-radius:12px;font-size:0.7rem;font-weight:700;letter-spacing:0.03em;';
-      if (o.payment_status === 'paid')  return `<span style="${base}background:#d4edda;color:#155724;">✓ PAID${o.payment_method === 'stripe' ? ' · CARD' : ' · TRANSFER'}</span>`;
+      if (o.payment_status === 'paid')  return `<span style="${base}background:#d4edda;color:#155724;">✓ PAID${o.payment_method === 'stripe' ? ' · ONLINE' : ' · TRANSFER'}</span>`;
       if (o.payment_method === 'transfer') return `<span style="${base}background:#fef3cd;color:#856404;">AWAITING TRANSFER</span>`;
       if (o.payment_status === 'expired')  return `<span style="${base}background:#eee;color:#777;">CARD CHECKOUT ABANDONED</span>`;
       return `<span style="${base}background:#eee;color:#777;">CARD NOT PAID YET</span>`;
@@ -1131,9 +1140,20 @@
     }
 
     async function updateOrderStatus(id, status) {
+      const body = { status };
+      const order = (_adminOrders || []).find(o => String(o.id) === String(id));
+      if (status === 'shipped' && order?.order_status !== 'shipped') {
+        // Marking as shipped emails the customer — add the tracking number if there is one
+        const t = prompt('Marking as shipped emails the customer that their order is on its way.\n\nTracking number (optional — leave empty if you don\'t have one):', '');
+        if (t === null) { await loadAdminOrders(); return; }   // cancelled: put the dropdown back
+        body.trackingNumber = t.trim();
+      }
       try {
-        await API.put(`/api/orders/${id}/status`, { status });
-        Toast.show(`Order updated → ${status.charAt(0).toUpperCase() + status.slice(1)}`, 'success');
+        const res = await API.put(`/api/orders/${id}/status`, body);
+        if (res?.emailed) Toast.show('Marked as shipped — the customer has been emailed.', 'success');
+        else if ('trackingNumber' in body) Toast.show('Marked as shipped, but the email could not be sent — please message the customer yourself.', 'error');
+        else Toast.show(`Order updated → ${status.charAt(0).toUpperCase() + status.slice(1)}`, 'success');
+        await loadAdminOrders();
         await loadAdminStats();
       } catch (err) { Toast.show(err.message, 'error'); }
     }
@@ -1179,6 +1199,7 @@
         document.getElementById('setAccountNumber').value= s.accountNumber || '';
         document.getElementById('setDeliveryFee').value  = s.deliveryFee   ?? 5.99;
         document.getElementById('setPayInThree').checked = !!s.payInThree;
+        document.getElementById('setClearpay').checked   = !!s.clearpay;
       } catch {}
       restoreSettingsState(); // overlay any unsaved local edits on top of DB values
     }
@@ -1195,6 +1216,7 @@
           accountNumber: document.getElementById('setAccountNumber').value.trim(),
           deliveryFee:   parseFloat(document.getElementById('setDeliveryFee').value) || 0,
           payInThree:    document.getElementById('setPayInThree').checked,
+          clearpay:      document.getElementById('setClearpay').checked,
         });
         clearSettingsState();
         if (res?.notice) Toast.show(res.notice, 'info');

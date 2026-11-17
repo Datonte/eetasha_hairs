@@ -468,8 +468,13 @@ function priceWithSaleHTML(p, original) {
   const now = salePrice(p, original);
   return `${currency}${now.toFixed(2)}${salePercent(p) ? ` <s class="price-was">${currency}${Number(original).toFixed(2)}</s>` : ''}`;
 }
+// "Or pay in instalments" line — must match payLaterText() in server.js
 function payInThreeHTML() {
-  return State.settings.payInThree ? `<p class="pay-in-3">Or pay in 3 interest-free instalments with Klarna</p>` : '';
+  const k = !!State.settings.payInThree, c = !!State.settings.clearpay;
+  const text = k && c ? 'Or pay in interest-free instalments with Klarna (3) or Clearpay (4, UK)'
+    : k ? 'Or pay in 3 interest-free instalments with Klarna'
+    : c ? 'Or pay in 4 interest-free instalments with Clearpay (UK)' : '';
+  return text ? `<p class="pay-in-3">${text}</p>` : '';
 }
 
 function productCardHTML(p) {

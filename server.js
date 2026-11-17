@@ -55,122 +55,239 @@ function escEmail(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// kind: 'paid'     → payment received (card paid, or bank transfer marked paid by admin)
-//       'transfer' → order placed, waiting for the customer's bank transfer
+// ---------- Customer emails (receipt + "on its way") ----------
+// Email apps (Gmail, Outlook, Apple Mail) ignore modern CSS like flexbox, so the
+// layout uses tables and inline styles only. Every email also has a plain-text version.
+const SHOP_EMAIL   = 'eetasha.collection@gmail.com';
+const EMAIL_FROM   = 'eetashacollection <noreply@eetashacollection.com>';
+const siteUrl      = () => (process.env.PUBLIC_SITE_URL || 'https://eetashacollection.com').trim().replace(/\/+$/, '');
+const gbp          = n => `£${(Number(n) || 0).toFixed(2)}`;
+const ukDate       = d => new Date(d || Date.now()).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/London' });
+const F            = 'font-family:Arial,Helvetica,sans-serif;';
+
+async function shopContacts() {
+  const { data } = await supabase.from('settings').select('whatsapp, instagram, bank_name, sort_code, account_number, account_name').eq('id', 1).single();
+  return {
+    whatsapp:  data?.whatsapp || '',
+    instagram: data?.instagram || '@eetashacollection',
+    bank: data || {},
+  };
+}
+
+function emailLayout({ preheader, heading, intro, content, contacts }) {
+  const wa = (contacts.whatsapp || '').replace(/[^0-9]/g, '');
+  const ig = (contacts.instagram || '').replace(/^@/, '');
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escEmail(heading)}</title></head>
+<body style="margin:0;padding:0;background:#faf9f7;">
+<span style="display:none;max-height:0;overflow:hidden;opacity:0;">${escEmail(preheader)}</span>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#faf9f7;"><tr><td align="center" style="padding:24px 12px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;background:#ffffff;border-radius:12px;">
+    <tr><td style="background:#1a1a1a;padding:28px;text-align:center;border-radius:12px 12px 0 0;">
+      <div style="font-family:Georgia,serif;color:#c9a84c;font-size:22px;letter-spacing:2px;text-transform:uppercase;">eetashacollection</div>
+      <div style="${F}color:#999999;font-size:13px;margin-top:6px;">Luxury Hair Collection</div>
+    </td></tr>
+    <tr><td style="padding:32px 28px;">
+      <h1 style="margin:0 0 8px;font-family:Georgia,serif;color:#1a1a1a;font-size:21px;font-weight:normal;">${escEmail(heading)}</h1>
+      <p style="margin:0 0 24px;${F}color:#555555;font-size:14px;line-height:1.6;">${intro}</p>
+      ${content}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;background:#faf9f7;border:1px solid #f0ede8;border-radius:8px;"><tr><td style="padding:16px 20px;${F}font-size:14px;color:#555555;line-height:1.9;">
+        <div style="font-size:11px;color:#999999;text-transform:uppercase;letter-spacing:1px;">Need help with your order?</div>
+        ${wa ? `WhatsApp: <a href="https://wa.me/${wa}" style="color:#9b7a2a;">${escEmail(contacts.whatsapp)}</a><br>` : ''}
+        Email: <a href="mailto:${SHOP_EMAIL}" style="color:#9b7a2a;">${SHOP_EMAIL}</a> (or just reply to this email)<br>
+        ${ig ? `Instagram: <a href="https://instagram.com/${escEmail(ig)}" style="color:#9b7a2a;">@${escEmail(ig)}</a>` : ''}
+      </td></tr></table>
+    </td></tr>
+    <tr><td style="padding:18px 28px;text-align:center;border-top:1px solid #f0ede8;${F}font-size:12px;color:#aaaaaa;line-height:1.7;">
+      <a href="${siteUrl()}" style="color:#9b7a2a;">eetashacollection.com</a> · <a href="${siteUrl()}/returns" style="color:#9b7a2a;">Returns policy</a><br>
+      © ${new Date().getFullYear()} eetashacollection
+    </td></tr>
+  </table>
+</td></tr></table>
+</body></html>`;
+}
+
+// Items, totals, payment and delivery details — the receipt itself
+function receiptHtml(order, paymentText, amountLabel) {
+  const cell = 'padding:10px 0;border-bottom:1px solid #f0ede8;font-size:14px;vertical-align:top;';
+  const head = `text-align:left;${F}font-size:11px;color:#999999;text-transform:uppercase;letter-spacing:1px;padding-bottom:8px;border-bottom:2px solid #f0ede8;`;
+  const items = (order.items || []).map(i => `<tr>
+      <td style="${cell}${F}color:#1a1a1a;">${escEmail(i.product_name)}${i.variant_label ? `<br><span style="color:#9b8860;font-size:12px;">${escEmail(i.variant_label)}</span>` : ''}</td>
+      <td style="${cell}${F}text-align:center;color:#555555;white-space:nowrap;padding-left:14px;padding-right:14px;">× ${Number(i.quantity) || 1}</td>
+      <td style="${cell}${F}text-align:right;color:#1a1a1a;white-space:nowrap;padding-left:8px;">${gbp(Number(i.price) * (Number(i.quantity) || 1))}</td>
+    </tr>`).join('');
+  const row = (label, value, strong) => `<tr>
+      <td style="${F}padding:4px 0;font-size:${strong ? 16 : 14}px;color:${strong ? '#1a1a1a' : '#555555'};${strong ? 'font-weight:bold;' : ''}">${label}</td>
+      <td style="${F}padding:4px 0;font-size:${strong ? 16 : 14}px;text-align:right;color:${strong ? '#9b7a2a' : '#555555'};${strong ? 'font-weight:bold;' : ''}">${value}</td></tr>`;
+  const deliveryFee = Number(order.delivery_fee) || 0;
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#faf9f7;border-radius:8px;margin-bottom:22px;"><tr>
+      <td style="padding:14px 18px;${F}font-size:13px;color:#555555;line-height:1.8;">
+        <strong style="color:#1a1a1a;">Order ${escEmail(order.order_number)}</strong><br>
+        Date: ${ukDate(order.created_at)}<br>
+        Payment: ${escEmail(paymentText)}
+      </td></tr></table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px;">
+      <tr><th style="${head}">Item</th><th style="${head}text-align:center;padding-left:14px;padding-right:14px;">Qty</th><th style="${head}text-align:right;">Price</th></tr>
+      ${items}
+    </table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+      ${row('Subtotal', gbp(order.subtotal))}
+      ${row(`Delivery${order.delivery_carrier ? `<br><span style="font-size:12px;color:#999999;">${escEmail(order.delivery_carrier)}</span>` : ''}`, deliveryFee ? gbp(deliveryFee) : 'FREE')}
+      ${row(amountLabel, gbp(order.total), true)}
+    </table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:22px;border:1px solid #f0ede8;border-radius:8px;"><tr>
+      <td style="padding:14px 18px;${F}font-size:14px;color:#333333;line-height:1.6;">
+        <div style="font-size:11px;color:#999999;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Delivering to</div>
+        <strong>${escEmail(order.customer_name)}</strong><br>
+        <span style="white-space:pre-line;">${escEmail(order.delivery_address)}</span><br>
+        <span style="color:#777777;">${escEmail(order.customer_phone || '')}</span>
+      </td></tr></table>`;
+}
+
+function receiptText(order, paymentText, amountLabel) {
+  const lines = (order.items || []).map(i => `- ${i.product_name}${i.variant_label ? ` (${i.variant_label})` : ''} x${Number(i.quantity) || 1}: ${gbp(Number(i.price) * (Number(i.quantity) || 1))}`);
+  return [
+    `Order ${order.order_number}`, `Date: ${ukDate(order.created_at)}`, `Payment: ${paymentText}`, '',
+    ...lines, '',
+    `Subtotal: ${gbp(order.subtotal)}`,
+    `Delivery${order.delivery_carrier ? ` (${order.delivery_carrier})` : ''}: ${Number(order.delivery_fee) ? gbp(order.delivery_fee) : 'FREE'}`,
+    `${amountLabel}: ${gbp(order.total)}`, '',
+    'Delivering to:', order.customer_name, order.delivery_address, '',
+  ].join('\n');
+}
+
+function contactsText(contacts) {
+  return [
+    'Need help? ' + [contacts.whatsapp && `WhatsApp ${contacts.whatsapp}`, `email ${SHOP_EMAIL} (or reply to this email)`, contacts.instagram && `Instagram ${contacts.instagram}`].filter(Boolean).join(' · '),
+    `${siteUrl()} · Returns policy: ${siteUrl()}/returns`,
+  ].join('\n');
+}
+
+// kind: 'paid'     → payment received: this is the customer's receipt (card, or bank transfer marked paid by admin)
+//       'transfer' → order placed, waiting for the customer's bank transfer (includes the bank details)
 async function sendOrderConfirmationEmail(order, kind = 'paid') {
   if (!hasResend) return;
   try {
-    // Fetch contact + bank details from settings
-    const { data: settings } = await supabase.from('settings')
-      .select('whatsapp, instagram, bank_name, sort_code, account_number, account_name').eq('id', 1).single();
-    order.whatsapp  = settings?.whatsapp  || '';
-    order.instagram = settings?.instagram || '@eetashacollection';
+    const contacts = await shopContacts();
     const awaitingTransfer = kind === 'transfer';
+    const paymentText = order.payment_method === 'transfer'
+      ? (awaitingTransfer ? 'Bank transfer — awaiting payment' : 'Bank transfer — paid')
+      : 'Paid online';
+    const amountLabel = awaitingTransfer ? 'Total to pay' : 'Total paid';
+    const b = contacts.bank;
+
     const bankHtml = awaitingTransfer ? `
-      <div style="margin-bottom:24px;padding:16px 20px;border:2px solid #c9a84c;border-radius:8px;font-family:Arial,sans-serif;">
-        <p style="margin:0 0 10px;font-size:13px;color:#1a1a1a;font-weight:bold;">Please pay by bank transfer to complete your order</p>
-        <p style="margin:0 0 4px;font-size:14px;color:#555;">Bank: <strong>${escEmail(settings?.bank_name || '')}</strong></p>
-        <p style="margin:0 0 4px;font-size:14px;color:#555;">Account name: <strong>${escEmail(settings?.account_name || '')}</strong></p>
-        <p style="margin:0 0 4px;font-size:14px;color:#555;">Sort code: <strong>${escEmail(settings?.sort_code || '')}</strong></p>
-        <p style="margin:0 0 4px;font-size:14px;color:#555;">Account number: <strong>${escEmail(settings?.account_number || '')}</strong></p>
-        <p style="margin:0 0 4px;font-size:14px;color:#555;">Amount: <strong>£${Number(order.total).toFixed(2)}</strong></p>
-        <p style="margin:0;font-size:14px;color:#555;">Reference: <strong>${escEmail(order.order_number)}</strong></p>
-        <p style="margin:10px 0 0;font-size:12px;color:#999;">We'll confirm and prepare your order as soon as the payment arrives.</p>
-      </div>` : '';
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;border:2px solid #c9a84c;border-radius:8px;"><tr>
+        <td style="padding:16px 20px;${F}font-size:14px;color:#555555;line-height:1.8;">
+          <strong style="color:#1a1a1a;">Please pay by bank transfer to complete your order</strong><br>
+          Bank: <strong>${escEmail(b.bank_name || '')}</strong><br>
+          Account name: <strong>${escEmail(b.account_name || '')}</strong><br>
+          Sort code: <strong>${escEmail(b.sort_code || '')}</strong><br>
+          Account number: <strong>${escEmail(b.account_number || '')}</strong><br>
+          Amount: <strong>${gbp(order.total)}</strong><br>
+          Reference: <strong>${escEmail(order.order_number)}</strong>
+          <div style="font-size:12px;color:#999999;margin-top:8px;">We'll email you your receipt as soon as the payment arrives, then get your order ready.</div>
+        </td></tr></table>` : '';
 
-    const itemsHtml = (order.items || []).map(i => `
-      <tr>
-        <td style="padding:10px 0;border-bottom:1px solid #f0ede8;font-size:14px;">${escEmail(i.product_name)}${i.variant_label ? `<br><span style="color:#9b8860;font-size:12px;">${escEmail(i.variant_label)}</span>` : ''}</td>
-        <td style="padding:10px 0;border-bottom:1px solid #f0ede8;text-align:center;font-size:14px;">×${i.quantity}</td>
-        <td style="padding:10px 0;border-bottom:1px solid #f0ede8;text-align:right;font-size:14px;">£${(i.price * i.quantity).toFixed(2)}</td>
-      </tr>`).join('');
+    const intro = awaitingTransfer
+      ? `Hi ${escEmail(order.customer_name)}, thank you for your order. Please complete your bank transfer using the details below.`
+      : `Hi ${escEmail(order.customer_name)}, thank you for shopping with us. Your payment has been received, and this email is your receipt. We'll email you again when your order is on its way.`;
 
-    const html = `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#faf9f7;font-family:Georgia,serif;">
-  <div style="max-width:580px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.08);">
-
-    <!-- Header -->
-    <div style="background:#1a1a1a;padding:32px;text-align:center;">
-      <h1 style="margin:0;color:#c9a84c;font-size:22px;letter-spacing:2px;text-transform:uppercase;">eetashacollection</h1>
-      <p style="margin:8px 0 0;color:#999;font-size:13px;font-family:Arial,sans-serif;">Luxury Hair Collection</p>
-    </div>
-
-    <!-- Body -->
-    <div style="padding:36px 32px;">
-      <h2 style="margin:0 0 6px;color:#1a1a1a;font-size:20px;">${awaitingTransfer ? 'Order Received' : 'Order Confirmed! 🎉'}</h2>
-      <p style="margin:0 0 24px;color:#666;font-size:14px;font-family:Arial,sans-serif;">Hi ${escEmail(order.customer_name)}, ${awaitingTransfer
-        ? 'thank you for your order. Please complete your bank transfer using the details below.'
-        : "thank you — your payment has been received and we'll get your order ready for dispatch soon."}</p>
-      ${bankHtml}
-
-      <div style="background:#faf9f7;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
-        <p style="margin:0;font-size:13px;font-family:Arial,sans-serif;color:#666;">Order Reference</p>
-        <p style="margin:4px 0 0;font-size:20px;color:#c9a84c;font-weight:bold;letter-spacing:1px;">${escEmail(order.order_number)}</p>
-      </div>
-
-      <!-- Items -->
-      <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
-        <thead>
-          <tr>
-            <th style="text-align:left;font-size:11px;color:#999;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:1px;padding-bottom:10px;border-bottom:2px solid #f0ede8;">Item</th>
-            <th style="text-align:center;font-size:11px;color:#999;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:1px;padding-bottom:10px;border-bottom:2px solid #f0ede8;">Qty</th>
-            <th style="text-align:right;font-size:11px;color:#999;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:1px;padding-bottom:10px;border-bottom:2px solid #f0ede8;">Price</th>
-          </tr>
-        </thead>
-        <tbody>${itemsHtml}</tbody>
-      </table>
-
-      <!-- Totals -->
-      <div style="border-top:2px solid #f0ede8;padding-top:16px;">
-        <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-family:Arial,sans-serif;font-size:14px;color:#666;">
-          <span>Subtotal</span><span>£${order.subtotal.toFixed(2)}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:12px;font-family:Arial,sans-serif;font-size:14px;color:#666;">
-          <span>Delivery${order.delivery_carrier ? ` (${order.delivery_carrier})` : ''}</span><span>£${order.delivery_fee.toFixed(2)}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;color:#1a1a1a;">
-          <span>Total</span><span style="color:#c9a84c;">£${order.total.toFixed(2)}</span>
-        </div>
-      </div>
-
-      <!-- Delivery address -->
-      <div style="margin-top:24px;padding:16px 20px;border:1px solid #f0ede8;border-radius:8px;">
-        <p style="margin:0 0 6px;font-size:11px;color:#999;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:1px;">Delivering To</p>
-        <p style="margin:0;font-size:14px;color:#333;font-family:Arial,sans-serif;white-space:pre-line;">${escEmail(order.delivery_address)}</p>
-      </div>
-
-      <div style="margin-top:28px;padding:16px 20px;background:#faf9f7;border-radius:8px;border:1px solid #f0ede8;">
-        <p style="margin:0 0 10px;font-size:11px;color:#999;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:1px;">Need help with your order?</p>
-        <p style="margin:0 0 6px;font-size:14px;font-family:Arial,sans-serif;color:#555;">💬 WhatsApp: <a href="https://wa.me/${(order.whatsapp||'').replace(/[^0-9]/g,'')}" style="color:#c9a84c;text-decoration:none;">${escEmail(order.whatsapp||'')}</a></p>
-        <p style="margin:0 0 6px;font-size:14px;font-family:Arial,sans-serif;color:#555;">✉️ Email: <a href="mailto:eetasha.collection@gmail.com" style="color:#c9a84c;text-decoration:none;">eetasha.collection@gmail.com</a></p>
-        <p style="margin:0 0 6px;font-size:14px;font-family:Arial,sans-serif;color:#555;">📸 Instagram: <a href="https://instagram.com/${(order.instagram||'').replace('@','')}" target="_blank" style="color:#c9a84c;text-decoration:none;">${escEmail(order.instagram||'@eetashacollection')}</a></p>
-        <p style="margin:0;font-size:14px;font-family:Arial,sans-serif;color:#555;">📞 Phone: <a href="tel:${escEmail(order.whatsapp||'')}" style="color:#c9a84c;text-decoration:none;">${escEmail(order.whatsapp||'')}</a></p>
-      </div>
-    </div>
-
-    <!-- Footer -->
-    <div style="background:#faf9f7;padding:20px 32px;text-align:center;border-top:1px solid #f0ede8;">
-      <p style="margin:0;font-size:12px;color:#bbb;font-family:Arial,sans-serif;">© ${new Date().getFullYear()} eetashacollection · Luxury Hair Collection</p>
-    </div>
-  </div>
-</body>
-</html>`;
-
-    await resendClient.emails.send({
-      from:    'eetashacollection <noreply@eetashacollection.com>',
-      to:      [order.customer_email],
-      subject: awaitingTransfer
-        ? `Order Received — ${order.order_number} | Complete your bank transfer`
-        : `Order Confirmed — ${order.order_number} | eetashacollection`,
-      html,
+    const html = emailLayout({
+      preheader: awaitingTransfer ? `Order ${order.order_number}: please complete your bank transfer of ${gbp(order.total)}` : `Receipt for order ${order.order_number} — ${gbp(order.total)} paid`,
+      heading:   awaitingTransfer ? 'Order received' : 'Thank you — here is your receipt',
+      intro,
+      content:   bankHtml + receiptHtml(order, paymentText, amountLabel),
+      contacts,
     });
+    const text = [
+      awaitingTransfer ? 'ORDER RECEIVED — please complete your bank transfer' : 'THANK YOU — HERE IS YOUR RECEIPT', '',
+      `Hi ${order.customer_name},`,
+      awaitingTransfer
+        ? `Please pay ${gbp(order.total)} by bank transfer: ${b.bank_name || ''}, account name ${b.account_name || ''}, sort code ${b.sort_code || ''}, account number ${b.account_number || ''}, reference ${order.order_number}.`
+        : 'Your payment has been received. We will email you again when your order is on its way.', '',
+      receiptText(order, paymentText, amountLabel),
+      contactsText(contacts),
+    ].join('\n');
+
+    const { error } = await resendClient.emails.send({
+      from:     EMAIL_FROM,
+      to:       [order.customer_email],
+      replyTo:  SHOP_EMAIL,
+      subject:  awaitingTransfer
+        ? `Order received — ${order.order_number} | Complete your bank transfer`
+        : `Your receipt — order ${order.order_number} | eetashacollection`,
+      html, text,
+    });
+    if (error) throw new Error(error.message || String(error));
     console.log(`  ✅ ${kind} email sent for ${order.order_number}`);
   } catch (err) {
     console.error('  ⚠ Email send failed:', err.message);
     // Non-fatal — order still goes through
+  }
+}
+
+// Tracking links for the carriers we use; anything else just shows the number
+function trackingUrl(carrierText, number) {
+  const c = String(carrierText || '').toLowerCase(), n = encodeURIComponent(number);
+  if (c.includes('royal mail') || c.includes('parcelforce')) return `https://www.royalmail.com/track-your-item#/tracking-results/${n}`;
+  if (c.includes('fedex'))  return `https://www.fedex.com/fedextrack/?trknbr=${n}`;
+  if (c.includes('dpd'))    return `https://track.dpd.co.uk/parcels/${n}`;
+  if (c.includes('evri') || c.includes('hermes')) return `https://www.evri.com/track/parcel/${n}`;
+  if (c.includes('dhl'))    return `https://www.dhl.com/gb-en/home/tracking.html?tracking-id=${n}`;
+  if (c.includes('ups'))    return `https://www.ups.com/track?tracknum=${n}`;
+  return null;
+}
+
+// "Your order is on its way" — sent once, when the admin marks an order as shipped
+async function sendOrderShippedEmail(order, trackingNumber) {
+  if (!hasResend) return false;
+  try {
+    const contacts = await shopContacts();
+    const url = trackingNumber ? trackingUrl(order.delivery_carrier, trackingNumber) : null;
+    const carrier = String(order.delivery_carrier || 'tracked delivery').replace(/ · Tracking .*$/, '');
+    const items = (order.items || []).map(i => `<li style="margin-bottom:6px;">${escEmail(i.product_name)} × ${Number(i.quantity) || 1}${i.variant_label ? `<br><span style="color:#9b8860;font-size:12px;">${escEmail(i.variant_label)}</span>` : ''}</li>`).join('');
+    const content = `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#faf9f7;border-radius:8px;margin-bottom:22px;"><tr>
+        <td style="padding:14px 18px;${F}font-size:14px;color:#555555;line-height:1.8;">
+          <strong style="color:#1a1a1a;">Order ${escEmail(order.order_number)}</strong><br>
+          Sent with: ${escEmail(carrier)}
+          ${trackingNumber ? `<br>Tracking number: <strong style="color:#1a1a1a;">${escEmail(trackingNumber)}</strong>` : ''}
+          ${url ? `<div style="margin-top:12px;"><a href="${escEmail(url)}" style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:13px;">Track your parcel</a></div>` : ''}
+        </td></tr></table>
+      <div style="${F}font-size:11px;color:#999999;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">In this parcel</div>
+      <ul style="${F}font-size:14px;color:#1a1a1a;padding-left:18px;margin:0 0 20px;">${items}</ul>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #f0ede8;border-radius:8px;"><tr>
+        <td style="padding:14px 18px;${F}font-size:14px;color:#333333;line-height:1.6;">
+          <div style="font-size:11px;color:#999999;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Delivering to</div>
+          <span style="white-space:pre-line;">${escEmail(order.delivery_address)}</span>
+        </td></tr></table>`;
+    const html = emailLayout({
+      preheader: `Order ${order.order_number} has been dispatched${trackingNumber ? ` — tracking ${trackingNumber}` : ''}`,
+      heading:   'Your order is on its way',
+      intro:     `Hi ${escEmail(order.customer_name)}, good news — your order has been dispatched. Please keep your hair in its sealed packaging until you're happy with it, as unsealed hair can't be returned.`,
+      content, contacts,
+    });
+    const text = [
+      'YOUR ORDER IS ON ITS WAY', '',
+      `Hi ${order.customer_name}, your order ${order.order_number} has been dispatched with ${carrier}.`,
+      trackingNumber ? `Tracking number: ${trackingNumber}${url ? ` — track it here: ${url}` : ''}` : '',
+      '', ...(order.items || []).map(i => `- ${i.product_name} x${Number(i.quantity) || 1}`), '',
+      'Delivering to:', order.delivery_address, '',
+      contactsText(contacts),
+    ].join('\n');
+    const { error } = await resendClient.emails.send({
+      from: EMAIL_FROM, to: [order.customer_email], replyTo: SHOP_EMAIL,
+      subject: `Your order ${order.order_number} is on its way | eetashacollection`,
+      html, text,
+    });
+    if (error) throw new Error(error.message || String(error));
+    console.log(`  ✅ shipped email sent for ${order.order_number}`);
+    return true;
+  } catch (err) {
+    console.error('  ⚠ Shipped email failed:', err.message);
+    return false;
   }
 }
 
@@ -181,10 +298,11 @@ async function sendAdminOrderEmail(order, kind = 'paid') {
     const to = process.env.ADMIN_NOTIFY_EMAIL || 'eetasha.collection@gmail.com';
     const items = (order.items || []).map(i =>
       `<li style="margin-bottom:6px;"><strong>${escEmail(i.product_name)}</strong> × ${i.quantity} — £${(i.price * i.quantity).toFixed(2)}${i.variant_label ? `<br><span style="color:#775a19;">${escEmail(i.variant_label)}</span>` : ''}</li>`).join('');
-    const status = kind === 'transfer' ? '⏳ Awaiting bank transfer — check your account before dispatching' : '✅ Paid by card';
-    await resendClient.emails.send({
-      from:    'eetashacollection <noreply@eetashacollection.com>',
+    const status = kind === 'transfer' ? '⏳ Awaiting bank transfer — check your account before dispatching' : '✅ Paid online';
+    const { error } = await resendClient.emails.send({
+      from:    EMAIL_FROM,
       to:      [to],
+      replyTo: order.customer_email,   // reply goes straight to the customer
       subject: `${kind === 'transfer' ? 'New order (awaiting transfer)' : 'New paid order'} — ${order.order_number} — £${Number(order.total).toFixed(2)}`,
       html: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#333;max-width:560px;">
         <h2 style="margin:0 0 4px;">${escEmail(order.order_number)} · £${Number(order.total).toFixed(2)}</h2>
@@ -194,9 +312,10 @@ async function sendAdminOrderEmail(order, kind = 'paid') {
         <p style="margin:0 0 4px;">${escEmail(order.customer_email)} · ${escEmail(order.customer_phone)}</p>
         <p style="margin:0 0 4px;white-space:pre-line;">${escEmail(order.delivery_address)}</p>
         <p style="margin:0 0 16px;">Delivery: ${escEmail(order.delivery_carrier || 'Standard')} (£${Number(order.delivery_fee).toFixed(2)})</p>
-        <p style="margin:0;"><a href="${(process.env.PUBLIC_SITE_URL || 'https://eetashacollection.com').trim()}/admin">Open admin dashboard</a></p>
+        <p style="margin:0;"><a href="${siteUrl()}/admin">Open admin dashboard</a></p>
       </div>`,
     });
+    if (error) throw new Error(error.message || String(error));
   } catch (err) {
     console.error('  ⚠ Admin email failed:', err.message);
   }
@@ -972,12 +1091,28 @@ app.get('/api/orders', requireAdmin, async (req, res) => {
 
 app.put('/api/orders/:id/status', requireAdmin, [
   body('status').isIn(['pending', 'confirmed', 'shipped', 'delivered', 'cancelled']).withMessage('Invalid status'),
+  body('trackingNumber').optional({ nullable: true }).isString().isLength({ max: 60 }).withMessage('Tracking number is too long'),
 ], async (req, res) => {
   if (!valid(req, res)) return;
   try {
-    const { error } = await supabase.from('orders').update({ order_status: req.body.status }).eq('id', req.params.id);
-    if (error) return res.status(404).json({ error: 'Order not found.' });
-    res.json({ ok: true });
+    const status = req.body.status;
+    const { data: before } = await supabase.from('orders').select('*').eq('id', req.params.id).single();
+    if (!before) return res.status(404).json({ error: 'Order not found.' });
+    const updates = { order_status: status };
+    // The tracking number is kept on the order's delivery line, so it shows in the admin too
+    const tracking = clean(req.body.trackingNumber || '').replace(/[^\w\- ]/g, '').trim();
+    if (status === 'shipped' && tracking && !String(before.delivery_carrier || '').includes(tracking)) {
+      updates.delivery_carrier = `${before.delivery_carrier || 'Delivery'} · Tracking ${tracking}`;
+    }
+    // Only the change TO shipped emails the customer (choosing "shipped" again doesn't resend)
+    const { data: rows, error } = await supabase.from('orders').update(updates)
+      .eq('id', req.params.id).select();
+    if (error || !rows?.length) return res.status(404).json({ error: 'Order not found.' });
+    let emailed = false;
+    if (status === 'shipped' && before.order_status !== 'shipped' && before.customer_email) {
+      emailed = await sendOrderShippedEmail(rows[0], tracking || null);
+    }
+    res.json({ ok: true, emailed });
   } catch {
     res.status(404).json({ error: 'Order not found.' });
   }
@@ -1029,6 +1164,7 @@ app.get('/api/settings', async (req, res) => {
       freeUkDeliveryOver: FREE_UK_DELIVERY_OVER,
       wigStylingFee:   WIG_STYLING_FEE,
       payInThree:      !!data.shop_options?.payInThree,
+      clearpay:        !!data.shop_options?.clearpay,
     });
   } catch {
     res.status(500).json({ error: 'Failed to load settings.' });
@@ -1074,9 +1210,9 @@ app.put('/api/settings', requireAdmin, [
     if (Object.keys(updates).length) await supabase.from('settings').update(updates).eq('id', 1);
     // Saved on its own so the other settings still save before the database update has been run
     let notice;
-    if (req.body.payInThree !== undefined) {
-      const { error } = await supabase.from('settings').update({ shop_options: { payInThree: !!req.body.payInThree } }).eq('id', 1);
-      if (isMissingColumn(error, 'shop_options')) notice = 'Saved — but "Pay in 3" needs a one-time database update first: run supabase-shop-extras-migration.sql in the Supabase SQL Editor.';
+    if (req.body.payInThree !== undefined || req.body.clearpay !== undefined) {
+      const { error } = await supabase.from('settings').update({ shop_options: { payInThree: !!req.body.payInThree, clearpay: !!req.body.clearpay } }).eq('id', 1);
+      if (isMissingColumn(error, 'shop_options')) notice = 'Saved — but Klarna / Clearpay need a one-time database update first: run supabase-shop-extras-migration.sql in the Supabase SQL Editor.';
     }
     res.json({ ok: true, notice });
   } catch {
@@ -1157,7 +1293,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
       });
     }
 
-    const sessionFor = methods => stripe.checkout.sessions.create({
+    const sessionFor = (methods, shipping) => stripe.checkout.sessions.create({
       payment_method_types: methods,
       line_items:           lineItems,
       mode:                 'payment',
@@ -1166,14 +1302,21 @@ app.post('/api/create-checkout-session', async (req, res) => {
       customer_email: order.customer_email,
       metadata: { orderId: order.id, orderNumber: order.order_number },
       expires_at: Math.floor(Date.now() / 1000) + 60 * 60,   // abandoned checkouts expire after 1 hour
+      ...(shipping ? { payment_intent_data: { shipping } } : {}),
     });
-    // "Pay in 3" = Klarna, which must also be switched on in the Stripe dashboard.
-    // If Stripe refuses it (not switched on there yet), the customer can still pay by card.
+    // Pay later: Klarna ("Pay in 3") and Clearpay ("Pay in 4") must also be switched on in the
+    // Stripe dashboard. Clearpay is UK-only and needs the delivery address. If Stripe refuses an
+    // option (e.g. not switched on there yet), we try again without it, so card always works.
     const { data: shopSettings } = await supabase.from('settings').select('*').eq('id', 1).single();
+    const opts = shopSettings?.shop_options || {};
+    const clearpayShipping = opts.clearpay ? ukShippingFor(order) : null;
+    const attempts = [];
+    if (clearpayShipping) attempts.push([['card', ...(opts.payInThree ? ['klarna'] : []), 'afterpay_clearpay'], clearpayShipping]);
+    if (opts.payInThree)  attempts.push([['card', 'klarna'], null]);
     let sess;
-    if (shopSettings?.shop_options?.payInThree) {
-      try { sess = await sessionFor(['card', 'klarna']); }
-      catch (err) { console.error('Klarna not available, card only:', err.message); }
+    for (const [methods, shipping] of attempts) {
+      try { sess = await sessionFor(methods, shipping); break; }
+      catch (err) { console.error(`Pay-later option not available (${methods.join(', ')}):`, err.message); }
     }
     if (!sess) sess = await sessionFor(['card']);
 
@@ -1184,6 +1327,27 @@ app.post('/api/create-checkout-session', async (req, res) => {
     res.status(500).json({ error: 'Card payment could not be started. Please try again or choose bank transfer.' });
   }
 });
+
+// Clearpay only works for UK customers and needs the delivery address on the payment.
+// The checkout has one free-text address box, so we take the first line and the postcode from it.
+function ukShippingFor(order) {
+  if (!/\(UK\)/.test(order.delivery_carrier || '')) return null;
+  const text = String(order.delivery_address || '').trim();
+  const postcode = (text.match(/\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/i) || []);
+  if (!postcode[0]) return null;
+  const lines = text.split(/\n|,/).map(s => s.trim()).filter(Boolean);
+  const rest = lines.slice(1).filter(l => l.toUpperCase() !== postcode[0].toUpperCase()).join(', ').replace(postcode[0], '').replace(/[,\s]+$/, '');
+  return {
+    name: String(order.customer_name || '').slice(0, 100),
+    phone: String(order.customer_phone || '').slice(0, 20) || undefined,
+    address: {
+      line1: (lines[0] || text).slice(0, 200),
+      line2: rest.slice(0, 200) || undefined,
+      postal_code: `${postcode[1]} ${postcode[2]}`.toUpperCase(),
+      country: 'GB',
+    },
+  };
+}
 
 app.get('/api/verify-payment/:sessionId', async (req, res) => {
   if (!hasStripe) return res.json({ paid: false });
@@ -1227,6 +1391,14 @@ function priceInfo(p) {
   })();
   const pct = Pricing.salePercentOf(p.details);
   return { ...base, low: Pricing.applySale(base.low, pct), high: Pricing.applySale(base.high, pct), wasLow: pct ? base.low : null, pct };
+}
+// "Or pay in instalments" line — must match payInThreeHTML() in js/app.js
+function payLaterText(o) {
+  const k = !!o?.payInThree, c = !!o?.clearpay;
+  if (k && c) return 'Or pay in interest-free instalments with Klarna (3) or Clearpay (4, UK)';
+  if (k) return 'Or pay in 3 interest-free instalments with Klarna';
+  if (c) return 'Or pay in 4 interest-free instalments with Clearpay (UK)';
+  return '';
 }
 // "Ready to ship" / "Made to order" line. Units made into wigs default to made to order.
 function dispatchInfo(p) {
@@ -1379,7 +1551,7 @@ app.get('/product/:slug', async (req, res) => {
     const availability = p.in_stock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';
     const dispatch     = dispatchInfo(p);
     const { data: shopSettings } = await supabase.from('settings').select('*').eq('id', 1).single();
-    const payInThree   = !!shopSettings?.shop_options?.payInThree;
+    const payLater     = payLaterText(shopSettings?.shop_options);
 
     const ld = {
       '@context': 'https://schema.org',
@@ -1423,7 +1595,7 @@ app.get('/product/:slug', async (req, res) => {
           <div class="product-card-category">${escHtml(p.category || 'Hair')}</div>
           <h1 class="serif">${escHtml(p.name)}</h1>
           <div class="pd-price">${price.hasRange ? `<small>from </small>` : ''}${money(price.low)}${price.pct ? ` <s class="price-was">${money(price.wasLow)}</s> <span class="sale-badge">${price.pct}% off</span>` : ''}</div>
-          ${payInThree && p.in_stock ? `<p class="pay-in-3">Or pay in 3 interest-free instalments with Klarna</p>` : ''}
+          ${payLater && p.in_stock ? `<p class="pay-in-3">${payLater}</p>` : ''}
           <p class="pd-stock ${p.in_stock ? 'in' : 'out'}">${!p.in_stock ? 'Out of stock – coming back soon' : dispatch ? `${dispatch.title} · <span>${escHtml(dispatch.text)}</span>` : 'In stock'}</p>
           <div class="pd-desc">${escHtml(desc)}</div>
           <div id="pdAction"><a href="/shop" class="btn btn-primary">Shop the collection</a></div>
