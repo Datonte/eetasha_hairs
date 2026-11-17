@@ -65,10 +65,13 @@ const gbp          = n => `£${(Number(n) || 0).toFixed(2)}`;
 const ukDate       = d => new Date(d || Date.now()).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/London' });
 const F            = 'font-family:Arial,Helvetica,sans-serif;';
 
+// WhatsApp is switched off until the new business number is ready (same switch in js/app.js).
+const WHATSAPP_ON  = false;
+
 async function shopContacts() {
   const { data } = await supabase.from('settings').select('whatsapp, instagram, bank_name, sort_code, account_number, account_name').eq('id', 1).single();
   return {
-    whatsapp:  data?.whatsapp || '',
+    whatsapp:  WHATSAPP_ON ? (data?.whatsapp || '') : '',
     instagram: data?.instagram || '@eetashacollection',
     bank: data || {},
   };
@@ -1152,7 +1155,7 @@ app.get('/api/settings', async (req, res) => {
     if (!data) return res.json({});
     // Map snake_case DB fields → camelCase for the client (same shape as before)
     res.json({
-      whatsapp:        data.whatsapp,
+      whatsapp:        WHATSAPP_ON ? data.whatsapp : '',   // old number not sent to the site while WhatsApp is off
       instagram:       data.instagram,
       email:           data.email,
       bankName:        data.bank_name,
@@ -1613,7 +1616,7 @@ app.get('/product/:slug', async (req, res) => {
           <ul class="pd-perks">
             <li><span class="material-symbols-outlined">local_shipping</span>Tracked UK &amp; worldwide delivery</li>
             <li><span class="material-symbols-outlined">verified</span>Premium quality hair, carefully selected</li>
-            <li><span class="material-symbols-outlined">support_agent</span>Personal help on WhatsApp</li>
+            <li><span class="material-symbols-outlined">support_agent</span>Personal help by email &amp; Instagram</li>
           </ul>
           ${PRODUCT_GUIDES_HTML}
           <div id="pdSocial" style="margin-top:24px;"></div>

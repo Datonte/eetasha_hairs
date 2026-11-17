@@ -45,7 +45,7 @@
       <h2 class="serif">Wrong or faulty item</h2>
       <p>If we've sent you the wrong unit, or it arrives faulty:</p>
       <ul>
-        <li>Contact us <strong>within 48 hours of delivery</strong> on WhatsApp or by email so we can sort it out quickly.</li>
+        <li>Contact us <strong>within 48 hours of delivery</strong> by email (or reply to your order email) so we can sort it out quickly.</li>
         <li>Send clear photos or a video showing the issue, with the <strong>tag still attached</strong> and the hair <strong>unworn</strong>.</li>
         <li>Once confirmed, we'll exchange or refund the item and cover the return postage.</li>
       </ul>
@@ -84,7 +84,7 @@
       <p>Nothing in this policy affects your statutory rights as a consumer.</p>
 
       <h2 class="serif">Contact us</h2>
-      <p>WhatsApp: <a id="returnsWhatsapp" href="#" style="color:var(--gold-dark);">message us</a> · Email: <a href="mailto:eetasha.collection@gmail.com" style="color:var(--gold-dark);">eetasha.collection@gmail.com</a></p>
+      <p>Email: <a href="mailto:eetasha.collection@gmail.com" style="color:var(--gold-dark);">eetasha.collection@gmail.com</a> · Instagram: <a id="returnsInstagram" href="https://instagram.com/eetashacollection" target="_blank" rel="noopener" style="color:var(--gold-dark);">@eetashacollection</a></p>
     </div>
   </section>
 
@@ -96,9 +96,9 @@
       renderNav('');
       renderFooter();
       updateCartCount();
-      const wa = (Store.getSettings().whatsapp || '').replace(/[^0-9]/g, '');
-      const link = document.getElementById('returnsWhatsapp');
-      if (wa) { link.href = `https://wa.me/${wa}`; link.textContent = Store.getSettings().whatsapp; link.target = '_blank'; link.rel = 'noopener'; }
+      const ig = String(Store.getSettings().instagram || '').trim().replace(/^@/, '');
+      const link = document.getElementById('returnsInstagram');
+      if (ig) { link.href = `https://instagram.com/${encodeURIComponent(ig)}`; link.textContent = '@' + ig; }
       document.body.classList.add('page-ready');
     });
   </script>

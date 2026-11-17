@@ -667,6 +667,7 @@ body.page-ready { opacity: 1; transition: opacity 0.22s ease; }
 
 /* ============= Instagram & WhatsApp ============= */
 .social-links a { width: 40px; height: 40px; }
+.btn-email { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 .btn-instagram, .btn-whatsapp { color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: none; }
 .btn-instagram { background: linear-gradient(45deg, #f58529 0%, #dd2a7b 50%, #8134af 100%); }
 .btn-whatsapp  { background: #25D366; }

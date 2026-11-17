@@ -110,7 +110,7 @@
           <form onsubmit="saveSettings(event)">
             <div class="grid-2">
               <div class="form-group">
-                <label class="form-label">WhatsApp Number</label>
+                <label class="form-label">WhatsApp Number <span style="font-weight:400;color:var(--gray-400);">(hidden on the site until the new business WhatsApp is ready)</span></label>
                 <input type="text" class="form-input" id="setWhatsapp" placeholder="+447012345678">
               </div>
               <div class="form-group">
@@ -872,8 +872,8 @@
               <span class="order-date">${formatDate(o.created_at)}</span>
               <div style="display:flex;gap:8px;align-items:center;">
                 <span class="order-total serif">${formatCurrency(o.total)}</span>
-                ${o.customer_phone ? `<a href="https://wa.me/${o.customer_phone.replace(/[^0-9]/g,'')}" target="_blank" rel="noopener" class="btn btn-sm" title="Message on WhatsApp" aria-label="Message on WhatsApp" style="background:#25D366;color:white;padding:8px 10px;">
-                  ${brandIcon('whatsapp', 16)}
+                ${o.customer_email ? `<a href="mailto:${encodeURIComponent(o.customer_email).replace(/%40/g, '@')}?subject=${encodeURIComponent(`Your eetashacollection order ${o.order_number || ''}`)}" class="btn btn-sm btn-primary" title="Email the customer" aria-label="Email the customer" style="padding:8px 10px;">
+                  <span class="material-symbols-outlined" aria-hidden="true" style="font-size:16px;">mail</span>
                 </a>` : ''}
               </div>
             </div>

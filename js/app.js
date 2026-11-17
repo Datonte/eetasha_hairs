@@ -11,7 +11,7 @@ const State = {
   products: [],
   session:  null,   // logged-in customer { id, name, email, ... }
   settings: {
-    whatsapp: '+447951828832', instagram: '@eetashacollection',
+    whatsapp: '', instagram: '@eetashacollection',
     currency: '£',  deliveryFee: 5.99,
     bankName: '', sortCode: '', accountNumber: '', accountName: 'eetashacollection',
   },
@@ -360,42 +360,51 @@ function hydrateBrandIcons(root = document) {
     el.outerHTML = brandIcon(el.dataset.brandIcon, Number(el.dataset.size) || 18);
   });
 }
-// Instagram + WhatsApp links from Admin → Settings
-function socialLinks(whatsappMessage = '') {
+// Enquiries go to email and Instagram. WhatsApp is switched off until the new
+// business WhatsApp number is ready: set this to true and add the number in
+// Admin → Settings to bring the WhatsApp buttons back.
+const WHATSAPP_ON = false;
+const SHOP_EMAIL  = 'eetasha.collection@gmail.com';
+const mailIcon = (size = 18) => `<span class="material-symbols-outlined" aria-hidden="true" style="font-size:${size}px;line-height:1;">mail</span>`;
+
+// Email, Instagram (+ WhatsApp when switched on) links
+function socialLinks(subject = '') {
   const s = State.settings || {};
   const handle = String(s.instagram || '').trim().replace(/^@/, '');
-  const wa = String(s.whatsapp || '').replace(/[^0-9]/g, '');
+  const wa = WHATSAPP_ON ? String(s.whatsapp || '').replace(/[^0-9]/g, '') : '';
   return {
     handle,
+    email:    SHOP_EMAIL,
+    emailUrl: `mailto:${SHOP_EMAIL}${subject ? `?subject=${encodeURIComponent(subject)}` : ''}`,
     igUrl: handle ? `https://instagram.com/${encodeURIComponent(handle)}` : '',
-    waUrl: wa ? `https://wa.me/${wa}${whatsappMessage ? `?text=${encodeURIComponent(whatsappMessage)}` : ''}` : '',
+    waUrl: wa ? `https://wa.me/${wa}${subject ? `?text=${encodeURIComponent(`Hi! ${subject}`)}` : ''}` : '',
   };
 }
 // One-line version under "Add to Bag" in the option pickers
 function pickerSocialLine(productName = '') {
-  const l = socialLinks(productName ? `Hi! I have a question about the ${productName}.` : '');
-  if (!l.igUrl && !l.waUrl) return '';
+  const l = socialLinks(productName ? `Question about the ${productName}` : 'Question about your hair');
   return `<p class="picker-social">Not sure?
-    ${l.igUrl ? `See more photos &amp; videos on <a href="${l.igUrl}" target="_blank" rel="noopener">Instagram</a>` : ''}${l.igUrl && l.waUrl ? ', or ' : ''}
-    ${l.waUrl ? `ask us on <a href="${l.waUrl}" target="_blank" rel="noopener">WhatsApp</a>` : ''}${l.igUrl ? ' or Instagram' : ''}.</p>`;
+    ${l.igUrl ? `See more photos &amp; videos on <a href="${l.igUrl}" target="_blank" rel="noopener">Instagram</a>, or ask` : 'Ask'} us by
+    <a href="${l.emailUrl}">email</a>${l.waUrl ? ` or <a href="${l.waUrl}" target="_blank" rel="noopener">WhatsApp</a>` : ''}${l.igUrl ? ' or Instagram' : ''}.</p>`;
 }
 
-// "See more on Instagram / message us" section, used on the home, shop and product pages
+// "See more on Instagram / ask us" section, used on the home, shop and product pages
 function socialCtaHTML({ productName = '' } = {}) {
-  const l = socialLinks(productName ? `Hi! I have a question about the ${productName}.` : 'Hi! I have a question about your hair.');
-  if (!l.igUrl && !l.waUrl) return '';
+  const l = socialLinks(productName ? `Question about the ${productName}` : 'Question about your hair');
   return `
     <div class="social-cta">
       <div class="social-cta-text">
         <h3 class="serif">${productName ? 'Want to see more?' : 'See it before you buy'}</h3>
         <p>For more pictures and videos${productName ? ' of this hair' : ' of our hair'}, check out our Instagram.
-           Not sure what to choose, or have a question? Message us on WhatsApp or Instagram and we'll help.</p>
+           Not sure what to choose, or have a question? Email us at <a href="${l.emailUrl}" style="color:var(--gold-dark);">${l.email}</a>
+           or message us on Instagram and we'll help.</p>
       </div>
       <div class="social-cta-buttons">
+        <a href="${l.emailUrl}" class="btn btn-primary btn-email">${mailIcon(18)}<span>Email us</span></a>
         ${l.igUrl ? `<a href="${l.igUrl}" target="_blank" rel="noopener" class="btn btn-instagram">${brandIcon('instagram', 18)}<span>See more on Instagram</span></a>` : ''}
         ${l.waUrl ? `<a href="${l.waUrl}" target="_blank" rel="noopener" class="btn btn-whatsapp">${brandIcon('whatsapp', 18)}<span>Message us on WhatsApp</span></a>` : ''}
       </div>
-      ${l.handle ? `<div class="social-cta-handle">@${escHtml(l.handle)}</div>` : ''}
+      ${l.handle ? `<div class="social-cta-handle">@${escHtml(l.handle)} · ${l.email}</div>` : ''}
     </div>`;
 }
 
@@ -415,9 +424,11 @@ function renderFooter() {
             <div class="footer-brand">eetashacollection</div>
             <p class="footer-desc">Premium luxury hair for the modern woman. Quality that speaks for itself.</p>
             <div class="social-links">
+              <a href="${l.emailUrl}" title="Email us" aria-label="Email us">${mailIcon(18)}</a>
               ${l.igUrl ? `<a href="${l.igUrl}" target="_blank" rel="noopener" title="Instagram" aria-label="Instagram">${brandIcon('instagram', 18)}</a>` : ''}
               ${l.waUrl ? `<a href="${l.waUrl}" target="_blank" rel="noopener" title="WhatsApp" aria-label="WhatsApp">${brandIcon('whatsapp', 18)}</a>` : ''}
             </div>
+            <p class="footer-desc" style="margin-top:12px;">Enquiries: <a href="${l.emailUrl}" style="display:inline;color:var(--gold-light);">${l.email}</a></p>
             ${l.igUrl ? `<p class="footer-desc" style="margin-top:12px;">More photos &amp; videos on Instagram <a href="${l.igUrl}" target="_blank" rel="noopener" style="display:inline;color:var(--gold-light);">@${escHtml(l.handle)}</a></p>` : ''}
           </div>
           <div>
@@ -431,6 +442,7 @@ function renderFooter() {
             <a href="/about#contact">Contact Us</a>
             <a href="/returns">Returns &amp; Refunds</a>
             <a href="/returns#delivery">Delivery</a>
+            <a href="${l.emailUrl}">Email Us</a>
             ${l.waUrl ? `<a href="${l.waUrl}" target="_blank" rel="noopener">WhatsApp Support</a>` : ''}
             ${l.igUrl ? `<a href="${l.igUrl}" target="_blank" rel="noopener">Instagram</a>` : ''}
           </div>
@@ -912,7 +924,7 @@ function openVariantModal(productId) {
   function render() {
     const price = currentPrice();
     if (!liveKeys.length) {
-      modal.querySelector('#vmStep1Btns').innerHTML = `<p style="font-size:0.85rem;color:var(--gray-500);">This item can't be ordered online right now — message us on WhatsApp or Instagram and we'll help.</p>`;
+      modal.querySelector('#vmStep1Btns').innerHTML = `<p style="font-size:0.85rem;color:var(--gray-500);">This item can't be ordered online right now. Email us at <a href="mailto:${SHOP_EMAIL}" style="color:var(--gold-dark);">${SHOP_EMAIL}</a> or message us on Instagram and we'll help.</p>`;
       modal.querySelector('#vmAddBtn').disabled = true;
       return;
     }

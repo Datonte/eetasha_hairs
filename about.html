@@ -51,7 +51,7 @@
           </p>
           <p style="color:var(--gray-600);line-height:1.8;">
             From choosing your hair to aftercare, I'm here to help every step of the way —
-            just send a message on WhatsApp and I'll personally guide you.
+            just send an email or a message on Instagram and I'll personally guide you.
           </p>
         </div>
         <div style="background:var(--gray-100);border-radius:var(--radius-lg);aspect-ratio:4/5;display:flex;align-items:center;justify-content:center;overflow:hidden;">
@@ -75,7 +75,7 @@
         <div style="padding:24px;">
           <span class="material-symbols-outlined" style="font-size:36px;color:var(--gold);margin-bottom:12px;">favorite</span>
           <h3 style="color:white;margin-bottom:8px;font-size:1rem;">Personal Touch</h3>
-          <p style="color:var(--gray-400);font-size:0.85rem;">Every customer matters. I'm always just a WhatsApp message away.</p>
+          <p style="color:var(--gray-400);font-size:0.85rem;">Every customer matters. I'm always just an email or Instagram message away.</p>
         </div>
         <div style="padding:24px;">
           <span class="material-symbols-outlined" style="font-size:36px;color:var(--gold);margin-bottom:12px;">eco</span>
@@ -93,11 +93,14 @@
       <h2 class="serif mb-2">Let's Chat</h2>
       <p style="color:var(--gray-600);margin-bottom:24px;">
         Have questions about a product? Need help choosing the right hair? Reach out — I'd love to help.
-        For more pictures and videos of our hair, check out our Instagram. For any enquiries, message us on WhatsApp or Instagram.
+        For more pictures and videos of our hair, check out our Instagram. For any enquiries, email us or message us on Instagram.
+      </p>
+      <p style="margin-bottom:24px;">
+        <a href="mailto:eetasha.collection@gmail.com" id="contactEmail" style="color:var(--gold-dark);font-weight:600;font-size:1.05rem;">eetasha.collection@gmail.com</a>
       </p>
       <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
-        <a href="#" id="whatsappLink" target="_blank" rel="noopener" class="btn btn-whatsapp">
-          <span data-brand-icon="whatsapp"></span> WhatsApp
+        <a href="mailto:eetasha.collection@gmail.com?subject=Enquiry" class="btn btn-primary btn-email">
+          <span class="material-symbols-outlined" aria-hidden="true" style="font-size:18px;">mail</span> Email us
         </a>
         <a href="#" id="instagramLink" target="_blank" rel="noopener" class="btn btn-instagram">
           <span data-brand-icon="instagram"></span> Instagram
@@ -116,9 +119,7 @@
       updateCartCount();
 
       const s  = Store.getSettings();
-      const wa = (s.whatsapp || '').replace(/[^0-9]/g, '');
       const ig = (s.instagram || '').replace('@', '');
-      document.getElementById('whatsappLink').href  = wa ? `https://wa.me/${wa}` : '#';
       document.getElementById('instagramLink').href = ig ? `https://instagram.com/${ig}` : '#';
       document.body.classList.add('page-ready');
     });
