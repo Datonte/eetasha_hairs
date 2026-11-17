@@ -1305,19 +1305,29 @@ app.post('/api/create-checkout-session', async (req, res) => {
       expires_at: Math.floor(Date.now() / 1000) + 60 * 60,   // abandoned checkouts expire after 1 hour
       ...(shipping ? { payment_intent_data: { shipping } } : {}),
     });
-    // Pay later: Klarna ("Pay in 3") and Clearpay ("Pay in 4") must also be switched on in the
-    // Stripe dashboard. Clearpay is UK-only and needs the delivery address. If Stripe refuses an
-    // option (e.g. not switched on there yet), we try again without it, so card always works.
+    // Payment options on Stripe's page:
+    //  - card (Apple Pay and Google Pay come with it automatically)
+    //  - Revolut Pay, Amazon Pay: shown when switched on in the Stripe dashboard
+    //  - Klarna ("Pay in 3") and Clearpay ("Pay in 4", UK only, needs the address): only when
+    //    switched on in the admin AND in Stripe
+    // If Stripe refuses one (e.g. not switched on there), we drop just that one and try again,
+    // so the others still show and card always works.
     const { data: shopSettings } = await supabase.from('settings').select('*').eq('id', 1).single();
     const opts = shopSettings?.shop_options || {};
     const clearpayShipping = opts.clearpay ? ukShippingFor(order) : null;
-    const attempts = [];
-    if (clearpayShipping) attempts.push([['card', ...(opts.payInThree ? ['klarna'] : []), 'afterpay_clearpay'], clearpayShipping]);
-    if (opts.payInThree)  attempts.push([['card', 'klarna'], null]);
+    let methods = ['card', 'revolut_pay', 'amazon_pay',   // add 'paypal' here once PayPal is connected in Stripe
+      ...(opts.payInThree ? ['klarna'] : []), ...(clearpayShipping ? ['afterpay_clearpay'] : [])];
     let sess;
-    for (const [methods, shipping] of attempts) {
-      try { sess = await sessionFor(methods, shipping); break; }
-      catch (err) { console.error(`Pay-later option not available (${methods.join(', ')}):`, err.message); }
+    for (let attempt = 0; attempt < 8 && !sess; attempt++) {
+      try {
+        sess = await sessionFor(methods, methods.includes('afterpay_clearpay') ? clearpayShipping : null);
+      } catch (err) {
+        const refused = methods.find(m => m !== 'card' && (err.message || '').includes(m));
+        console.error(`Payment option not available${refused ? ` (${refused})` : ''}:`, err.message);
+        if (refused) methods = methods.filter(m => m !== refused);
+        else if (methods.length > 1) methods = ['card'];   // unclear which one: fall back to card only
+        else throw err;
+      }
     }
     if (!sess) sess = await sessionFor(['card']);
 
