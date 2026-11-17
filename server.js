@@ -1147,6 +1147,31 @@ app.put('/api/orders/:id/payment', requireAdmin, [
 });
 
 // ============================================================
+//  KEEP-ALIVE  (daily Vercel cron, see "crons" in vercel.json)
+// ============================================================
+// Supabase's free plan pauses a project after about a week with no activity.
+// Vercel calls this once a day so the database always has recent activity.
+// It only reads one row and returns nothing private.
+app.get('/api/keep-alive', async (req, res) => {
+  const secret = process.env.CRON_SECRET;
+  if (secret) {
+    const given = Buffer.from(String(req.headers.authorization || ''));
+    const want  = Buffer.from(`Bearer ${secret}`);
+    if (given.length !== want.length || !crypto.timingSafeEqual(given, want)) {
+      return res.status(401).json({ error: 'Not allowed.' });
+    }
+  }
+  try {
+    const { error } = await supabase.from('settings').select('id').eq('id', 1).single();
+    if (error) throw error;
+    res.set('Cache-Control', 'no-store').json({ ok: true, at: new Date().toISOString() });
+  } catch (err) {
+    console.error('Keep-alive failed:', err.message);
+    res.status(500).json({ ok: false });
+  }
+});
+
+// ============================================================
 //  SETTINGS
 // ============================================================
 app.get('/api/settings', async (req, res) => {

@@ -1,4 +1,7 @@
 {
+  "crons": [
+    { "path": "/api/keep-alive", "schedule": "0 6 * * *" }
+  ],
   "redirects": [
     { "source": "/index.html", "destination": "/", "permanent": true },
     { "source": "/:page(shop|about|account|admin|checkout|checkout-success|delivery|returns|privacy|terms).html", "destination": "/:page", "permanent": true }
