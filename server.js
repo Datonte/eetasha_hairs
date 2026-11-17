@@ -102,7 +102,7 @@ function emailLayout({ preheader, heading, intro, content, contacts }) {
       </td></tr></table>
     </td></tr>
     <tr><td style="padding:18px 28px;text-align:center;border-top:1px solid #f0ede8;${F}font-size:12px;color:#aaaaaa;line-height:1.7;">
-      <a href="${siteUrl()}" style="color:#9b7a2a;">eetashacollection.com</a> · <a href="${siteUrl()}/returns" style="color:#9b7a2a;">Returns policy</a><br>
+      <a href="${siteUrl()}" style="color:#9b7a2a;">eetashacollection.com</a> · <a href="${siteUrl()}/returns" style="color:#9b7a2a;">Returns policy</a> · <a href="${siteUrl()}/privacy" style="color:#9b7a2a;">Privacy</a><br>
       © ${new Date().getFullYear()} eetashacollection
     </td></tr>
   </table>
@@ -1665,6 +1665,8 @@ app.get('/sitemap.xml', async (req, res) => {
       { loc: `${SITE_URL}/shop`,  lastmod: today, priority: '0.9' },
       { loc: `${SITE_URL}/about`,                 priority: '0.5' },
       { loc: `${SITE_URL}/returns`,               priority: '0.3' },
+      { loc: `${SITE_URL}/terms`,                 priority: '0.2' },
+      { loc: `${SITE_URL}/privacy`,               priority: '0.2' },
       ...(products || []).map(p => ({
         loc: SITE_URL + productPath(p),
         lastmod: (p.created_at || '').slice(0, 10) || undefined,

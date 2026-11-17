@@ -442,6 +442,8 @@ function renderFooter() {
             <a href="/about#contact">Contact Us</a>
             <a href="/returns">Returns &amp; Refunds</a>
             <a href="/returns#delivery">Delivery</a>
+            <a href="/terms">Terms of Sale</a>
+            <a href="/privacy">Privacy Policy</a>
             <a href="${l.emailUrl}">Email Us</a>
             ${l.waUrl ? `<a href="${l.waUrl}" target="_blank" rel="noopener">WhatsApp Support</a>` : ''}
             ${l.igUrl ? `<a href="${l.igUrl}" target="_blank" rel="noopener">Instagram</a>` : ''}
