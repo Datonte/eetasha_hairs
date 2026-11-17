@@ -59,7 +59,7 @@
           if (orderId) document.getElementById('orderId').textContent = `Order: ${orderId}`;
         }
       } else if (orderId) {
-        // Bank transfer order
+        // No payment details in the address (e.g. an older link)
         document.getElementById('orderId').textContent = `Order: ${orderId}`;
       }
       document.body.classList.add('page-ready');

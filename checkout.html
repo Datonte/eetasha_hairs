@@ -51,28 +51,21 @@
           </div>
 
           <div class="admin-card">
-            <h3 class="serif mb-2">Payment Method</h3>
-            <div style="display:flex;flex-direction:column;gap:12px;">
-              <label style="display:flex;align-items:center;gap:12px;padding:14px;border:1.5px solid var(--gray-200);border-radius:var(--radius);cursor:pointer;transition:all var(--transition);">
-                <input type="radio" name="payMethod" value="stripe" checked style="accent-color:var(--gold-dark);">
-                <div>
-                  <div style="font-weight:600;font-size:0.85rem;">💳 Pay by Card</div>
-                  <div style="font-size:0.75rem;color:var(--gray-500);">Secure payment via Stripe</div>
-                </div>
-              </label>
-              <label style="display:flex;align-items:center;gap:12px;padding:14px;border:1.5px solid var(--gray-200);border-radius:var(--radius);cursor:pointer;transition:all var(--transition);">
-                <input type="radio" name="payMethod" value="transfer" style="accent-color:var(--gold-dark);">
-                <div>
-                  <div style="font-weight:600;font-size:0.85rem;">🏦 Bank Transfer</div>
-                  <div style="font-size:0.75rem;color:var(--gray-500);">Transfer and confirm via WhatsApp</div>
-                </div>
-              </label>
+            <h3 class="serif mb-2">Payment</h3>
+            <div style="display:flex;align-items:flex-start;gap:12px;padding:14px;border:1.5px solid var(--gold-dark);border-radius:var(--radius);background:var(--gold-bg);">
+              <span class="material-symbols-outlined" style="color:var(--gold-dark);font-size:22px;">lock</span>
+              <div>
+                <div style="font-weight:600;font-size:0.88rem;">Apple Pay, Google Pay or card</div>
+                <div style="font-size:0.75rem;color:var(--gray-500);line-height:1.5;margin-top:2px;">You'll pay on Stripe's secure payment page. We never see your card details.</div>
+                <div id="coPayLater" style="font-size:0.75rem;color:var(--gray-600);margin-top:6px;"></div>
+              </div>
             </div>
           </div>
 
           <button class="btn btn-primary btn-full mt-2" id="placeOrderBtn" onclick="placeOrder()">
-            Place Order
+            Continue to secure payment
           </button>
+          <p style="font-size:0.75rem;color:var(--gray-500);text-align:center;margin-top:8px;">No account needed. Your receipt is emailed to you.</p>
           <p style="font-size:0.75rem;color:var(--gray-500);text-align:center;margin-top:10px;line-height:1.5;">
             By placing your order you agree to our <a href="/returns" target="_blank" style="color:var(--gold-dark);text-decoration:underline;">Returns &amp; Refunds policy</a>.
             Hair can't be returned once the hygiene-seal tag is removed.
@@ -105,33 +98,6 @@
     </div>
   </section>
 
-  <!-- Bank Transfer Modal -->
-  <div class="modal-overlay" id="transferModal">
-    <div class="modal" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <h3 class="serif">Bank Transfer Details</h3>
-        <button onclick="closeTransferModal()"><span class="material-symbols-outlined">close</span></button>
-      </div>
-      <div class="modal-body">
-        <p style="margin-bottom:16px;color:var(--gray-600);font-size:0.9rem;">Please transfer the total amount to the account below:</p>
-        <div style="background:var(--gold-bg);padding:20px;border-radius:var(--radius);margin-bottom:16px;">
-          <div style="margin-bottom:10px;"><span style="color:var(--gray-500);font-size:0.75rem;">Bank</span><br><strong id="tmBank">—</strong></div>
-          <div style="margin-bottom:10px;"><span style="color:var(--gray-500);font-size:0.75rem;">Sort Code</span><br><strong id="tmSort">—</strong></div>
-          <div style="margin-bottom:10px;"><span style="color:var(--gray-500);font-size:0.75rem;">Account Number</span><br><strong id="tmAccount">—</strong></div>
-          <div><span style="color:var(--gray-500);font-size:0.75rem;">Account Name</span><br><strong id="tmName">—</strong></div>
-        </div>
-        <div style="background:var(--gray-50);padding:16px;border-radius:var(--radius);font-size:0.85rem;color:var(--gray-600);">
-          <strong>Amount: <span id="tmAmount" style="color:var(--gold-dark)">£0.00</span></strong><br>
-          <strong>Reference: <span id="tmRef">—</span></strong>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <a id="tmWhatsApp" href="#" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="background:#25D366;">
-          <span data-brand-icon="whatsapp" data-size="16"></span> Confirm on WhatsApp
-        </a>
-      </div>
-    </div>
-  </div>
 
   <div id="siteFooter"></div>
   <script src="js/app.js"></script>
@@ -202,11 +168,10 @@
         return;
       }
 
-      const cart   = Store.getCart();
-      const method = document.querySelector('input[name="payMethod"]:checked').value;
-
-      const btn = document.getElementById('placeOrderBtn');
-      btn.disabled = true; btn.textContent = 'Placing order…';
+      const cart = Store.getCart();
+      const btn  = document.getElementById('placeOrderBtn');
+      const reset = () => { btn.disabled = false; btn.textContent = 'Continue to secure payment'; };
+      btn.disabled = true; btn.textContent = 'Opening secure payment…';
 
       try {
         // Create order on server — server calculates prices from DB (not from us)
@@ -216,63 +181,28 @@
           customerPhone:     phone,
           deliveryAddress:   address,
           items:             cart.map(i => ({ productId: i.productId, qty: i.qty, variantKey: i.variantKey || null, variantLabel: i.variantLabel || null })),
-          paymentMethod:     method,
+          paymentMethod:     'stripe',
           deliveryCarrierId: _selectedDelivery?.carrierId || '',
           deliveryRegion:    _selectedDelivery?.region    || 'uk',
         });
-        if (method === 'stripe') {
-          // Keep the bag and delivery choice until Stripe confirms payment, so a
-          // customer who cancels on the card page comes back to a full bag.
-          try {
-            const { url } = await API.post('/api/create-checkout-session', { orderId: order.id });
-            window.location.href = url;
-            return;
-          } catch (err) {
-            Toast.show(err.message || 'Card payment could not be started. Please try again or choose bank transfer.', 'error');
-            return;
-          }
-        }
-
-        sessionStorage.removeItem('et_delivery');
-        clearCheckoutState();
-        Store.clearCart();
-
-        // Show transfer details
-        const settings = Store.getSettings();
-        document.getElementById('tmBank').textContent    = settings.bankName      || 'Not set';
-        document.getElementById('tmSort').textContent    = settings.sortCode      || 'Not set';
-        document.getElementById('tmAccount').textContent = settings.accountNumber || 'Not set';
-        document.getElementById('tmName').textContent    = settings.accountName   || 'eetashacollection';
-        document.getElementById('tmAmount').textContent  = formatCurrency(order.total);
-        document.getElementById('tmRef').textContent     = order.order_number;
-
-        const waNum = (settings.whatsapp || '').replace(/[^0-9]/g, '');
-        const waMsg = encodeURIComponent(`Hi! I've placed order ${order.order_number} for ${formatCurrency(order.total)}. I'll send my payment receipt now.`);
-        document.getElementById('tmWhatsApp').href = `https://wa.me/${waNum}?text=${waMsg}`;
-        document.getElementById('transferModal').classList.add('open');
-
+        // Keep the bag and delivery choice until Stripe confirms payment, so a
+        // customer who goes back from the payment page returns to a full bag.
+        const { url } = await API.post('/api/create-checkout-session', { orderId: order.id });
+        window.location.href = url;
       } catch (err) {
-        Toast.show(err.message || 'Failed to place order. Please try again.', 'error');
-      } finally {
-        btn.disabled = false; btn.textContent = 'Place Order';
+        Toast.show(err.message || 'Payment could not be started. Please try again.', 'error');
+        reset();
       }
-    }
-
-    function closeTransferModal() {
-      document.getElementById('transferModal').classList.remove('open');
-      window.location.href = Store.getSession() ? '/account' : '/';
     }
 
     // Checkout form state persistence
     function saveCheckoutState() {
       try {
-        const method = document.querySelector('input[name="payMethod"]:checked');
         sessionStorage.setItem('checkoutFormState', JSON.stringify({
           name:    document.getElementById('coName').value,
           email:   document.getElementById('coEmail').value,
           phone:   document.getElementById('coPhone').value,
           address: document.getElementById('coAddress').value,
-          pay:     method ? method.value : 'transfer',
         }));
       } catch {}
     }
@@ -284,7 +214,6 @@
         if (s.email)   document.getElementById('coEmail').value   = s.email;
         if (s.phone)   document.getElementById('coPhone').value   = s.phone;
         if (s.address) document.getElementById('coAddress').value = s.address;
-        if (s.pay) { const r = document.querySelector(`input[name="payMethod"][value="${s.pay}"]`); if (r) r.checked = true; }
       } catch {}
     }
     function clearCheckoutState() { try { sessionStorage.removeItem('checkoutFormState'); } catch {} }
@@ -295,6 +224,10 @@
       renderFooter();
       updateCartCount();
       renderCheckout();
+      // "Or pay in instalments with Klarna / Clearpay" — only when switched on in the admin
+      const payLater = document.createElement('div');
+      payLater.innerHTML = payInThreeHTML();
+      document.getElementById('coPayLater').textContent = payLater.textContent;
 
       // Autosave checkout fields on every change
       const coContent = document.getElementById('checkoutContent');

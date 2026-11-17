@@ -948,7 +948,8 @@ app.post('/api/orders', orderLimiter, optionalUser, [
   body('items.*.qty').isInt({ min: 1, max: 99 }).withMessage('Invalid quantity'),
   body('items.*.variantKey').optional({ nullable: true }).isString().isLength({ max: 100 }).withMessage('Invalid option'),
   body('items.*.variantLabel').optional({ nullable: true }).isString().isLength({ max: 200 }).withMessage('Invalid option'),
-  body('paymentMethod').isIn(['stripe', 'transfer']).withMessage('Invalid payment method'),
+  // New orders are paid online through Stripe only (older bank-transfer orders can still be marked paid in the admin)
+  body('paymentMethod').equals('stripe').withMessage('Please refresh the page and try again.'),
 ], async (req, res) => {
   if (!valid(req, res)) return;
   try {
