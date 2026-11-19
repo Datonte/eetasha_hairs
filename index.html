@@ -112,6 +112,16 @@
     </div>
   </section>
 
+  <!-- See the hair: up to 9 short looping videos (added in Admin → Settings → Home page videos) -->
+  <section class="section hidden" id="homeVideosSection">
+    <div class="container text-center">
+      <span class="section-subtitle">See it in motion</span>
+      <h2 class="serif mb-3">See the Hair</h2>
+      <div class="home-videos" id="homeVideosGrid"></div>
+      <p class="home-videos-more" id="homeVideosMore"></p>
+    </div>
+  </section>
+
   <!-- More photos & videos on Instagram / enquiries -->
   <section class="section" style="padding-bottom:0;">
     <div class="container" id="socialCta"></div>
@@ -130,6 +140,47 @@
   <div id="siteFooter"></div>
   <script src="js/app.js"></script>
   <script>
+    // "See the hair" videos: they loop silently, like Instagram. To keep data use low, each
+    // video only downloads when it scrolls onto the screen, and pauses when it scrolls off.
+    function renderHomeVideoSection() {
+      const vids = (Store.getSettings().homeVideos || []).filter(v => v && v.url);
+      const section = document.getElementById('homeVideosSection');
+      if (!vids.length) { section.classList.add('hidden'); return; }
+      const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;   // people who turn off motion: tap to play
+      document.getElementById('homeVideosGrid').innerHTML = vids.map((v, i) => `
+        <figure class="home-video">
+          <div class="home-video-frame">
+            <video data-src="${escHtml(v.url)}" muted loop playsinline preload="none" ${calm ? 'controls' : ''} aria-label="${escHtml(v.caption || 'Hair video')}"></video>
+            ${calm ? '' : `<button type="button" class="home-video-sound" data-sound="${i}" aria-label="Turn sound on"><span class="material-symbols-outlined">volume_off</span></button>`}
+          </div>
+          ${v.caption ? `<figcaption>${escHtml(v.caption)}</figcaption>` : ''}
+        </figure>`).join('');
+      const all = [...document.querySelectorAll('#homeVideosGrid video')];
+      const load = v => { if (!v.src) { v.src = v.dataset.src; v.load(); } };
+      if (calm || !('IntersectionObserver' in window)) {
+        all.forEach(v => { v.preload = 'metadata'; load(v); });
+        all.forEach(v => v.addEventListener('play', () => all.forEach(o => { if (o !== v) o.pause(); })));
+      } else {
+        const seen = new IntersectionObserver(entries => entries.forEach(({ target: v, isIntersecting }) => {
+          if (isIntersecting) { load(v); v.play().catch(() => {}); } else v.pause();
+        }), { threshold: 0.5 });
+        all.forEach(v => seen.observe(v));
+      }
+      // Sound button: one video with sound at a time
+      document.querySelectorAll('#homeVideosGrid [data-sound]').forEach(btn => btn.addEventListener('click', () => {
+        const v = all[+btn.dataset.sound], turnOn = v.muted;
+        all.forEach(o => { o.muted = true; });
+        document.querySelectorAll('#homeVideosGrid [data-sound]').forEach(b => { b.querySelector('span').textContent = 'volume_off'; b.setAttribute('aria-label', 'Turn sound on'); });
+        if (turnOn) { v.muted = false; v.play().catch(() => {}); btn.querySelector('span').textContent = 'volume_up'; btn.setAttribute('aria-label', 'Turn sound off'); }
+      }));
+      const l = socialLinks();
+      document.getElementById('homeVideosMore').innerHTML = l.igUrl
+        ? `For more videos, check out our Instagram <a href="${l.igUrl}" target="_blank" rel="noopener">@${escHtml(l.handle)}</a>
+           <a href="${l.igUrl}" target="_blank" rel="noopener" class="btn btn-instagram btn-sm" style="margin-top:12px;">${brandIcon('instagram', 16)}<span>More videos on Instagram</span></a>`
+        : '';
+      section.classList.remove('hidden');
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
       await initApp();
       renderNav('home');
@@ -149,6 +200,7 @@
       {
         document.getElementById('socialCta').innerHTML = socialCtaHTML();
       }
+      renderHomeVideoSection();
       document.body.classList.add('page-ready');
     });
   </script>

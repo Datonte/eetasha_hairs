@@ -1154,7 +1154,8 @@ function openVariantModal(productId) {
 function escHtml(str) {
   const d = document.createElement('div');
   d.appendChild(document.createTextNode(String(str || '')));
-  return d.innerHTML;
+  // Quotes too, so it's also safe inside attributes like value="…" and src="…"
+  return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });

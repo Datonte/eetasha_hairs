@@ -24,3 +24,14 @@ private/
 # Photos/screenshots dropped into the project folder — never publish by accident
 WhatsApp Image*
 *.HEIC
+
+# Videos dropped into the project folder — they go to the website's video storage, never into the code
+*.mp4
+*.mov
+*.MOV
+*.MP4
+*.m4v
+*.avi
+*.webm
+*.3gp
+videos/

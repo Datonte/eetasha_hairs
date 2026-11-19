@@ -164,6 +164,24 @@
           </form>
         </div>
 
+        <!-- Home page videos -->
+        <div class="admin-card" style="margin-top:24px;">
+          <h2 class="serif mb-1">Home page videos</h2>
+          <p class="pm-step-help" style="margin-bottom:12px;">Up to 9 short videos showing how the hair looks. They play on a loop (silently) on the home page, with "For more videos, check out our Instagram" underneath.
+            Best under <strong>5 MB</strong> each; the biggest allowed is 50 MB. You can pick several at once. Saved straight away.</p>
+          <div id="homeVideosList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;"></div>
+          <div id="homeVideosAdd" style="margin-top:14px;">
+            <label class="btn btn-primary btn-sm" style="cursor:pointer;">
+              <span class="material-symbols-outlined" style="font-size:16px;">upload</span> Upload videos
+              <input type="file" id="homeVideoFile" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" multiple style="display:none;">
+            </label>
+            <div id="homeVideoProgress" style="display:none;margin-top:10px;max-width:360px;">
+              <div style="height:8px;background:var(--gray-100);border-radius:6px;overflow:hidden;"><div id="homeVideoBar" style="height:100%;width:0;background:var(--gold-dark);transition:width .2s;"></div></div>
+              <div id="homeVideoStatus" style="font-size:0.78rem;color:var(--gray-500);margin-top:4px;"></div>
+            </div>
+          </div>
+        </div>
+
         <!-- Change Password -->
         <div class="admin-card" style="margin-top:24px;">
           <h2 class="serif mb-2">Change Admin Password</h2>
@@ -1256,6 +1274,84 @@
     }
     function clearSettingsState() { try { sessionStorage.removeItem('adminSettingsState'); } catch {} }
 
+    // ---------- Home page videos (up to 9) ----------
+    let _homeVideos = [];
+    function renderHomeVideos() {
+      const list = document.getElementById('homeVideosList');
+      if (!list) return;
+      list.innerHTML = _homeVideos.length ? _homeVideos.map((v, i) => `
+        <div style="border:1px solid var(--gray-200);border-radius:10px;padding:8px;background:#fff;">
+          <video src="${escHtml(v.url)}#t=0.1" controls playsinline preload="metadata" style="width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:8px;background:#111;"></video>
+          <input type="text" class="form-input" data-vcap="${i}" value="${escHtml(v.caption || '')}" placeholder="Caption, e.g. 22&quot; body wave" maxlength="80" style="margin-top:6px;padding:6px 8px;font-size:0.8rem;">
+          <div style="display:flex;gap:6px;margin-top:6px;">
+            ${i > 0 ? `<button type="button" class="btn btn-secondary btn-sm" data-vup="${i}" title="Move left" style="padding:4px 8px;">←</button>` : ''}
+            <button type="button" class="btn btn-secondary btn-sm" data-vdel="${i}" style="flex:1;padding:4px 8px;">Remove</button>
+          </div>
+        </div>`).join('')
+        : '<p style="font-size:0.82rem;color:var(--gray-400);">No videos yet. The video section stays hidden on the home page until you add one.</p>';
+      document.getElementById('homeVideosAdd').style.display = _homeVideos.length >= 9 ? 'none' : '';
+      list.querySelectorAll('[data-vcap]').forEach(inp => inp.addEventListener('change', () => { _homeVideos[+inp.dataset.vcap].caption = inp.value.trim(); saveHomeVideos('Caption saved.'); }));
+      list.querySelectorAll('[data-vdel]').forEach(b => b.addEventListener('click', () => {
+        if (!confirm('Remove this video from the home page? It will be deleted.')) return;
+        _homeVideos.splice(+b.dataset.vdel, 1); saveHomeVideos('Video removed.');
+      }));
+      list.querySelectorAll('[data-vup]').forEach(b => b.addEventListener('click', () => {
+        const i = +b.dataset.vup; [_homeVideos[i - 1], _homeVideos[i]] = [_homeVideos[i], _homeVideos[i - 1]]; saveHomeVideos('Order saved.');
+      }));
+    }
+    async function saveHomeVideos(okMsg) {
+      try {
+        const r = await API.put('/api/admin/home-videos', { videos: _homeVideos.map(v => ({ path: v.path, caption: v.caption || '' })) });
+        _homeVideos = r.videos || [];
+        renderHomeVideos();
+        if (okMsg) Toast.show(okMsg, 'success');
+      } catch (err) { Toast.show(err.message || 'Could not save the videos.', 'error'); loadSettings(); }
+    }
+    // She can pick several videos at once; they upload one after another
+    document.getElementById('homeVideoFile')?.addEventListener('change', async e => {
+      const files = [...(e.target.files || [])];
+      e.target.value = '';
+      if (!files.length) return;
+      const room = 9 - _homeVideos.length;
+      if (files.length > room) Toast.show(`Only ${room} more video${room === 1 ? '' : 's'} can be added (9 at most), so the first ${room} will be uploaded.`, 'info');
+      const prog = document.getElementById('homeVideoProgress'), bar = document.getElementById('homeVideoBar'), status = document.getElementById('homeVideoStatus');
+      const todo = files.slice(0, room);
+      let added = 0;
+      for (const [n, file] of todo.entries()) {
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        const type = file.type || { mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm' }[ext] || '';
+        const mb = file.size / 1024 / 1024;
+        const which = todo.length > 1 ? `Video ${n + 1} of ${todo.length}: ` : '';
+        if (!['video/mp4', 'video/quicktime', 'video/webm'].includes(type)) { Toast.show(`${file.name}: please choose an MP4 or MOV video.`, 'error'); continue; }
+        if (mb > 50) { Toast.show(`${file.name} is ${mb.toFixed(0)} MB. The most allowed is 50 MB, so please shrink it first.`, 'error'); continue; }
+        if (mb > 15 && !confirm(`${file.name} is ${mb.toFixed(0)} MB. Under 5 MB is best, so it loads quickly and doesn't use up your monthly viewing allowance. Upload it anyway?`)) continue;
+        prog.style.display = ''; bar.style.width = '0'; status.textContent = `${which}starting…`;
+        try {
+          const { path, uploadUrl } = await API.post('/api/admin/videos/upload-url', { type, size: file.size });
+          // Straight to storage (the website itself can't take files this big)
+          await new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('PUT', uploadUrl);
+            xhr.setRequestHeader('Content-Type', type);
+            xhr.setRequestHeader('x-upsert', 'false');
+            xhr.setRequestHeader('cache-control', 'max-age=31536000');
+            xhr.upload.onprogress = ev => { if (ev.lengthComputable) { const p = Math.round(ev.loaded / ev.total * 100); bar.style.width = p + '%'; status.textContent = `${which}uploading… ${p}% of ${mb.toFixed(1)} MB`; } };
+            xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error('The upload was refused. Please try again.'));
+            xhr.onerror = () => reject(new Error('The upload failed. Check your internet and try again.'));
+            xhr.send(file);
+          });
+          status.textContent = `${which}saving…`;
+          _homeVideos.push({ path, caption: '' });
+          await saveHomeVideos();
+          added++;
+        } catch (err) {
+          status.textContent = `${file.name}: ${err.message || 'upload failed.'}`;
+          Toast.show(`${file.name}: ${err.message || 'upload failed.'}`, 'error');
+        }
+      }
+      if (added) { prog.style.display = 'none'; Toast.show(`${added} video${added > 1 ? 's' : ''} added to the home page.`, 'success'); }
+    });
+
     async function loadSettings() {
       try {
         const s = await API.get('/api/settings');
@@ -1268,6 +1364,8 @@
         document.getElementById('setDeliveryFee').value  = s.deliveryFee   ?? 5.99;
         document.getElementById('setPayInThree').checked = !!s.payInThree;
         document.getElementById('setClearpay').checked   = !!s.clearpay;
+        _homeVideos = Array.isArray(s.homeVideos) ? s.homeVideos : [];
+        renderHomeVideos();
       } catch {}
       restoreSettingsState(); // overlay any unsaved local edits on top of DB values
     }

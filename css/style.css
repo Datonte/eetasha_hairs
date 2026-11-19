@@ -701,6 +701,22 @@ details > summary.pm-step-title::after { content: '▾'; margin-left: 4px; color
 .btn-instagram { background: linear-gradient(45deg, #f58529 0%, #dd2a7b 50%, #8134af 100%); }
 .btn-whatsapp  { background: #25D366; }
 .btn-instagram:hover, .btn-whatsapp:hover { color: #fff; filter: brightness(1.06); transform: translateY(-1px); }
+/* Home page "See the hair" videos: 3 side by side; on phones they scroll sideways */
+.home-videos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; max-width: 900px; margin: 0 auto; }
+.home-video { margin: 0; }
+.home-video-frame { position: relative; }
+.home-video video { width: 100%; aspect-ratio: 9 / 16; object-fit: cover; border-radius: var(--radius-lg); background: #1a1a1a; display: block; }
+.home-video-sound { position: absolute; right: 10px; bottom: 10px; width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer;
+  background: rgba(0, 0, 0, 0.55); color: #fff; display: flex; align-items: center; justify-content: center; }
+.home-video-sound .material-symbols-outlined { font-size: 20px; }
+.home-video-sound:hover { background: rgba(0, 0, 0, 0.75); }
+.home-video figcaption { font-size: 0.82rem; color: var(--gray-600); margin-top: 8px; }
+.home-videos-more { color: var(--gray-600); font-size: 0.92rem; margin-top: 22px; display: flex; flex-direction: column; align-items: center; }
+.home-videos-more a:not(.btn) { color: var(--gold-dark); font-weight: 600; }
+@media (max-width: 768px) {
+  .home-videos { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 12px; padding-bottom: 6px; margin: 0 -16px; padding-left: 16px; padding-right: 16px; }
+  .home-video { flex: 0 0 56%; scroll-snap-align: center; }
+}
 .social-cta {
   background: var(--gold-bg); border: 1px solid #efe3c8; border-radius: var(--radius-lg);
   padding: 28px; display: grid; grid-template-columns: 1fr auto; gap: 18px 28px; align-items: center;

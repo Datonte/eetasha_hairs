@@ -452,6 +452,7 @@ app.use(helmet({
       styleSrc:    ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc:     ["'self'", 'https://fonts.gstatic.com', 'https://fonts.googleapis.com'],
       imgSrc:      ["'self'", 'data:', 'https:', 'blob:'],
+      mediaSrc:    ["'self'", 'https://*.supabase.co', 'blob:'],   // home page videos
       connectSrc:  ["'self'", 'https://api.stripe.com', 'https://*.supabase.co'],
       frameSrc:    ['https://js.stripe.com', 'https://hooks.stripe.com'],
       objectSrc:   ["'none'"],
@@ -1194,6 +1195,7 @@ app.get('/api/settings', async (req, res) => {
       wigStylingFee:   WIG_STYLING_FEE,
       payInThree:      !!data.shop_options?.payInThree,
       clearpay:        !!data.shop_options?.clearpay,
+      homeVideos:      cleanHomeVideos(data.shop_options?.homeVideos),
     });
   } catch {
     res.status(500).json({ error: 'Failed to load settings.' });
@@ -1240,12 +1242,82 @@ app.put('/api/settings', requireAdmin, [
     // Saved on its own so the other settings still save before the database update has been run
     let notice;
     if (req.body.payInThree !== undefined || req.body.clearpay !== undefined) {
-      const { error } = await supabase.from('settings').update({ shop_options: { payInThree: !!req.body.payInThree, clearpay: !!req.body.clearpay } }).eq('id', 1);
+      const { error } = await saveShopOptions({ payInThree: !!req.body.payInThree, clearpay: !!req.body.clearpay });
       if (isMissingColumn(error, 'shop_options')) notice = 'Saved — but Klarna / Clearpay need a one-time database update first: run supabase-shop-extras-migration.sql in the Supabase SQL Editor.';
     }
     res.json({ ok: true, notice });
   } catch {
     res.status(500).json({ error: 'Failed to save settings.' });
+  }
+});
+
+// settings.shop_options holds several things (pay later, home page videos…): change only the given keys
+async function saveShopOptions(changes) {
+  const { data, error } = await supabase.from('settings').select('shop_options').eq('id', 1).single();
+  if (error) return { error };
+  return supabase.from('settings').update({ shop_options: { ...(data?.shop_options || {}), ...changes } }).eq('id', 1);
+}
+
+// ============================================================
+//  HOME PAGE VIDEOS  (up to 3 short "see the hair" clips)
+// ============================================================
+// Videos are uploaded from the admin straight to Supabase Storage (Vercel can't take
+// files bigger than ~4.5 MB), into a public "site-videos" bucket. The list lives in
+// settings.shop_options.homeVideos as [{ path, caption }].
+const VIDEO_BUCKET   = 'site-videos';
+const VIDEO_MAX_MB   = 50;   // Supabase free plan: 50 MB per file
+const VIDEO_TYPES    = { 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' };
+const MAX_HOME_VIDEOS = 9;
+function cleanHomeVideos(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter(v => v && /^home\/[\w.-]{1,80}\.(mp4|mov|webm)$/.test(String(v.path || ''))).slice(0, MAX_HOME_VIDEOS).map(v => ({
+    path: v.path,
+    url: supabase.storage.from(VIDEO_BUCKET).getPublicUrl(v.path).data.publicUrl,
+    caption: clean(String(v.caption || '')).slice(0, 80),
+  }));
+}
+async function ensureVideoBucket() {
+  const { data: buckets } = await supabase.storage.listBuckets();
+  if (buckets?.find(b => b.name === VIDEO_BUCKET)) return;
+  const { error } = await supabase.storage.createBucket(VIDEO_BUCKET, {
+    public: true, fileSizeLimit: `${VIDEO_MAX_MB}MB`, allowedMimeTypes: Object.keys(VIDEO_TYPES),
+  });
+  if (error && !/exists/i.test(error.message || '')) throw error;
+}
+
+// Step 1: the admin asks for a one-time upload link, then sends the file straight to storage
+app.post('/api/admin/videos/upload-url', requireAdmin, [
+  body('type').isIn(Object.keys(VIDEO_TYPES)).withMessage('Please choose an MP4 or MOV video.'),
+  body('size').isInt({ min: 1, max: VIDEO_MAX_MB * 1024 * 1024 }).withMessage(`Videos must be under ${VIDEO_MAX_MB} MB.`),
+], async (req, res) => {
+  if (!valid(req, res)) return;
+  try {
+    await ensureVideoBucket();
+    const path = `home/${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${VIDEO_TYPES[req.body.type]}`;
+    const { data, error } = await supabase.storage.from(VIDEO_BUCKET).createSignedUploadUrl(path);
+    if (error) throw error;
+    res.json({ path, uploadUrl: data.signedUrl });
+  } catch (err) {
+    console.error('Video upload link failed:', err.message);
+    res.status(500).json({ error: 'Could not start the upload. Please try again.' });
+  }
+});
+
+// Step 2: save the list of home page videos (removed ones are deleted from storage)
+app.put('/api/admin/home-videos', requireAdmin, async (req, res) => {
+  try {
+    const wanted = cleanHomeVideos(req.body?.videos).map(({ path, caption }) => ({ path, caption }));
+    const { data } = await supabase.from('settings').select('shop_options').eq('id', 1).single();
+    const before = cleanHomeVideos(data?.shop_options?.homeVideos).map(v => v.path);
+    const { error } = await saveShopOptions({ homeVideos: wanted });
+    if (isMissingColumn(error, 'shop_options')) return res.status(400).json({ error: EXTRAS_MIGRATION_MSG });
+    if (error) throw error;
+    const removed = before.filter(p => !wanted.some(w => w.path === p));
+    if (removed.length) await supabase.storage.from(VIDEO_BUCKET).remove(removed).catch(() => {});
+    res.json({ ok: true, videos: cleanHomeVideos(wanted) });
+  } catch (err) {
+    console.error('Saving home videos failed:', err.message);
+    res.status(500).json({ error: 'Failed to save the videos.' });
   }
 });
 
