@@ -140,45 +140,76 @@
   <div id="siteFooter"></div>
   <script src="js/app.js"></script>
   <script>
-    // "See the hair" videos: they loop silently, like Instagram. To keep data use low, each
-    // video only downloads when it scrolls onto the screen, and pauses when it scrolls off.
+    // "See the hair" videos: they loop silently (always muted), like Instagram. To keep data use
+    // low, each video only downloads when it scrolls onto the screen, and pauses when it scrolls off.
+    // On phones the strip scrolls round in a circle: after the last video comes the first again.
     function renderHomeVideoSection() {
       const vids = (Store.getSettings().homeVideos || []).filter(v => v && v.url);
       const section = document.getElementById('homeVideosSection');
       if (!vids.length) { section.classList.add('hidden'); return; }
       const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;   // people who turn off motion: tap to play
-      document.getElementById('homeVideosGrid').innerHTML = vids.map((v, i) => `
-        <figure class="home-video">
+      const grid = document.getElementById('homeVideosGrid');
+      const card = (v, copy) => `
+        <figure class="home-video"${copy ? ' data-copy aria-hidden="true"' : ''}>
           <div class="home-video-frame">
-            <video data-src="${escHtml(v.url)}" muted loop playsinline preload="none" ${calm ? 'controls' : ''} aria-label="${escHtml(v.caption || 'Hair video')}"></video>
-            ${calm ? '' : `<button type="button" class="home-video-sound" data-sound="${i}" aria-label="Turn sound on"><span class="material-symbols-outlined">volume_off</span></button>`}
+            <video data-src="${escHtml(v.url)}" muted loop playsinline preload="none" ${calm ? 'controls' : ''} aria-label="${escHtml(v.caption || 'Hair video')}"${copy ? ' tabindex="-1"' : ''}></video>
           </div>
           ${v.caption ? `<figcaption>${escHtml(v.caption)}</figcaption>` : ''}
-        </figure>`).join('');
-      const all = [...document.querySelectorAll('#homeVideosGrid video')];
+        </figure>`;
+      // Copies before and after the real set make the endless strip on phones (hidden on computers)
+      const ring = vids.length > 1;
+      grid.innerHTML = (ring ? vids.map(v => card(v, true)).join('') : '') + vids.map(v => card(v, false)).join('') + (ring ? vids.map(v => card(v, true)).join('') : '');
+      const all = [...grid.querySelectorAll('video')];
+      all.forEach(v => { v.muted = true; v.defaultMuted = true; v.volume = 0; });   // never any sound
       const load = v => { if (!v.src) { v.src = v.dataset.src; v.load(); } };
       if (calm || !('IntersectionObserver' in window)) {
         all.forEach(v => { v.preload = 'metadata'; load(v); });
         all.forEach(v => v.addEventListener('play', () => all.forEach(o => { if (o !== v) o.pause(); })));
+        all.forEach(v => v.addEventListener('volumechange', () => { if (!v.muted) v.muted = true; }));
       } else {
+        // Any part on screen (e.g. the next video peeking in): fetch just its first frame
+        const peek = new IntersectionObserver(entries => entries.forEach(({ target: v, isIntersecting }) => {
+          if (isIntersecting && !v.src) { v.preload = 'metadata'; load(v); }
+        }), { threshold: 0 });
+        // Mostly on screen: play (looping); off screen: pause
         const seen = new IntersectionObserver(entries => entries.forEach(({ target: v, isIntersecting }) => {
           if (isIntersecting) { load(v); v.play().catch(() => {}); } else v.pause();
         }), { threshold: 0.5 });
-        all.forEach(v => seen.observe(v));
+        all.forEach(v => { peek.observe(v); seen.observe(v); });
       }
-      // Sound button: one video with sound at a time
-      document.querySelectorAll('#homeVideosGrid [data-sound]').forEach(btn => btn.addEventListener('click', () => {
-        const v = all[+btn.dataset.sound], turnOn = v.muted;
-        all.forEach(o => { o.muted = true; });
-        document.querySelectorAll('#homeVideosGrid [data-sound]').forEach(b => { b.querySelector('span').textContent = 'volume_off'; b.setAttribute('aria-label', 'Turn sound on'); });
-        if (turnOn) { v.muted = false; v.play().catch(() => {}); btn.querySelector('span').textContent = 'volume_up'; btn.setAttribute('aria-label', 'Turn sound off'); }
-      }));
+      if (ring) loopVideoStrip(grid, vids.length);
       const l = socialLinks();
       document.getElementById('homeVideosMore').innerHTML = l.igUrl
         ? `For more videos, check out our Instagram <a href="${l.igUrl}" target="_blank" rel="noopener">@${escHtml(l.handle)}</a>
            <a href="${l.igUrl}" target="_blank" rel="noopener" class="btn btn-instagram btn-sm" style="margin-top:12px;">${brandIcon('instagram', 16)}<span>More videos on Instagram</span></a>`
         : '';
       section.classList.remove('hidden');
+      if (ring) requestAnimationFrame(() => grid._centre?.());   // start on the real first video
+    }
+
+    // Endless swiping on phones. The strip is [copies][real videos][copies]; whenever you
+    // stop in the copies, it quietly jumps to the same video in the real set, so you can
+    // keep swiping either way for ever. On computers the copies are hidden and nothing moves.
+    function loopVideoStrip(grid, n) {
+      const items = () => [...grid.children];
+      const isStrip = () => grid.scrollWidth > grid.clientWidth + 1;   // phones: sideways strip
+      const setWidth = () => items()[n].offsetLeft - items()[0].offsetLeft;
+      const jump = by => {
+        grid.style.scrollSnapType = 'none'; grid.style.scrollBehavior = 'auto';
+        grid.scrollLeft += by;
+        requestAnimationFrame(() => { grid.style.scrollSnapType = ''; grid.style.scrollBehavior = ''; });
+      };
+      grid._centre = () => { if (isStrip()) jump(setWidth() - grid.scrollLeft); };
+      const settle = () => {
+        if (!isStrip()) return;
+        const w = setWidth(), x = grid.scrollLeft;
+        if (x < w * 0.5) jump(w);              // went back past the first video → same spot in the real set
+        else if (x >= w * 1.5) jump(-w);       // went forward past the last video → back to the start
+      };
+      let t;
+      grid.addEventListener('scroll', () => { clearTimeout(t); t = setTimeout(settle, 140); }, { passive: true });
+      if ('onscrollend' in window) grid.addEventListener('scrollend', settle);
+      let r; window.addEventListener('resize', () => { clearTimeout(r); r = setTimeout(() => grid._centre(), 200); });
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
