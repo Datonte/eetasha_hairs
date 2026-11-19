@@ -437,74 +437,133 @@
               <span class="toggle-track"></span>
               <span class="toggle-thumb"></span>
             </label>
-            <span style="font-size:0.85rem;font-weight:600;">Enable Variants</span>
-            <span style="font-size:0.78rem;color:var(--gray-400);">(inches / bundles / colour pricing)</span>
+            <span style="font-size:0.85rem;font-weight:600;">Customers choose options</span>
+            <span style="font-size:0.78rem;color:var(--gray-400);">(bundles, inches, colour… switch off for simple items like care products)</span>
           </div>
           <div id="pmVariantsConfig" style="display:none;margin-top:16px;">
-            <!-- Product Type -->
-            <div class="form-group">
-              <label class="form-label" style="margin-bottom:8px;">Variant Type</label>
-              <select id="pmVariantType" class="form-input" style="max-width:320px;" onchange="onVariantTypeChange()">
-                <option value="built">★ Priced from the Pricing tab (recommended)</option>
-                <option value="bundle">Bundles (inches × bundles × colour)</option>
-                <option value="wig">Wig — HD Lace (inches × lace size)</option>
-                <option value="big-wig">Big Wig 32–40" (inches × lace size)</option>
-                <option value="closure">Closure (lace size × inches)</option>
-                <option value="frontal">Frontal (lace size × inches)</option>
-              </select>
-            </div>
-            <!-- Priced from the Pricing tab: the product only chooses which options it offers -->
-            <div id="pmBuiltSection" style="display:none;margin-top:14px;">
-              <p style="font-size:0.8rem;color:var(--gray-500);margin-bottom:12px;">Prices are worked out automatically from your Pricing tab (supplier cost + your profit). Choose which options customers can pick for this product.</p>
-              <div class="grid-3" style="gap:12px;">
-                <div class="form-group"><label class="form-label">What is it?</label>
-                  <select id="pmBuiltKind" class="form-input" onchange="onBuiltKindChange()">
-                    <option value="unit">Wig / unit (bundles + closure or frontal)</option>
-                    <option value="bundles">Bundles only</option>
-                    <option value="lace">Closure or frontal only</option>
-                  </select></div>
-                <div class="form-group"><label class="form-label">Weft list</label><select id="pmBuiltList" class="form-input"></select></div>
-                <div class="form-group"><label class="form-label">Hair grade</label><select id="pmBuiltGrade" class="form-input"></select></div>
+            <!-- STEP 1: what is it? (big buttons) -->
+            <div class="pm-step" style="border-top:none;padding-top:0;">
+              <div class="pm-step-title"><span class="pm-step-num">1</span>What is this product?</div>
+              <div class="pm-kind-row" id="pmKindButtons">
+                <button type="button" class="pm-kind-btn" data-pick="bundles" onclick="pickProductKind('bundles')"><strong>Bundles</strong><span>sold by the bundle</span></button>
+                <button type="button" class="pm-kind-btn" data-pick="wig" onclick="pickProductKind('wig')"><strong>Wig</strong><span>bundles + closure or frontal</span></button>
+                <button type="button" class="pm-kind-btn" data-pick="closure" onclick="pickProductKind('closure')"><strong>Closure</strong><span>on its own</span></button>
+                <button type="button" class="pm-kind-btn" data-pick="frontal" onclick="pickProductKind('frontal')"><strong>Frontal</strong><span>on its own</span></button>
               </div>
-              <div class="form-group" style="margin-top:10px;"><label class="form-label" style="margin-bottom:8px;">Lengths customers can choose</label><div id="pmBuiltLengths" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
-              <div class="form-group" style="margin-top:10px;" id="pmBuiltBundlesWrap"><label class="form-label" style="margin-bottom:8px;" id="pmBuiltBundlesLabel">Bundles per unit</label>
+              <p id="pmLegacyNote" class="pm-step-help" style="display:none;margin-top:10px;background:var(--gold-bg);border-radius:8px;padding:10px 12px;">This product still uses prices typed in by hand (the old way, shown below). Tap one of the buttons above to give it automatic prices and simple tick-boxes. Its old prices are kept as a backup.</p>
+            </div>
+            <!-- Automatic prices: she only ticks what this product comes in -->
+            <div id="pmBuiltSection" style="display:none;">
+              <select id="pmBuiltKind" style="display:none;" onchange="onBuiltKindChange()">
+                <option value="unit">Wig</option>
+                <option value="bundles">Bundles</option>
+                <option value="lace">Closure or frontal</option>
+              </select>
+              <p class="pm-step-help" style="margin:2px 0 4px;">For each step, tap to switch an option on or off. <strong style="color:var(--gold-dark);">Gold = available</strong>, white = not available. Customers only ever see what's gold. Prices fill in automatically at the bottom.</p>
+
+              <div class="pm-step" id="pmBuiltBundlesWrap">
+                <div class="pm-step-title"><span class="pm-step-num"></span><span id="pmBuiltBundlesLabel">Number of bundles</span>
+                  <span class="pm-step-tools"><button type="button" onclick="setAllBuiltBundles(true)">All</button><button type="button" onclick="setAllBuiltBundles(false)">None</button></span></div>
                 <div id="pmBuiltBundlesQuick" style="display:none;flex-direction:column;gap:8px;margin-bottom:8px;">
-                  <div style="font-size:0.75rem;color:var(--gray-500);line-height:1.5;">Tap the numbers this bundle comes in (each product can be different), or type them, e.g. <strong>1, 2, 4, 7</strong> or <strong>1-10, 20, 30-40</strong>.</div>
+                  <div class="pm-step-help">Tap the numbers this product comes in, or type them, e.g. <strong>1, 2, 4, 7</strong> or <strong>1-10, 20, 30-40</strong>.</div>
                   <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
                     <input type="text" id="pmBuiltBundlesType" class="form-input" placeholder="e.g. 1, 3, 5, 9, 10" style="flex:1;min-width:160px;max-width:260px;padding:6px 10px;font-size:0.85rem;"
                       onkeydown="if(event.key==='Enter'){event.preventDefault();applyTypedBundles();}">
                     <button type="button" class="btn btn-primary btn-sm" onclick="applyTypedBundles()">Use these</button>
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="setAllBuiltBundles(true)">All 1–40</button>
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="setAllBuiltBundles(false)">None</button>
                   </div>
                   <div id="pmBuiltBundlesSummary" style="font-size:0.78rem;color:var(--gold-dark);font-weight:600;"></div>
-                </div><div id="pmBuiltBundles" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
-              <div class="form-group" style="margin-top:10px;" id="pmBuiltLacesWrap"><label class="form-label" style="margin-bottom:8px;">Closures / frontals</label><div id="pmBuiltLaces" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
-              <div class="form-group" style="margin-top:10px;"><label class="form-label" style="margin-bottom:8px;">Texture <span style="font-size:0.75rem;color:var(--gray-400);">(tick one to fix it, or several to let customers choose)</span></label><div id="pmBuiltTextures" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
-              <div class="form-group" style="margin-top:10px;" id="pmBuiltFinishesWrap"><label class="form-label" style="margin-bottom:8px;">How it can be supplied</label><div id="pmBuiltFinishes" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
-              <div class="form-group" style="margin-top:10px;" id="pmBuiltCapsWrap"><label class="form-label" style="margin-bottom:8px;">Cap sizes customers can choose <span style="font-size:0.75rem;color:var(--gray-400);">(free choice, shown when it is made into a wig)</span></label><div id="pmBuiltCaps" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
-              <div class="form-group" style="margin-top:10px;" id="pmBuiltLaceTypesWrap"><label class="form-label" style="margin-bottom:8px;">Lace type customers can choose <span style="font-size:0.75rem;color:var(--gray-400);">(free choice; leave both unticked to not ask)</span></label><div id="pmBuiltLaceTypes" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
-              <div class="form-group" style="margin-top:14px;">
-                <label class="form-label" style="margin-bottom:4px;">Switch off combinations this product doesn't come in</label>
-                <p style="font-size:0.75rem;color:var(--gray-400);margin-bottom:8px;">Untick a box — e.g. 12" × 4 bundles — and customers won't see it. Ticked = available.</p>
-                <div id="pmBuiltCombos" style="display:grid;gap:14px;"></div>
+                </div>
+                <div id="pmBuiltBundles" class="pm-chips"></div>
               </div>
-              <div class="grid-3" style="gap:12px;margin-top:10px;">
-                <div class="form-group"><label class="form-label">Colour</label>
-                  <select id="pmBuiltColourMode" class="form-input" onchange="onBuiltColourModeChange()">
-                    <option value="choose">Customer chooses (from the colours ticked below)</option>
-                    <option value="fixed">Fixed colour (shown in the photo)</option>
-                  </select></div>
-                <div class="form-group pm-fixed-colour"><label class="form-label">Fixed colour code</label><select id="pmBuiltFixedCode" class="form-input"></select></div>
-                <div class="form-group pm-fixed-colour"><label class="form-label">Colour name shown</label><input id="pmBuiltFixedName" class="form-input" placeholder="e.g. Burgundy"></div>
+
+              <div class="pm-step">
+                <div class="pm-step-title"><span class="pm-step-num"></span>Inches (length)
+                  <span class="pm-step-tools"><button type="button" onclick="setAllIn('pmBuiltLengths', true)">All</button><button type="button" onclick="setAllIn('pmBuiltLengths', false)">None</button></span></div>
+                <div id="pmBuiltLengths" class="pm-chips"></div>
               </div>
-              <p style="font-size:0.75rem;color:var(--gray-400);margin-top:4px;">Colour price: 1B natural costs nothing extra; #2–#18 and #613 / blondes / fashion colours add your supplier's colour charge automatically.</p>
-              <div class="form-group" style="margin-top:16px;">
-                <label class="form-label" style="margin-bottom:4px;">Price table: what customers will pay</label>
-                <p style="font-size:0.75rem;color:var(--gray-400);margin-bottom:8px;">Worked out from your Pricing tab and updated as you tick options above. Shows the lowest price for each box (natural 1B colour); other colours and textures add their extra.</p>
+
+              <div class="pm-step" id="pmBuiltLacesWrap">
+                <div class="pm-step-title"><span class="pm-step-num"></span><span id="pmBuiltLacesLabel">Closure &amp; frontal sizes</span>
+                  <span class="pm-step-tools"><button type="button" onclick="setAllIn('pmBuiltLaces', true)">All</button><button type="button" onclick="setAllIn('pmBuiltLaces', false)">None</button></span></div>
+                <div id="pmBuiltLaces" class="pm-chips"></div>
+              </div>
+
+              <div class="pm-step" id="pmBuiltLaceTypesWrap">
+                <div class="pm-step-title"><span class="pm-step-num"></span>Lace type</div>
+                <p class="pm-step-help">Leave both off if you don't want to ask the customer.</p>
+                <div id="pmBuiltLaceTypes" class="pm-chips"></div>
+              </div>
+
+              <div class="pm-step">
+                <div class="pm-step-title"><span class="pm-step-num"></span>Texture
+                  <span class="pm-step-tools"><button type="button" onclick="setAllIn('pmBuiltTextures', true)">All</button><button type="button" onclick="setAllIn('pmBuiltTextures', false)">None</button></span></div>
+                <p class="pm-step-help">Pick one if the product only comes in one texture, or several to let the customer choose.</p>
+                <div id="pmBuiltTextures" class="pm-chips"></div>
+              </div>
+
+              <div class="pm-step">
+                <div class="pm-step-title"><span class="pm-step-num"></span>Colour</div>
+                <div class="grid-3" style="gap:12px;">
+                  <div class="form-group" style="margin-bottom:0;">
+                    <select id="pmBuiltColourMode" class="form-input" onchange="onBuiltColourModeChange()">
+                      <option value="choose">Customer chooses from the colours below</option>
+                      <option value="fixed">Comes in one colour only (as in the photo)</option>
+                    </select></div>
+                  <div class="form-group pm-fixed-colour" style="margin-bottom:0;"><select id="pmBuiltFixedCode" class="form-input" title="Colour code"></select></div>
+                  <div class="form-group pm-fixed-colour" style="margin-bottom:0;"><input id="pmBuiltFixedName" class="form-input" placeholder="Colour name, e.g. Burgundy"></div>
+                </div>
+                <p class="pm-step-help" style="margin-top:6px;">1B natural costs nothing extra. #2–#18, blondes and fashion colours add their extra automatically.</p>
+                <div id="pmBuiltColourSlot"></div>
+              </div>
+
+              <div class="pm-step" id="pmBuiltFinishesWrap">
+                <div class="pm-step-title"><span class="pm-step-num"></span>How it can be made
+                  <span class="pm-step-tools"><button type="button" onclick="setAllIn('pmBuiltFinishes', true)">All</button><button type="button" onclick="setAllIn('pmBuiltFinishes', false)">None</button></span></div>
+                <div id="pmBuiltFinishes" class="pm-chips"></div>
+              </div>
+
+              <div class="pm-step" id="pmBuiltCapsWrap">
+                <div class="pm-step-title"><span class="pm-step-num"></span>Cap sizes
+                  <span class="pm-step-tools"><button type="button" onclick="setAllIn('pmBuiltCaps', true)">All</button><button type="button" onclick="setAllIn('pmBuiltCaps', false)">None</button></span></div>
+                <div id="pmBuiltCaps" class="pm-chips"></div>
+              </div>
+
+              <div class="pm-step">
+                <details id="pmBuiltCombosBox">
+                  <summary class="pm-step-title" style="cursor:pointer;"><span class="pm-step-num"></span>Fine-tune (optional)</summary>
+                  <p class="pm-step-help" style="margin:6px 0 8px;">Switch off a particular combination, e.g. 30" only comes in 3 or more bundles. Ticked = available.</p>
+                  <div id="pmBuiltCombos" style="display:grid;gap:14px;"></div>
+                </details>
+              </div>
+
+              <div class="pm-step">
+                <div class="pm-step-title"><span class="pm-step-num"></span>Prices customers will pay</div>
+                <p class="pm-step-help">Worked out automatically from your Pricing tab. Lowest price for each box (1B colour); other colours and textures add their extra.</p>
                 <div id="pmBuiltPreview" style="overflow-x:auto;"></div>
               </div>
+
+              <details style="margin-top:14px;">
+                <summary style="cursor:pointer;font-size:0.8rem;color:var(--gray-500);">Advanced: supplier price list</summary>
+                <div class="grid-3" style="gap:12px;margin-top:10px;">
+                  <div class="form-group"><label class="form-label">Weft list</label><select id="pmBuiltList" class="form-input"></select></div>
+                  <div class="form-group"><label class="form-label">Hair grade</label><select id="pmBuiltGrade" class="form-input"></select></div>
+                </div>
+              </details>
             </div>
+            <!-- Old way: prices typed in by hand (kept for products like the braided wig) -->
+            <details id="pmOldWayBox" style="margin-top:12px;">
+              <summary style="cursor:pointer;font-size:0.8rem;color:var(--gray-500);">Advanced: type prices in by hand instead</summary>
+              <div class="form-group" style="margin-top:10px;">
+                <select id="pmVariantType" class="form-input" style="max-width:360px;" onchange="onVariantTypeChange()">
+                  <option value="built">Automatic prices (recommended)</option>
+                  <option value="bundle">By hand: bundles (inches × bundles × colour)</option>
+                  <option value="wig">By hand: wig (inches × lace size)</option>
+                  <option value="big-wig">By hand: big wig 32–40" (inches × lace size)</option>
+                  <option value="closure">By hand: closure (lace size × inches)</option>
+                  <option value="frontal">By hand: frontal (lace size × inches)</option>
+                </select>
+              </div>
+            </details>
             <!-- Inches grid (hidden for closure/frontal step1) -->
             <div class="form-group" style="margin-top:14px;" id="pmInchesSection">
               <label class="form-label" id="pmInchesLabel" style="margin-bottom:8px;">Available Inches</label>
@@ -525,7 +584,8 @@
               <label class="form-label" style="margin-bottom:8px;">Hair Type</label>
               <div id="pmHairTypeGrid" style="display:flex;flex-wrap:wrap;gap:7px;"></div>
             </div>
-            <!-- Colours grid -->
+            <!-- Colours grid (moved into the "Colour" step for automatic prices) -->
+            <div id="pmColoursHome"></div>
             <div class="form-group" style="margin-top:14px;" id="pmColoursSection">
               <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
                 <label class="form-label" style="margin:0;">Available Colours</label>
@@ -1404,9 +1464,10 @@
     function _bGrid(id, items, attr, selected, fmt = v => v) {
       document.getElementById(id).innerHTML = items.map(v => {
         const on = selected.map(String).includes(String(v));
-        return `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:5px 10px;border-radius:6px;border:1.5px solid ${on ? 'var(--gold-dark)' : 'var(--gray-200)'};background:${on ? '#fff8e1' : '#fff'};font-size:0.82rem;font-weight:600;user-select:none;">
+        // Gold = available to customers, white = not available
+        return `<label class="pm-chip${on ? ' on' : ''}">
           <input type="checkbox" data-${attr}="${escHtml(String(v))}" ${on ? 'checked' : ''} style="display:none;"
-            onchange="this.closest('label').style.borderColor=this.checked?'var(--gold-dark)':'var(--gray-200)';this.closest('label').style.background=this.checked?'#fff8e1':'#fff'">
+            onchange="this.closest('label').classList.toggle('on', this.checked)">
           ${escHtml(fmt(v))}</label>`;
       }).join('');
     }
@@ -1416,6 +1477,7 @@
     function renderBuiltForm(cfgIn) {
       const P = window.Pricing;
       const cfg = P.sanitizeBuiltConfig(cfgIn || {}, _pricing || P.DEFAULT_PRICING);
+      document.getElementById('pmBuiltBundlesType').value = '';   // don't carry typing over from another product
       document.getElementById('pmBuiltKind').value = cfg.kind;
       fillSelect('pmBuiltList', Object.entries((_pricing || P.DEFAULT_PRICING).weftLists).map(([id, l]) => ({ value: id, label: l.label })), cfg.weftList);
       document.getElementById('pmBuiltList').value = cfg.weftList;
@@ -1464,7 +1526,20 @@
               return `<td style="text-align:center;padding:4px 8px;"><input type="checkbox" data-excl="${escHtml(k)}" ${_builtExcluded.has(k) ? '' : 'checked'} style="width:17px;height:17px;accent-color:var(--gold-dark);cursor:pointer;"></td>`;
             }).join('')}</tr>`).join('')}</tbody></table></div></div>`;
       };
+      // Bundles: one row per number of bundles, one column per length (same layout as the price table)
+      const bundleGrid = () => {
+        if (!lens.length || !counts.length) return '';
+        const th = 'padding:5px 8px;background:var(--gray-100);font-size:0.72rem;color:var(--gray-500);text-align:center;white-space:nowrap;';
+        return `<div><div style="font-size:0.8rem;font-weight:600;margin-bottom:6px;">Number of bundles × inches</div>
+          <div style="overflow-x:auto;max-height:420px;overflow-y:auto;"><table style="border-collapse:collapse;">
+            <thead><tr><th style="${th}text-align:left;">Bundles</th>${lens.map(l => `<th style="${th}">${l}"</th>`).join('')}</tr></thead>
+            <tbody>${counts.map(c => `<tr><td style="padding:4px 8px;font-weight:600;font-size:0.8rem;white-space:nowrap;">${c}</td>${lens.map(l => {
+              const k = `${l}|${c}|*`;
+              return `<td style="text-align:center;padding:4px 8px;"><input type="checkbox" data-excl="${escHtml(k)}" ${_builtExcluded.has(k) ? '' : 'checked'} style="width:17px;height:17px;accent-color:var(--gold-dark);cursor:pointer;"></td>`;
+            }).join('')}</tr>`).join('')}</tbody></table></div></div>`;
+      };
       document.getElementById('pmBuiltCombos').innerHTML =
+        (kind === 'bundles' ? bundleGrid() : '') +
         (kind === 'unit'    ? grid('Length × bundles', counts, c => `${c} bundle${c > 1 ? 's' : ''}`, (l, c) => `${l}|${c}|*`) : '') +
         (kind !== 'bundles' ? grid(kind === 'lace' ? 'Length × size' : 'Length × closure / frontal', laces, c => c, (l, c) => `${l}|*|${c}`) : '');
     }
@@ -1472,6 +1547,7 @@
     document.getElementById('pmBuiltSection').addEventListener('change', e => {
       if (e.target.closest('#pmBuiltLengths, #pmBuiltBundles, #pmBuiltLaces') || e.target.id === 'pmBuiltKind') renderBuiltCombos();
       if (e.target.closest('#pmBuiltBundles')) updateBundlesSummary();
+      if (e.target.closest('#pmBuiltLaces')) updateKindButtons();
       scheduleBuiltPreview();
     });
     document.getElementById('pmColoursGrid')?.addEventListener('change', () => scheduleBuiltPreview());
@@ -1577,8 +1653,9 @@
     function onBuiltKindChange(keepLengths) {
       const kind = document.getElementById('pmBuiltKind').value;
       document.getElementById('pmBuiltBundlesWrap').style.display  = kind === 'lace' ? 'none' : '';
-      document.getElementById('pmBuiltBundlesLabel').textContent   = kind === 'bundles' ? 'Number of bundles customers can buy' : 'Bundles per unit';
+      document.getElementById('pmBuiltBundlesLabel').textContent   = kind === 'bundles' ? 'Number of bundles' : 'Bundles in the wig';
       document.getElementById('pmBuiltLacesWrap').style.display    = kind === 'bundles' ? 'none' : '';
+      document.getElementById('pmBuiltLacesLabel').textContent     = kind === 'lace' ? 'Sizes' : 'Closure & frontal sizes';
       document.getElementById('pmBuiltFinishesWrap').style.display = kind === 'unit' ? '' : 'none';
       document.getElementById('pmBuiltCapsWrap').style.display      = kind === 'unit' ? '' : 'none';
       document.getElementById('pmBuiltLaceTypesWrap').style.display = kind === 'bundles' ? 'none' : '';
@@ -1587,6 +1664,64 @@
         _bGrid('pmBuiltLengths', lens, 'blen', lens.filter(l => l >= 12), v => `${v}"`);
         renderBuiltBundleChoices(kind, []);
       }
+      renumberSteps();
+      updateKindButtons();
+    }
+
+    // ---- Simple step-by-step product editor ----
+    // Number the visible steps 2, 3, 4… (step 1 is "What is this product?")
+    function renumberSteps() {
+      let n = 2;
+      document.querySelectorAll('#pmBuiltSection .pm-step').forEach(step => {
+        if (step.style.display === 'none') return;
+        const num = step.querySelector('.pm-step-num');
+        if (num) num.textContent = n++;
+      });
+    }
+    // Which big button is lit: Bundles / Wig / Closure / Frontal
+    function currentPick() {
+      if (!document.getElementById('pmVariantsEnabled').checked || _getVariantType() !== 'built') return null;
+      const kind = document.getElementById('pmBuiltKind').value;
+      if (kind === 'bundles') return 'bundles';
+      if (kind === 'unit') return 'wig';
+      const laces = _bChecked('pmBuiltLaces', 'blace');
+      return laces.length && laces.every(l => l.startsWith('13')) ? 'frontal' : 'closure';
+    }
+    function updateKindButtons() {
+      const pick = currentPick();
+      document.querySelectorAll('#pmKindButtons .pm-kind-btn').forEach(b => b.classList.toggle('selected', b.dataset.pick === pick));
+    }
+    // Tapping Bundles / Wig / Closure / Frontal
+    function pickProductKind(pick) {
+      const enabled = document.getElementById('pmVariantsEnabled');
+      const typeEl  = document.getElementById('pmVariantType');
+      // Coming from prices typed by hand: keep them as a backup (same as the Pricing tab switch-over)
+      if (enabled.checked && typeEl.value !== 'built' && !_editingLegacy) {
+        const old = getVariantsFromModal();
+        if (old) _editingLegacy = { ...old, _price: Number(document.getElementById('pmPrice').value) || 0 };
+      }
+      if (!enabled.checked) { enabled.checked = true; document.getElementById('pmVariantsConfig').style.display = 'block'; }
+      const kind = { bundles: 'bundles', wig: 'unit', closure: 'lace', frontal: 'lace' }[pick];
+      const wasBuilt = typeEl.value === 'built' && document.getElementById('pmBuiltLengths').children.length;
+      typeEl.value = 'built';
+      document.getElementById('pmOldWayBox').open = false;
+      onVariantTypeChange();
+      const kindEl = document.getElementById('pmBuiltKind');
+      if (!wasBuilt || kindEl.value !== kind) { kindEl.value = kind; onBuiltKindChange(); }
+      if (kind === 'lace') {
+        // Closure → the closure sizes, frontal → the 13x sizes (she can still change them)
+        document.querySelectorAll('#pmBuiltLaces input[data-blace]').forEach(cb => {
+          cb.checked = (pick === 'frontal') === cb.dataset.blace.startsWith('13');
+          cb.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+      }
+      renderBuiltCombos();
+      updateKindButtons();
+      scheduleBuiltPreview();
+    }
+    // "All" / "None" for any step
+    function setAllIn(gridId, on) {
+      document.querySelectorAll(`#${gridId} input[type=checkbox]`).forEach(cb => { cb.checked = on; cb.dispatchEvent(new Event('change', { bubbles: true })); });
     }
     function onBuiltColourModeChange() {
       const fixed = document.getElementById('pmBuiltColourMode').value === 'fixed';
@@ -1728,15 +1863,22 @@
       const builtSection = document.getElementById('pmBuiltSection');
       const oldParts = ['pmInchesSection', 'pmLaceSizesSection', 'pmAttachmentSection', 'pmHairTypeSection', 'pmPriceTableWrap'].map(id => document.getElementById(id));
       const buildRow = document.getElementById('pmBuildHint')?.parentElement;
+      const colours = document.getElementById('pmColoursSection');
+      document.getElementById('pmLegacyNote').style.display = vt === 'built' ? 'none' : '';
+      if (vt !== 'built') document.getElementById('pmOldWayBox').open = true;
       if (vt === 'built') {
         builtSection.style.display = '';
         oldParts.forEach(el => { if (el) el.style.display = 'none'; });
         if (buildRow) buildRow.style.display = 'none';
+        document.getElementById('pmBuiltColourSlot').appendChild(colours);   // colours live in the "Colour" step
         if (!document.getElementById('pmBuiltLengths').children.length) renderBuiltForm({});
         onBuiltColourModeChange();
+        updateKindButtons();
         scheduleBuiltPreview();
         return;
       }
+      document.getElementById('pmColoursHome').after(colours);
+      updateKindButtons();
       builtSection.style.display = 'none';
       if (buildRow) buildRow.style.display = 'flex';
       const isBundle = vt === 'bundle';
@@ -1763,6 +1905,7 @@
       if (enabled) {
         onVariantTypeChange();
       }
+      updateKindButtons();
     }
 
     function _checkboxGrid(items, dataAttr, selected) {

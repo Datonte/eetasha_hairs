@@ -661,6 +661,28 @@ body.page-ready { opacity: 1; transition: opacity 0.22s ease; }
   #shopFilters::-webkit-scrollbar { display: none; }
   .filter-btn { flex-shrink: 0; }
 }
+/* Admin product editor: simple numbered steps */
+.pm-step { border-top: 1px solid var(--gray-100); padding-top: 14px; margin-top: 14px; }
+.pm-step-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-weight: 700; font-size: 0.92rem; color: var(--gray-900); margin-bottom: 8px; }
+.pm-step-num { width: 24px; height: 24px; border-radius: 50%; background: var(--gold-dark); color: #fff; font-size: 0.78rem; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.pm-step-tools { margin-left: auto; display: inline-flex; gap: 6px; }
+.pm-step-tools button { background: #fff; border: 1px solid var(--gray-200); border-radius: 6px; padding: 3px 10px; font-size: 0.75rem; font-weight: 600; cursor: pointer; color: var(--gray-600); }
+.pm-step-tools button:hover { border-color: var(--gold-dark); color: var(--gold-dark); }
+.pm-step-help { font-size: 0.78rem; color: var(--gray-500); line-height: 1.5; margin-bottom: 8px; }
+.pm-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.pm-chip { display: flex; align-items: center; gap: 5px; cursor: pointer; padding: 6px 11px; border-radius: 7px; border: 1.5px solid var(--gray-200); background: #fff; color: var(--gray-600); font-size: 0.82rem; font-weight: 600; user-select: none; }
+.pm-chip:hover { border-color: var(--gold); }
+.pm-chip.on { background: var(--gold-dark); border-color: var(--gold-dark); color: #fff; }
+.pm-kind-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.pm-kind-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; border: 2px solid var(--gray-200); border-radius: 10px; background: #fff; cursor: pointer; text-align: left; }
+.pm-kind-btn strong { font-size: 0.95rem; color: var(--gray-900); }
+.pm-kind-btn span { font-size: 0.72rem; color: var(--gray-500); }
+.pm-kind-btn:hover { border-color: var(--gold); }
+.pm-kind-btn.selected { border-color: var(--gold-dark); background: var(--gold-bg); box-shadow: 0 0 0 1px var(--gold-dark); }
+details > summary.pm-step-title { list-style: none; }
+details > summary.pm-step-title::-webkit-details-marker { display: none; }
+details > summary.pm-step-title::after { content: '▾'; margin-left: 4px; color: var(--gray-400); font-size: 0.8rem; }
+
 /* Admin: let the main area shrink to the screen so wide tables scroll inside their box */
 .admin-main { min-width: 0; }
 .admin-card select, .admin-card input, .admin-card textarea { max-width: 100%; }
