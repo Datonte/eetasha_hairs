@@ -340,9 +340,20 @@
     // or "length|*|lace" (e.g. 12" with a 13x6 frontal). Customers never see them.
     cfg.excluded = [...new Set((Array.isArray(s.excluded) ? s.excluded : [])
       .map(String).filter(k => /^\d{1,2}\|(\d{1,2}|\*)\|(\d{1,2}x\d{1,2}|\*)$/.test(k)))].slice(0, 500);
+    // Prices the admin typed in herself, e.g. { "18|3|-|-": 250 } = 18" × 3 bundles costs £250.
+    // Key: length|bundles|lace|finish ("-" when it doesn't apply). See priceFor() below.
+    cfg.priceOverrides = {};
+    if (s.priceOverrides && typeof s.priceOverrides === 'object') {
+      for (const [k, v] of Object.entries(s.priceOverrides).slice(0, 3000)) {
+        const n = Math.round(Number(v) * 100) / 100;
+        if (/^\d{1,2}\|\d{1,2}\|(\d{1,2}x\d{1,2}|-)\|([a-z]+|-)$/.test(k) && Number.isFinite(n) && n > 0 && n <= 100000) cfg.priceOverrides[k] = n;
+      }
+    }
     if (s.legacy && typeof s.legacy === 'object') cfg.legacy = s.legacy;   // old price table kept as a backup
     return cfg;
   }
+  const overrideKey = (cfg, length, bundles, lace, finish) =>
+    `${Number(length)}|${cfg.kind === 'lace' ? 0 : Number(bundles) || 0}|${cfg.kind === 'bundles' ? '-' : (lace || '-')}|${cfg.kind === 'unit' ? (finish || '-') : '-'}`;
   function isExcluded(cfg, length, bundles, lace) {
     const ex = cfg.excluded;
     if (!ex || !ex.length) return false;
@@ -371,6 +382,25 @@
     return COLOUR_GROUPS.filter(g => cfg.colours.some(c => colourGroup(c) === g));
   }
 
+  // The selling price of one choice. Automatic (supplier cost + profit) unless the admin
+  // typed her own price for that box. Her price is for the cheapest texture and colour;
+  // other textures and colours keep their usual extra on top.
+  // Used by the price table (shop + admin) AND checkout, so they always agree.
+  function priceFor(pricing, cfg, sel) {
+    const auto = computeUnit(pricing, builtSelection(cfg, sel));
+    const autoV = auto.error ? null : auto.sellGbp;
+    const typed = cfg.priceOverrides?.[overrideKey(cfg, sel.length, sel.bundles, sel.lace, sel.finish)];
+    if (typed === undefined) return autoV;
+    let base = null;
+    for (const texture of cfg.textures) for (const g of builtColourGroups(cfg)) {
+      const r = computeUnit(pricing, builtSelection(cfg, { ...sel, texture, colourGroup: g }));
+      if (!r.error && r.sellGbp !== null) base = base === null ? r.sellGbp : Math.min(base, r.sellGbp);
+    }
+    if (base === null) return typed;   // no supplier price for this box: her price for every texture/colour
+    if (autoV === null) return null;
+    return Math.round((typed + autoV - base) * 100) / 100;
+  }
+
   /**
    * Every selling price for a product, as nested arrays:
    * prices[length][bundleCount][lace][texture][colourGroup][finish] = £ or null.
@@ -390,8 +420,7 @@
     const prices = dims.lengths.map(length => dims.bundleCounts.map(bundles => dims.laces.map(lace =>
       dims.textures.map(texture => dims.colourGroups.map(colourGroupName => dims.finishes.map(finish => {
         if (isExcluded(cfg, length, bundles, lace)) return null;   // switched off for this product
-        const r = computeUnit(pricing, builtSelection(cfg, { length, bundles, lace, texture, colourGroup: colourGroupName, finish }));
-        const v = r.error ? null : r.sellGbp;
+        const v = priceFor(pricing, cfg, { length, bundles, lace, texture, colourGroup: colourGroupName, finish });
         if (v !== null) { fromPrice = fromPrice === null ? v : Math.min(fromPrice, v); maxPrice = maxPrice === null ? v : Math.max(maxPrice, v); }
         return v;
       }))))));
@@ -418,8 +447,8 @@
     const needsCap = cfg.kind === 'unit' && s.finish !== 'loose' && cfg.capSizes.length > 0;
     if (needsCap && !cfg.capSizes.includes(s.cap)) return { error: 'Please choose a cap size.' };
     if (cfg.laceTypes.length && !cfg.laceTypes.includes(s.laceType)) return { error: 'Please choose a lace type.' };
-    const r = computeUnit(pricing, builtSelection(cfg, s));
-    if (r.error || r.sellGbp === null) return { error: 'This option is not available right now.' };
+    const price = priceFor(pricing, cfg, { ...s, length: len });
+    if (price === null || price === undefined) return { error: 'This option is not available right now.' };
     const lace = cfg.kind === 'bundles' ? null : s.lace;
     const laceKind = lace ? (laceTable(pricing, lace)?.kind || 'lace') : null;
     const laceType = cfg.laceTypes.length ? ` ${s.laceType}` : '';
@@ -432,7 +461,7 @@
       cfg.kind === 'unit' ? FINISHES[s.finish] : null,
       needsCap ? CAP_SIZES[s.cap] : null,
     ].filter(Boolean);
-    return { price: r.sellGbp, label: parts.join(' · ') };
+    return { price, label: parts.join(' · ') };
   }
 
   // Cart key for a built item: B|length|bundles|lace|texture|colour|finish|cap|laceType
@@ -447,7 +476,7 @@
 
   const api = {
     DEFAULT_PRICING, WEFT_LENGTHS, LACE_LENGTHS, GRADE_LABELS, FINISHES, TEXTURES, COLOUR_GROUPS,
-    computeUnit, laceTable, sanitizePricing,
+    computeUnit, laceTable, sanitizePricing, overrideKey, priceFor,
     colourGroup, sanitizeBuiltConfig, buildPriceTable, quoteBuilt, builtKey, parseBuiltKey, laceLengthFor, BUNDLE_QTY_RANGE,
     CAP_SIZES, LACE_TYPES, GRAMS_PER_BUNDLE, bundleText, salePercentOf, applySale, countsText,
   };

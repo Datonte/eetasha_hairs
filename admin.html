@@ -538,7 +538,7 @@
 
               <div class="pm-step">
                 <div class="pm-step-title"><span class="pm-step-num"></span>Prices customers will pay</div>
-                <p class="pm-step-help">Worked out automatically from your Pricing tab. Lowest price for each box (1B colour); other colours and textures add their extra.</p>
+                <p class="pm-step-help">Each box starts with the automatic price from your Pricing tab (in grey). <strong>To set your own price, type it in the box.</strong> Leave a box empty to keep the automatic price. Prices are for 1B colour; other colours and textures add their extra on top.</p>
                 <div id="pmBuiltPreview" style="overflow-x:auto;"></div>
               </div>
 
@@ -1499,11 +1499,13 @@
       onBuiltColourModeChange();
       document.getElementById('pmBuiltCombos').innerHTML = '';   // don't carry ticks over from another product
       _builtExcluded = new Set(cfg.excluded || []);
+      _builtOverrides = { ...(cfg.priceOverrides || {}) };
       renderBuiltCombos();
       scheduleBuiltPreview();
     }
     // ---- Switch off individual combinations (length × bundles, length × closure/frontal) ----
     let _builtExcluded = new Set();
+    let _builtOverrides = {};   // prices she typed in herself, by Pricing.overrideKey()
     function _syncBuiltExcluded() {
       document.querySelectorAll('#pmBuiltCombos input[data-excl]').forEach(cb => {
         if (cb.checked) _builtExcluded.delete(cb.dataset.excl); else _builtExcluded.add(cb.dataset.excl);
@@ -1545,6 +1547,7 @@
     }
     // Rebuild the grids whenever lengths, bundle counts, closures or the product kind change
     document.getElementById('pmBuiltSection').addEventListener('change', e => {
+      if (e.target.closest('#pmBuiltPreview')) return;   // the price boxes handle themselves
       if (e.target.closest('#pmBuiltLengths, #pmBuiltBundles, #pmBuiltLaces') || e.target.id === 'pmBuiltKind') renderBuiltCombos();
       if (e.target.closest('#pmBuiltBundles')) updateBundlesSummary();
       if (e.target.closest('#pmBuiltLaces')) updateKindButtons();
@@ -1564,50 +1567,90 @@
       const note = (msg, colour = 'var(--gray-500)') => { box.innerHTML = `<p style="font-size:0.82rem;color:${colour};background:var(--gray-50,#fafafa);border:1px dashed var(--gray-200);border-radius:8px;padding:12px;">${msg}</p>`; };
       if (!_pricing) { note('Loading your prices…'); return; }
       const cfg = getBuiltConfigFromModal();
-      let t;
-      try { t = Pricing.buildPriceTable(_pricing, cfg); } catch (err) { note(`Couldn't work out prices: ${escHtml(err.message)}`, 'var(--error,#c0392b)'); return; }
+      let t, auto;
+      try {
+        t    = Pricing.buildPriceTable(_pricing, cfg);                            // with her own prices
+        auto = Pricing.buildPriceTable(_pricing, { ...cfg, priceOverrides: {} });  // automatic only (shown in grey)
+      } catch (err) { note(`Couldn't work out prices: ${escHtml(err.message)}`, 'var(--error,#c0392b)'); return; }
       const o = t.options;
       if (!o.lengths.length) { note('Tick at least one length above.'); return; }
       if (t.kind !== 'lace' && !o.bundleCounts.length) { note('Tick at least one number of bundles above.'); return; }
       if (t.kind !== 'bundles' && !o.laces.length) { note('Tick at least one closure or frontal above.'); return; }
-      if (t.fromPrice === null) {
-        note(_pricingSaved
-          ? 'No prices for these choices. Check the Pricing tab has supplier prices for this weft list, these lengths and these closures/frontals.'
-          : '<strong>No prices yet.</strong> Go to the <strong>Pricing</strong> tab, click <strong>Import price file</strong>, then <strong>Save</strong>. The prices then appear here.',
-          'var(--warning,#b7791f)');
-        return;
-      }
       const lowest = arr => { let m = null; (function walk(a) { if (Array.isArray(a)) a.forEach(walk); else if (a !== null && a !== undefined) m = m === null ? a : Math.min(m, a); })(arr); return m; };
-      const money = v => v === null ? '<span style="color:var(--gray-300);">—</span>' : `£${Number.isInteger(v) ? v : Number(v).toFixed(2)}`;
+      const fmt = v => Number.isInteger(v) ? String(v) : Number(v).toFixed(2);
+      const ex = new Set(cfg.excluded || []);
       const th = 'padding:6px 9px;background:var(--gray-100);font-size:0.72rem;color:var(--gray-500);text-align:center;white-space:nowrap;position:sticky;top:0;';
-      const td = 'padding:5px 9px;text-align:center;font-size:0.8rem;white-space:nowrap;border-top:1px solid var(--gray-100);';
+      const td = 'padding:4px 5px;text-align:center;font-size:0.8rem;white-space:nowrap;border-top:1px solid var(--gray-100);';
+      // Each box: her own price (gold) if she typed one, otherwise the automatic price in grey.
+      // "off" = switched off in the steps above, so customers can't pick it.
+      const box1 = (key, autoV, off) => {
+        if (off) return `<span style="color:var(--gray-300);font-size:0.75rem;">off</span>`;
+        const typed = _builtOverrides[key];
+        return `<span class="pm-price${typed !== undefined ? ' typed' : ''}">£<input type="number" inputmode="decimal" step="0.01" min="0" data-pk="${escHtml(key)}"
+          value="${typed !== undefined ? fmt(typed) : ''}" placeholder="${autoV === null ? 'price' : fmt(autoV)}" aria-label="Price"></span>`;
+      };
       const table = (corner, rows, cols, rowLabel, colLabel, cell) => `<table style="border-collapse:collapse;">
         <thead><tr><th style="${th}text-align:left;">${corner}</th>${cols.map(c => `<th style="${th}">${escHtml(colLabel(c))}</th>`).join('')}</tr></thead>
-        <tbody>${rows.map((r, ri) => `<tr><td style="${td}text-align:left;font-weight:600;">${escHtml(rowLabel(r))}</td>${cols.map((c, ci) => `<td style="${td}">${money(cell(ri, ci))}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+        <tbody>${rows.map((r, ri) => `<tr><td style="${td}padding-left:9px;text-align:left;font-weight:600;">${escHtml(rowLabel(r))}</td>${cols.map((c, ci) => `<td style="${td}">${cell(ri, ci)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
       const len = l => `${l}"`;
       const laceName = la => `${la} ${String(la).startsWith('13') ? 'frontal' : 'closure'}`;
+      const K = (l, b, la, f) => Pricing.overrideKey(cfg, l, b, la, f);
       let html = '';
       if (t.kind === 'bundles') {
         // rows: number of bundles, columns: lengths
-        html = table('Bundles', o.bundleCounts, o.lengths, b => `${b} (${b * 100}g)`, len, (bi, li) => lowest(t.prices[li]?.[bi]));
+        html = table('Bundles', o.bundleCounts, o.lengths, b => `${b} (${b * 100}g)`, len, (bi, li) => {
+          const l = o.lengths[li], b = o.bundleCounts[bi];
+          return box1(K(l, b), lowest(auto.prices[li]?.[bi]), ex.has(`${l}|${b}|*`));
+        });
       } else if (t.kind === 'lace') {
-        html = table('Size', o.laces, o.lengths, laceName, len, (lai, li) => lowest(t.prices[li]?.[0]?.[lai]));
+        html = table('Size', o.laces, o.lengths, laceName, len, (lai, li) => {
+          const l = o.lengths[li], la = o.laces[lai];
+          return box1(K(l, 0, la), lowest(auto.prices[li]?.[0]?.[lai]), ex.has(`${l}|*|${la}`));
+        });
       } else {
-        // Wig / unit: pick the number of bundles and how it's supplied, then lengths × closures/frontals
+        // Wig / unit: pick the number of bundles and how it's made, then lengths × closures/frontals
         if (!o.bundleCounts.includes(_pvBundles)) _pvBundles = o.bundleCounts.includes(3) ? 3 : o.bundleCounts[0];
         if (!o.finishes.includes(_pvFinish)) _pvFinish = o.finishes.includes('wig') ? 'wig' : o.finishes[0];
         const bi = o.bundleCounts.indexOf(_pvBundles), fi = o.finishes.indexOf(_pvFinish);
         const sel = (id, items, value, label) => `<select id="${id}" class="form-input" style="width:auto;padding:5px 8px;font-size:0.8rem;">${items.map(v => `<option value="${escHtml(String(v))}" ${v === value ? 'selected' : ''}>${escHtml(label(v))}</option>`).join('')}</select>`;
-        html = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+        html = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+            <span style="font-size:0.78rem;color:var(--gray-500);">Prices for:</span>
             ${sel('pmPvBundles', o.bundleCounts, _pvBundles, b => `${b} bundle${b > 1 ? 's' : ''}`)}
             ${o.finishes.length > 1 ? sel('pmPvFinish', o.finishes, _pvFinish, f => BUILT_FINISH_LABELS[f] || f) : ''}
           </div>` +
-          table('Length', o.lengths, o.laces, len, laceName, (li, lai) => lowest(t.prices[li]?.[bi]?.[lai]?.map(tex => tex.map(g => g[fi]))));
+          table('Length', o.lengths, o.laces, len, laceName, (li, lai) => {
+            const l = o.lengths[li], la = o.laces[lai];
+            return box1(K(l, _pvBundles, la, _pvFinish), lowest(auto.prices[li]?.[bi]?.[lai]?.map(tex => tex.map(g => g[fi]))),
+              ex.has(`${l}|${_pvBundles}|*`) || ex.has(`${l}|*|${la}`));
+          });
       }
       const pct = Math.round(Number(document.getElementById('pmSale')?.value));
-      box.innerHTML = html + `<p style="font-size:0.75rem;color:var(--gray-500);margin-top:8px;">From <strong>£${Math.round(t.fromPrice)}</strong> to <strong>£${Math.round(t.maxPrice)}</strong>${pct > 0 && pct <= 90 ? ` · before the ${pct}% sale` : ''}. "—" = not available (switched off or no supplier price).</p>`;
+      const typedCount = Object.keys(_builtOverrides).length;
+      const noAuto = auto.fromPrice === null
+        ? `<p style="font-size:0.8rem;color:var(--warning,#b7791f);background:var(--gold-bg);border-radius:8px;padding:10px 12px;margin-bottom:8px;">${_pricingSaved
+            ? 'There are no automatic prices for these choices'
+            : 'There are no automatic prices yet (import the price file on the Pricing tab)'}. You can still type your own price in each box below.</p>` : '';
+      box.innerHTML = noAuto + html + `<p style="font-size:0.75rem;color:var(--gray-500);margin-top:8px;line-height:1.6;">
+          ${t.fromPrice !== null ? `Customers pay from <strong>£${Math.round(t.fromPrice)}</strong> to <strong>£${Math.round(t.maxPrice)}</strong>${pct > 0 && pct <= 90 ? ` (before the ${pct}% sale)` : ''}. ` : ''}
+          Grey = automatic price · <span style="color:var(--gold-dark);font-weight:700;">gold = your own price</span> · empty a box to go back to automatic.
+          ${typedCount ? `<button type="button" id="pmPvReset" style="margin-left:6px;background:none;border:none;color:var(--gold-dark);text-decoration:underline;cursor:pointer;font-size:0.75rem;">Reset all ${typedCount} to automatic</button>` : ''}</p>`;
       document.getElementById('pmPvBundles')?.addEventListener('change', e => { _pvBundles = Number(e.target.value); renderBuiltPreview(); });
       document.getElementById('pmPvFinish')?.addEventListener('change', e => { _pvFinish = e.target.value; renderBuiltPreview(); });
+      document.getElementById('pmPvReset')?.addEventListener('click', () => {
+        if (!confirm('Put every price for this product back to the automatic price?')) return;
+        _builtOverrides = {}; renderBuiltPreview();
+      });
+      // Typing a price: save it, then redraw (keeping her place so Tab moves to the next box)
+      box.querySelectorAll('input[data-pk]').forEach(inp => inp.addEventListener('change', () => {
+        const n = Math.round(Number(inp.value) * 100) / 100;
+        if (inp.value.trim() === '' || !(n > 0)) delete _builtOverrides[inp.dataset.pk];
+        else _builtOverrides[inp.dataset.pk] = n;
+        setTimeout(() => {
+          const next = document.activeElement?.dataset?.pk;
+          renderBuiltPreview();
+          if (next) box.querySelector(`input[data-pk="${CSS.escape(next)}"]`)?.focus();
+        }, 0);
+      }));
     }
 
     // Units: 1–6 bundles per unit. Bundles on their own: customers can buy 1–40.
@@ -1663,6 +1706,7 @@
         const lens = kind === 'lace' ? Pricing.LACE_LENGTHS : Pricing.WEFT_LENGTHS;
         _bGrid('pmBuiltLengths', lens, 'blen', lens.filter(l => l >= 12), v => `${v}"`);
         renderBuiltBundleChoices(kind, []);
+        _builtOverrides = {};   // typed prices belonged to the old product type
       }
       renumberSteps();
       updateKindButtons();
@@ -1745,6 +1789,7 @@
         colours: getSelectedColours(),
         fixedColour: { code: document.getElementById('pmBuiltFixedCode').value, name: document.getElementById('pmBuiltFixedName').value.trim() || document.getElementById('pmBuiltFixedCode').value },
         excluded: (_syncBuiltExcluded(), [..._builtExcluded]),
+        priceOverrides: { ..._builtOverrides },   // prices she typed in herself
       };
       if (_editingLegacy) cfg.legacy = _editingLegacy;
       return cfg;
