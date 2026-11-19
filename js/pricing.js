@@ -261,9 +261,10 @@
   const COLOUR_NATURAL = 'Natural colour', COLOUR_MID = 'Colour #2–#18', COLOUR_HIGH = 'Colour #24 / #613 / #60 / Ash';
   const COLOUR_GROUPS = [COLOUR_NATURAL, COLOUR_MID, COLOUR_HIGH];
   const MAX_LACE_LENGTH = LACE_LENGTHS[LACE_LENGTHS.length - 1];
-  const BUNDLE_QTY_RANGE = Array.from({ length: 40 }, (_, i) => i + 1);   // bundles on their own: 1–40
-  // What bundle products start with: 10, 12, 14 … 40 (she can change it per product)
-  const BUNDLE_DEFAULT_COUNTS = BUNDLE_QTY_RANGE.filter(n => n >= 10 && n % 2 === 0);
+  // Bundles on their own are sold in 10, 12, 14 … 40 bundles only (no odd numbers, nothing under 10).
+  // The admin ticks which of these each product comes in; customers can only pick those.
+  const BUNDLE_QTY_RANGE = Array.from({ length: 16 }, (_, i) => 10 + i * 2);
+  const BUNDLE_DEFAULT_COUNTS = BUNDLE_QTY_RANGE.slice();
   // [1,2,3,5,9,10] → "1–3, 5, 9, 10" (runs of 3 or more are shortened)
   const countsText = list => {
     const n = [...new Set((list || []).map(Number))].filter(Number.isFinite).sort((a, b) => a - b);
@@ -317,7 +318,7 @@
       weftList: Object.keys(p.weftLists || {}).includes(s.weftList) ? s.weftList : 'list1',
       grade: Object.keys(GRADE_LABELS).includes(s.grade) ? s.grade : 'sdd',
       lengths: pick(ints(s.lengths), lengthPool, lengthPool.filter(l => l >= 12)).sort((a, b) => a - b),
-      // Units: 1–6 bundles per unit. Bundles on their own: customers can buy 1–40.
+      // Units: 1–6 bundles per unit. Bundles on their own: 10, 12, 14 … 40 (odd numbers / under 10 are dropped).
       bundleCounts: kind === 'lace' ? [] : (kind === 'unit'
         ? pick(ints(s.bundleCounts), [1, 2, 3, 4, 5, 6], [3, 4])
         : pick(ints(s.bundleCounts), BUNDLE_QTY_RANGE, BUNDLE_DEFAULT_COUNTS)).sort((a, b) => a - b),
