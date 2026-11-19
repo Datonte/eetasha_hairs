@@ -499,6 +499,11 @@
                 <div class="form-group pm-fixed-colour"><label class="form-label">Colour name shown</label><input id="pmBuiltFixedName" class="form-input" placeholder="e.g. Burgundy"></div>
               </div>
               <p style="font-size:0.75rem;color:var(--gray-400);margin-top:4px;">Colour price: 1B natural costs nothing extra; #2–#18 and #613 / blondes / fashion colours add your supplier's colour charge automatically.</p>
+              <div class="form-group" style="margin-top:16px;">
+                <label class="form-label" style="margin-bottom:4px;">Price table: what customers will pay</label>
+                <p style="font-size:0.75rem;color:var(--gray-400);margin-bottom:8px;">Worked out from your Pricing tab and updated as you tick options above. Shows the lowest price for each box (natural 1B colour); other colours and textures add their extra.</p>
+                <div id="pmBuiltPreview" style="overflow-x:auto;"></div>
+              </div>
             </div>
             <!-- Inches grid (hidden for closure/frontal step1) -->
             <div class="form-group" style="margin-top:14px;" id="pmInchesSection">
@@ -916,6 +921,7 @@
         document.getElementById('prMigrationBanner').classList.toggle('hidden', !r.needsMigration);
         document.getElementById('prSaveState').textContent = (!r.saved && !r.needsMigration) ? 'No prices saved yet — use "Import price file".' : '';
         renderPricing();
+        scheduleBuiltPreview();   // a product may already be open
       } catch (err) { Toast.show('Failed to load pricing.', 'error'); }
     }
 
@@ -1432,6 +1438,7 @@
       document.getElementById('pmBuiltCombos').innerHTML = '';   // don't carry ticks over from another product
       _builtExcluded = new Set(cfg.excluded || []);
       renderBuiltCombos();
+      scheduleBuiltPreview();
     }
     // ---- Switch off individual combinations (length × bundles, length × closure/frontal) ----
     let _builtExcluded = new Set();
@@ -1465,7 +1472,67 @@
     document.getElementById('pmBuiltSection').addEventListener('change', e => {
       if (e.target.closest('#pmBuiltLengths, #pmBuiltBundles, #pmBuiltLaces') || e.target.id === 'pmBuiltKind') renderBuiltCombos();
       if (e.target.closest('#pmBuiltBundles')) updateBundlesSummary();
+      scheduleBuiltPreview();
     });
+    document.getElementById('pmColoursGrid')?.addEventListener('change', () => scheduleBuiltPreview());
+
+    // ---- Price table: the selling prices this product will have ----
+    let _pvTimer = null, _pvBundles = null, _pvFinish = null;
+    function scheduleBuiltPreview() {
+      clearTimeout(_pvTimer);
+      _pvTimer = setTimeout(renderBuiltPreview, 60);   // ticking "All 1–40" fires 40 changes: draw once
+    }
+    function renderBuiltPreview() {
+      const box = document.getElementById('pmBuiltPreview');
+      if (!box || _getVariantType() !== 'built') return;
+      const note = (msg, colour = 'var(--gray-500)') => { box.innerHTML = `<p style="font-size:0.82rem;color:${colour};background:var(--gray-50,#fafafa);border:1px dashed var(--gray-200);border-radius:8px;padding:12px;">${msg}</p>`; };
+      if (!_pricing) { note('Loading your prices…'); return; }
+      const cfg = getBuiltConfigFromModal();
+      let t;
+      try { t = Pricing.buildPriceTable(_pricing, cfg); } catch (err) { note(`Couldn't work out prices: ${escHtml(err.message)}`, 'var(--error,#c0392b)'); return; }
+      const o = t.options;
+      if (!o.lengths.length) { note('Tick at least one length above.'); return; }
+      if (t.kind !== 'lace' && !o.bundleCounts.length) { note('Tick at least one number of bundles above.'); return; }
+      if (t.kind !== 'bundles' && !o.laces.length) { note('Tick at least one closure or frontal above.'); return; }
+      if (t.fromPrice === null) {
+        note(_pricingSaved
+          ? 'No prices for these choices. Check the Pricing tab has supplier prices for this weft list, these lengths and these closures/frontals.'
+          : '<strong>No prices yet.</strong> Go to the <strong>Pricing</strong> tab, click <strong>Import price file</strong>, then <strong>Save</strong>. The prices then appear here.',
+          'var(--warning,#b7791f)');
+        return;
+      }
+      const lowest = arr => { let m = null; (function walk(a) { if (Array.isArray(a)) a.forEach(walk); else if (a !== null && a !== undefined) m = m === null ? a : Math.min(m, a); })(arr); return m; };
+      const money = v => v === null ? '<span style="color:var(--gray-300);">—</span>' : `£${Number.isInteger(v) ? v : Number(v).toFixed(2)}`;
+      const th = 'padding:6px 9px;background:var(--gray-100);font-size:0.72rem;color:var(--gray-500);text-align:center;white-space:nowrap;position:sticky;top:0;';
+      const td = 'padding:5px 9px;text-align:center;font-size:0.8rem;white-space:nowrap;border-top:1px solid var(--gray-100);';
+      const table = (corner, rows, cols, rowLabel, colLabel, cell) => `<table style="border-collapse:collapse;">
+        <thead><tr><th style="${th}text-align:left;">${corner}</th>${cols.map(c => `<th style="${th}">${escHtml(colLabel(c))}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map((r, ri) => `<tr><td style="${td}text-align:left;font-weight:600;">${escHtml(rowLabel(r))}</td>${cols.map((c, ci) => `<td style="${td}">${money(cell(ri, ci))}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+      const len = l => `${l}"`;
+      const laceName = la => `${la} ${String(la).startsWith('13') ? 'frontal' : 'closure'}`;
+      let html = '';
+      if (t.kind === 'bundles') {
+        // rows: number of bundles, columns: lengths
+        html = table('Bundles', o.bundleCounts, o.lengths, b => `${b} (${b * 100}g)`, len, (bi, li) => lowest(t.prices[li]?.[bi]));
+      } else if (t.kind === 'lace') {
+        html = table('Size', o.laces, o.lengths, laceName, len, (lai, li) => lowest(t.prices[li]?.[0]?.[lai]));
+      } else {
+        // Wig / unit: pick the number of bundles and how it's supplied, then lengths × closures/frontals
+        if (!o.bundleCounts.includes(_pvBundles)) _pvBundles = o.bundleCounts.includes(3) ? 3 : o.bundleCounts[0];
+        if (!o.finishes.includes(_pvFinish)) _pvFinish = o.finishes.includes('wig') ? 'wig' : o.finishes[0];
+        const bi = o.bundleCounts.indexOf(_pvBundles), fi = o.finishes.indexOf(_pvFinish);
+        const sel = (id, items, value, label) => `<select id="${id}" class="form-input" style="width:auto;padding:5px 8px;font-size:0.8rem;">${items.map(v => `<option value="${escHtml(String(v))}" ${v === value ? 'selected' : ''}>${escHtml(label(v))}</option>`).join('')}</select>`;
+        html = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+            ${sel('pmPvBundles', o.bundleCounts, _pvBundles, b => `${b} bundle${b > 1 ? 's' : ''}`)}
+            ${o.finishes.length > 1 ? sel('pmPvFinish', o.finishes, _pvFinish, f => BUILT_FINISH_LABELS[f] || f) : ''}
+          </div>` +
+          table('Length', o.lengths, o.laces, len, laceName, (li, lai) => lowest(t.prices[li]?.[bi]?.[lai]?.map(tex => tex.map(g => g[fi]))));
+      }
+      const pct = Math.round(Number(document.getElementById('pmSale')?.value));
+      box.innerHTML = html + `<p style="font-size:0.75rem;color:var(--gray-500);margin-top:8px;">From <strong>£${Math.round(t.fromPrice)}</strong> to <strong>£${Math.round(t.maxPrice)}</strong>${pct > 0 && pct <= 90 ? ` · before the ${pct}% sale` : ''}. "—" = not available (switched off or no supplier price).</p>`;
+      document.getElementById('pmPvBundles')?.addEventListener('change', e => { _pvBundles = Number(e.target.value); renderBuiltPreview(); });
+      document.getElementById('pmPvFinish')?.addEventListener('change', e => { _pvFinish = e.target.value; renderBuiltPreview(); });
+    }
 
     // Units: 1–6 bundles per unit. Bundles on their own: customers can buy 1–40.
     function renderBuiltBundleChoices(kind, selected) {
@@ -1667,6 +1734,7 @@
         if (buildRow) buildRow.style.display = 'none';
         if (!document.getElementById('pmBuiltLengths').children.length) renderBuiltForm({});
         onBuiltColourModeChange();
+        scheduleBuiltPreview();
         return;
       }
       builtSection.style.display = 'none';
