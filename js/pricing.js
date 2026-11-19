@@ -17,7 +17,8 @@
 (function (root) {
   'use strict';
 
-  const WEFT_LENGTHS = [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
+  const WEFT_LENGTHS = [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40];
+  const BUNDLE_LENGTHS = WEFT_LENGTHS.filter(l => l >= 10);   // bundles on their own: 10", 12" … 40"
   const LACE_LENGTHS = [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28];
   const blank = lengths => Object.fromEntries(lengths.map(l => [l, null]));
   const blankGrades = () => ({ single: blank(WEFT_LENGTHS), double: blank(WEFT_LENGTHS), sdd: blank(WEFT_LENGTHS) });
@@ -261,9 +262,9 @@
   const COLOUR_NATURAL = 'Natural colour', COLOUR_MID = 'Colour #2–#18', COLOUR_HIGH = 'Colour #24 / #613 / #60 / Ash';
   const COLOUR_GROUPS = [COLOUR_NATURAL, COLOUR_MID, COLOUR_HIGH];
   const MAX_LACE_LENGTH = LACE_LENGTHS[LACE_LENGTHS.length - 1];
-  // Bundles on their own are sold in 10, 12, 14 … 40 bundles only (no odd numbers, nothing under 10).
-  // The admin ticks which of these each product comes in; customers can only pick those.
-  const BUNDLE_QTY_RANGE = Array.from({ length: 16 }, (_, i) => 10 + i * 2);
+  // Bundles on their own are sold by weight: 100g, 200g … 600g (1 bundle = 100g).
+  // The admin ticks which weights each product comes in; customers can only pick those.
+  const BUNDLE_QTY_RANGE = [1, 2, 3, 4, 5, 6];
   const BUNDLE_DEFAULT_COUNTS = BUNDLE_QTY_RANGE.slice();
   // [1,2,3,5,9,10] → "1–3, 5, 9, 10" (runs of 3 or more are shortened)
   const countsText = list => {
@@ -282,6 +283,7 @@
   const LACE_TYPES = ['HD', 'Transparent'];
   const GRAMS_PER_BUNDLE = 100;
   const bundleText = n => `${n} bundle${Number(n) > 1 ? 's' : ''} (${Number(n) * GRAMS_PER_BUNDLE}g)`;
+  const weightText = n => `${Number(n) * GRAMS_PER_BUNDLE}g`;   // bundles on their own are shown by weight
   // Sale price: whole-percent off, to the penny. Shared by the shop and the server so they always agree.
   const salePercentOf = details => {
     const n = Math.round(Number(details?.salePercent));
@@ -310,15 +312,15 @@
     };
     const ints = list => (Array.isArray(list) ? list : []).map(Number).filter(Number.isFinite);
     const laceSizes = allLaceSizes(p);
-    const lengthPool = kind === 'lace' ? LACE_LENGTHS : WEFT_LENGTHS;
+    const lengthPool = kind === 'lace' ? LACE_LENGTHS : kind === 'bundles' ? BUNDLE_LENGTHS : WEFT_LENGTHS;
     const cfg = {
       enabled: true,
       variant_type: 'built',
       kind,
       weftList: Object.keys(p.weftLists || {}).includes(s.weftList) ? s.weftList : 'list1',
       grade: Object.keys(GRADE_LABELS).includes(s.grade) ? s.grade : 'sdd',
-      lengths: pick(ints(s.lengths), lengthPool, lengthPool.filter(l => l >= 12)).sort((a, b) => a - b),
-      // Units: 1–6 bundles per unit. Bundles on their own: 10, 12, 14 … 40 (odd numbers / under 10 are dropped).
+      lengths: pick(ints(s.lengths), lengthPool, kind === 'bundles' ? BUNDLE_LENGTHS : lengthPool.filter(l => l >= 12 && l <= 30)).sort((a, b) => a - b),
+      // Units: 1–6 bundles per unit. Bundles on their own: 100g–600g (stored as 1–6 bundles of 100g).
       bundleCounts: kind === 'lace' ? [] : (kind === 'unit'
         ? pick(ints(s.bundleCounts), [1, 2, 3, 4, 5, 6], [3, 4])
         : pick(ints(s.bundleCounts), BUNDLE_QTY_RANGE, BUNDLE_DEFAULT_COUNTS)).sort((a, b) => a - b),
@@ -470,7 +472,7 @@
     const laceType = cfg.laceTypes.length ? ` ${s.laceType}` : '';
     const parts = [
       `${len}"`,
-      cfg.kind === 'lace' ? null : bundleText(s.bundles),
+      cfg.kind === 'lace' ? null : cfg.kind === 'bundles' ? weightText(s.bundles) : bundleText(s.bundles),
       lace ? `${cfg.kind === 'lace' ? '' : `${laceLengthFor(len)}" `}${lace}${laceType} ${laceKind}`.trim() : null,
       s.texture,
       colourName,
@@ -491,10 +493,10 @@
   }
 
   const api = {
-    DEFAULT_PRICING, WEFT_LENGTHS, LACE_LENGTHS, GRADE_LABELS, FINISHES, TEXTURES, COLOUR_GROUPS,
+    DEFAULT_PRICING, WEFT_LENGTHS, BUNDLE_LENGTHS, LACE_LENGTHS, GRADE_LABELS, FINISHES, TEXTURES, COLOUR_GROUPS,
     computeUnit, laceTable, sanitizePricing, overrideKey, priceFor,
     colourGroup, sanitizeBuiltConfig, buildPriceTable, quoteBuilt, builtKey, parseBuiltKey, laceLengthFor, BUNDLE_QTY_RANGE, BUNDLE_DEFAULT_COUNTS,
-    CAP_SIZES, LACE_TYPES, GRAMS_PER_BUNDLE, bundleText, salePercentOf, applySale, countsText,
+    CAP_SIZES, LACE_TYPES, GRAMS_PER_BUNDLE, bundleText, weightText, salePercentOf, applySale, countsText,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Pricing = api;

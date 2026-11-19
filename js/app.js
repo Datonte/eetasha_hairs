@@ -741,12 +741,9 @@ async function openBuiltPicker(p) {
     }).join(''));
 
     if (isBundles) {
-      // Bundles on their own: a button for every number this product comes in (set per
-      // product in the admin). With lots of numbers the buttons are smaller: "3" + "300g".
-      const many = o.bundleCounts.length > 8, qty = o.bundleCounts[s.bi], total = current();
-      html += step(n++, 'Number of bundles', o.bundleCounts.map((b, i) =>
-        btn(many ? `${b}` : `${b} bundle${b > 1 ? 's' : ''}`, i === s.bi, `_bp.set('bi',${i})`, !anyPrice(table.prices[s.li]?.[i]), `${b * 100}g`)).join('')
-        + (total !== null && qty ? `<div style="flex-basis:100%;font-size:0.75rem;color:var(--gray-500);margin-top:4px;">${qty} bundle${qty > 1 ? 's' : ''} (${qty * 100}g) · ${money(total / qty)} per bundle</div>` : ''));
+      // Bundles on their own are chosen by weight: 100g … 600g (only the weights set in the admin)
+      html += step(n++, 'Weight', o.bundleCounts.map((b, i) =>
+        btn(`${b * 100}g`, i === s.bi, `_bp.set('bi',${i})`, !anyPrice(table.prices[s.li]?.[i]))).join(''));
     } else if (!isLace && o.bundleCounts.length > 1) {
       html += step(n++, isBundles ? 'Number of bundles' : 'Bundles', o.bundleCounts.map((b, i) =>
         btn(`${b} bundle${b > 1 ? 's' : ''}`, i === s.bi, `_bp.set('bi',${i})`, !anyPrice(table.prices[s.li]?.[i]), `${b * 100}g`)).join(''));
@@ -835,7 +832,7 @@ async function openBuiltPicker(p) {
     const len = o.lengths[s.li], la = o.laces[s.lai], b = o.bundleCounts[s.bi];
     return [
       `${len}"`,
-      table.kind === 'lace' ? null : `${b} bundle${b > 1 ? 's' : ''} (${b * 100}g)`,
+      table.kind === 'lace' ? null : table.kind === 'bundles' ? `${b * 100}g` : `${b} bundle${b > 1 ? 's' : ''} (${b * 100}g)`,
       table.kind === 'bundles' ? null : `${table.kind === 'lace' ? '' : `${Math.min(len, 28)}" `}${la}${laceTypes.length ? ` ${s.laceType}` : ''} ${la.startsWith('13') ? 'frontal' : 'closure'}`.trim(),
       o.textures[s.ti],
       cfg.colourMode === 'fixed' ? cfg.fixedColour?.name : s.colour,

@@ -461,20 +461,20 @@
               </select>
               <p class="pm-step-help" style="margin:2px 0 4px;">For each step, tap to switch an option on or off. <strong style="color:var(--gold-dark);">Gold = available</strong>, white = not available. Customers only ever see what's gold. Prices fill in automatically at the bottom.</p>
 
+              <div class="pm-step">
+                <div class="pm-step-title"><span class="pm-step-num"></span>Length (inches)
+                  <span class="pm-step-tools"><button type="button" onclick="setAllIn('pmBuiltLengths', true)">All</button><button type="button" onclick="setAllIn('pmBuiltLengths', false)">None</button></span></div>
+                <div id="pmBuiltLengths" class="pm-chips"></div>
+              </div>
+
               <div class="pm-step" id="pmBuiltBundlesWrap">
-                <div class="pm-step-title"><span class="pm-step-num"></span><span id="pmBuiltBundlesLabel">Number of bundles</span>
+                <div class="pm-step-title"><span class="pm-step-num"></span><span id="pmBuiltBundlesLabel">Weight</span>
                   <span class="pm-step-tools"><button type="button" onclick="setAllBuiltBundles(true)">All</button><button type="button" onclick="setAllBuiltBundles(false)">None</button></span></div>
                 <div id="pmBuiltBundlesQuick" style="display:none;flex-direction:column;gap:8px;margin-bottom:8px;">
-                  <div class="pm-step-help">Bundles come in 10, 12, 14 … 40. Tap a number to switch it on or off for this product.</div>
+                  <div class="pm-step-help">Tap a weight to switch it on or off for this product.</div>
                   <div id="pmBuiltBundlesSummary" style="font-size:0.78rem;color:var(--gold-dark);font-weight:600;"></div>
                 </div>
                 <div id="pmBuiltBundles" class="pm-chips"></div>
-              </div>
-
-              <div class="pm-step">
-                <div class="pm-step-title"><span class="pm-step-num"></span>Inches (length)
-                  <span class="pm-step-tools"><button type="button" onclick="setAllIn('pmBuiltLengths', true)">All</button><button type="button" onclick="setAllIn('pmBuiltLengths', false)">None</button></span></div>
-                <div id="pmBuiltLengths" class="pm-chips"></div>
               </div>
 
               <div class="pm-step" id="pmBuiltLacesWrap">
@@ -526,7 +526,7 @@
               <div class="pm-step">
                 <details id="pmBuiltCombosBox">
                   <summary class="pm-step-title" style="cursor:pointer;"><span class="pm-step-num"></span>Fine-tune (optional)</summary>
-                  <p class="pm-step-help" style="margin:6px 0 8px;">Switch off a particular combination, e.g. 30" only comes in 3 or more bundles. Ticked = available.</p>
+                  <p class="pm-step-help" style="margin:6px 0 8px;">Switch off a particular combination, e.g. 40" doesn't come in 100g. Ticked = available.</p>
                   <div id="pmBuiltCombos" style="display:grid;gap:14px;"></div>
                 </details>
               </div>
@@ -1477,7 +1477,7 @@
       document.getElementById('pmBuiltList').value = cfg.weftList;
       fillSelect('pmBuiltGrade', Object.entries(P.GRADE_LABELS).map(([value, label]) => ({ value, label })), cfg.grade);
       document.getElementById('pmBuiltGrade').value = cfg.grade;
-      _bGrid('pmBuiltLengths', cfg.kind === 'lace' ? P.LACE_LENGTHS : P.WEFT_LENGTHS, 'blen', cfg.lengths, v => `${v}"`);
+      _bGrid('pmBuiltLengths', cfg.kind === 'lace' ? P.LACE_LENGTHS : cfg.kind === 'bundles' ? P.BUNDLE_LENGTHS : P.WEFT_LENGTHS, 'blen', cfg.lengths, v => `${v}"`);
       renderBuiltBundleChoices(cfg.kind, cfg.bundleCounts);
       _bGrid('pmBuiltLaces', _builtLaceSizes(), 'blace', cfg.laces.length ? cfg.laces : _builtLaceSizes(), v => `${v} ${v.startsWith('13') ? 'frontal' : 'closure'}`);
       _bGrid('pmBuiltTextures', P.TEXTURES, 'btex', cfg.textures);
@@ -1526,10 +1526,10 @@
       const bundleGrid = () => {
         if (!lens.length || !counts.length) return '';
         const th = 'padding:5px 8px;background:var(--gray-100);font-size:0.72rem;color:var(--gray-500);text-align:center;white-space:nowrap;';
-        return `<div><div style="font-size:0.8rem;font-weight:600;margin-bottom:6px;">Number of bundles × inches</div>
+        return `<div><div style="font-size:0.8rem;font-weight:600;margin-bottom:6px;">Weight × length</div>
           <div style="overflow-x:auto;max-height:420px;overflow-y:auto;"><table style="border-collapse:collapse;">
-            <thead><tr><th style="${th}text-align:left;">Bundles</th>${lens.map(l => `<th style="${th}">${l}"</th>`).join('')}</tr></thead>
-            <tbody>${counts.map(c => `<tr><td style="padding:4px 8px;font-weight:600;font-size:0.8rem;white-space:nowrap;">${c}</td>${lens.map(l => {
+            <thead><tr><th style="${th}text-align:left;">Weight</th>${lens.map(l => `<th style="${th}">${l}"</th>`).join('')}</tr></thead>
+            <tbody>${counts.map(c => `<tr><td style="padding:4px 8px;font-weight:600;font-size:0.8rem;white-space:nowrap;">${c * 100}g</td>${lens.map(l => {
               const k = `${l}|${c}|*`;
               return `<td style="text-align:center;padding:4px 8px;"><input type="checkbox" data-excl="${escHtml(k)}" ${_builtExcluded.has(k) ? '' : 'checked'} style="width:17px;height:17px;accent-color:var(--gold-dark);cursor:pointer;"></td>`;
             }).join('')}</tr>`).join('')}</tbody></table></div></div>`;
@@ -1610,7 +1610,7 @@
       let html = '', extraSelects = '';
       if (t.kind === 'bundles') {
         // rows: number of bundles, columns: lengths
-        html = table('Bundles', o.bundleCounts, o.lengths, b => `${b} (${b * 100}g)`, len, (bi, li) => {
+        html = table('Weight', o.bundleCounts, o.lengths, b => `${b * 100}g`, len, (bi, li) => {
           const l = o.lengths[li], b = o.bundleCounts[bi];
           return box1(K(l, b), cellLow(hintTable, li, bi, 0, null), ex.has(`${l}|${b}|*`));
         });
@@ -1668,11 +1668,12 @@
       }));
     }
 
-    // Units: 1–6 bundles per unit. Bundles on their own: 10, 12, 14 … 40 only.
+    // Wigs: 1–6 bundles in the wig. Bundles on their own: by weight, 100g … 600g.
     function renderBuiltBundleChoices(kind, selected) {
       const pool = kind === 'bundles' ? Pricing.BUNDLE_QTY_RANGE : [1, 2, 3, 4, 5, 6];
       const sel = (selected || []).filter(n => pool.includes(Number(n)));
-      _bGrid('pmBuiltBundles', pool, 'bcount', sel.length ? sel : (kind === 'unit' ? [3, 4] : Pricing.BUNDLE_DEFAULT_COUNTS));
+      _bGrid('pmBuiltBundles', pool, 'bcount', sel.length ? sel : (kind === 'unit' ? [3, 4] : Pricing.BUNDLE_DEFAULT_COUNTS),
+        kind === 'bundles' ? (v => `${v * 100}g`) : (v => `${v} bundle${v > 1 ? 's' : ''}`));
       document.getElementById('pmBuiltBundlesQuick').style.display = kind === 'bundles' ? 'flex' : 'none';
       updateBundlesSummary();
     }
@@ -1684,21 +1685,21 @@
       const el = document.getElementById('pmBuiltBundlesSummary');
       if (!el) return;
       const counts = _bChecked('pmBuiltBundles', 'bcount').map(Number).sort((a, b) => a - b);
-      el.textContent = counts.length ? `Customers can buy: ${Pricing.countsText(counts)} bundle${counts.length === 1 && counts[0] === 1 ? '' : 's'}` : 'No bundle numbers ticked yet: tick at least one.';
+      el.textContent = counts.length ? `Customers can choose: ${counts.map(c => `${c * 100}g`).join(', ')}` : 'No weight ticked yet: tick at least one.';
     }
 
     function onBuiltKindChange(keepLengths) {
       const kind = document.getElementById('pmBuiltKind').value;
       document.getElementById('pmBuiltBundlesWrap').style.display  = kind === 'lace' ? 'none' : '';
-      document.getElementById('pmBuiltBundlesLabel').textContent   = kind === 'bundles' ? 'Number of bundles' : 'Bundles in the wig';
+      document.getElementById('pmBuiltBundlesLabel').textContent   = kind === 'bundles' ? 'Weight' : 'Bundles in the wig';
       document.getElementById('pmBuiltLacesWrap').style.display    = kind === 'bundles' ? 'none' : '';
       document.getElementById('pmBuiltLacesLabel').textContent     = kind === 'lace' ? 'Sizes' : 'Closure & frontal sizes';
       document.getElementById('pmBuiltFinishesWrap').style.display = kind === 'unit' ? '' : 'none';
       document.getElementById('pmBuiltCapsWrap').style.display      = kind === 'unit' ? '' : 'none';
       document.getElementById('pmBuiltLaceTypesWrap').style.display = kind === 'bundles' ? 'none' : '';
       if (keepLengths !== true) {
-        const lens = kind === 'lace' ? Pricing.LACE_LENGTHS : Pricing.WEFT_LENGTHS;
-        _bGrid('pmBuiltLengths', lens, 'blen', lens.filter(l => l >= 12), v => `${v}"`);
+        const lens = kind === 'lace' ? Pricing.LACE_LENGTHS : kind === 'bundles' ? Pricing.BUNDLE_LENGTHS : Pricing.WEFT_LENGTHS;
+        _bGrid('pmBuiltLengths', lens, 'blen', kind === 'bundles' ? lens : lens.filter(l => l >= 12 && l <= 30), v => `${v}"`);
         renderBuiltBundleChoices(kind, []);
         _builtOverrides = {};   // typed prices belonged to the old product type
       }
@@ -1809,7 +1810,9 @@
         [/\bred\b/, 'RED', 'Red'],
       ];
       const hit = colourHints.find(([re]) => re.test(name));
-      const lengths = /\bbob\b/.test(name) ? [8, 10, 12, 14, 16] : (kind === 'lace' ? Pricing.LACE_LENGTHS : Pricing.WEFT_LENGTHS).filter(l => l >= 12);
+      const lengths = /\bbob\b/.test(name) ? [8, 10, 12, 14, 16]
+        : kind === 'bundles' ? Pricing.BUNDLE_LENGTHS.slice()
+        : (kind === 'lace' ? Pricing.LACE_LENGTHS : Pricing.WEFT_LENGTHS).filter(l => l >= 12 && l <= 30);
       return {
         enabled: true, variant_type: 'built', kind, weftList: 'list1', grade: 'sdd', lengths,
         bundleCounts: kind === 'unit' ? [3, 4] : (kind === 'bundles' ? Pricing.BUNDLE_DEFAULT_COUNTS.slice() : []),
