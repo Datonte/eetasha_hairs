@@ -533,7 +533,7 @@
 
               <div class="pm-step">
                 <div class="pm-step-title"><span class="pm-step-num"></span>Prices customers will pay</div>
-                <p class="pm-step-help">Each box starts with the automatic price from your Pricing tab (in grey). <strong>To set your own price, type it in the box.</strong> Leave a box empty to keep the automatic price. Prices are for 1B colour; other colours and textures add their extra on top.</p>
+                <p class="pm-step-help">Each box starts with the automatic price from your Pricing tab (in grey). <strong>To set your own price, type it in the box.</strong> Leave a box empty to keep the automatic price. Use <strong>Black (1B)</strong> / <strong>Other colours</strong> to set a price for each. Other textures add their extra on top.</p>
                 <div id="pmBuiltPreview" style="overflow-x:auto;"></div>
               </div>
 
@@ -1550,7 +1550,7 @@
     document.getElementById('pmColoursGrid')?.addEventListener('change', () => scheduleBuiltPreview());
 
     // ---- Price table: the selling prices this product will have ----
-    let _pvTimer = null, _pvBundles = null, _pvFinish = null;
+    let _pvTimer = null, _pvBundles = null, _pvFinish = null, _pvColour = 'black';
     function scheduleBuiltPreview() {
       clearTimeout(_pvTimer);
       _pvTimer = setTimeout(renderBuiltPreview, 60);   // ticking "All" fires many changes: draw once
@@ -1588,36 +1588,56 @@
         <tbody>${rows.map((r, ri) => `<tr><td style="${td}padding-left:9px;text-align:left;font-weight:600;">${escHtml(rowLabel(r))}</td>${cols.map((c, ci) => `<td style="${td}">${cell(ri, ci)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
       const len = l => `${l}"`;
       const laceName = la => `${la} ${String(la).startsWith('13') ? 'frontal' : 'closure'}`;
-      const K = (l, b, la, f) => Pricing.overrideKey(cfg, l, b, la, f);
-      let html = '';
+      // Two colour prices: Black (1B) and Other colours (everything else)
+      const gIdx = o.colourGroups.map((g, i) => ({ g, i }));
+      const blackIdx = gIdx.filter(x => x.g === 'Natural colour').map(x => x.i);
+      const otherIdx = gIdx.filter(x => x.g !== 'Natural colour').map(x => x.i);
+      if (!blackIdx.length) _pvColour = 'other';
+      if (!otherIdx.length) _pvColour = 'black';
+      const isOther = _pvColour === 'other';
+      const viewIdx = isOther ? otherIdx : blackIdx;
+      // Grey hint: black → the automatic price; other colours → what customers pay now
+      const hintTable = isOther ? t : auto;
+      // lowest price in one box for the colour shown (any texture; finish fi for wigs)
+      const cellLow = (tbl, li, bi, lai, fi) => lowest((tbl.prices[li]?.[bi]?.[lai] || []).map(tex => viewIdx.map(gi => fi === null ? tex[gi] : tex[gi]?.[fi])));
+      const K = (l, b, la, f) => Pricing.overrideKey(cfg, l, b, la, f, isOther);
+      const sel = (id, items, value, label) => `<select id="${id}" class="form-input" style="width:auto;padding:5px 8px;font-size:0.8rem;">${items.map(v => `<option value="${escHtml(String(v))}" ${v === value ? 'selected' : ''}>${escHtml(label(v))}</option>`).join('')}</select>`;
+      const colourSwitch = blackIdx.length && otherIdx.length
+        ? `<span class="pm-chips" style="gap:6px;">
+             <button type="button" class="pm-chip${!isOther ? ' on' : ''}" data-pvcol="black">Black (1B)</button>
+             <button type="button" class="pm-chip${isOther ? ' on' : ''}" data-pvcol="other">Other colours</button></span>`
+        : `<span style="font-size:0.8rem;font-weight:600;">${isOther ? 'Other colours' : 'Black (1B)'}</span>`;
+      let html = '', extraSelects = '';
       if (t.kind === 'bundles') {
         // rows: number of bundles, columns: lengths
         html = table('Bundles', o.bundleCounts, o.lengths, b => `${b} (${b * 100}g)`, len, (bi, li) => {
           const l = o.lengths[li], b = o.bundleCounts[bi];
-          return box1(K(l, b), lowest(auto.prices[li]?.[bi]), ex.has(`${l}|${b}|*`));
+          return box1(K(l, b), cellLow(hintTable, li, bi, 0, null), ex.has(`${l}|${b}|*`));
         });
       } else if (t.kind === 'lace') {
         html = table('Size', o.laces, o.lengths, laceName, len, (lai, li) => {
           const l = o.lengths[li], la = o.laces[lai];
-          return box1(K(l, 0, la), lowest(auto.prices[li]?.[0]?.[lai]), ex.has(`${l}|*|${la}`));
+          return box1(K(l, 0, la), cellLow(hintTable, li, 0, lai, null), ex.has(`${l}|*|${la}`));
         });
       } else {
         // Wig / unit: pick the number of bundles and how it's made, then lengths × closures/frontals
         if (!o.bundleCounts.includes(_pvBundles)) _pvBundles = o.bundleCounts.includes(3) ? 3 : o.bundleCounts[0];
         if (!o.finishes.includes(_pvFinish)) _pvFinish = o.finishes.includes('wig') ? 'wig' : o.finishes[0];
         const bi = o.bundleCounts.indexOf(_pvBundles), fi = o.finishes.indexOf(_pvFinish);
-        const sel = (id, items, value, label) => `<select id="${id}" class="form-input" style="width:auto;padding:5px 8px;font-size:0.8rem;">${items.map(v => `<option value="${escHtml(String(v))}" ${v === value ? 'selected' : ''}>${escHtml(label(v))}</option>`).join('')}</select>`;
-        html = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
-            <span style="font-size:0.78rem;color:var(--gray-500);">Prices for:</span>
-            ${sel('pmPvBundles', o.bundleCounts, _pvBundles, b => `${b} bundle${b > 1 ? 's' : ''}`)}
-            ${o.finishes.length > 1 ? sel('pmPvFinish', o.finishes, _pvFinish, f => BUILT_FINISH_LABELS[f] || f) : ''}
-          </div>` +
-          table('Length', o.lengths, o.laces, len, laceName, (li, lai) => {
-            const l = o.lengths[li], la = o.laces[lai];
-            return box1(K(l, _pvBundles, la, _pvFinish), lowest(auto.prices[li]?.[bi]?.[lai]?.map(tex => tex.map(g => g[fi]))),
-              ex.has(`${l}|${_pvBundles}|*`) || ex.has(`${l}|*|${la}`));
-          });
+        extraSelects = `${sel('pmPvBundles', o.bundleCounts, _pvBundles, b => `${b} bundle${b > 1 ? 's' : ''}`)}
+            ${o.finishes.length > 1 ? sel('pmPvFinish', o.finishes, _pvFinish, f => BUILT_FINISH_LABELS[f] || f) : ''}`;
+        html = table('Length', o.lengths, o.laces, len, laceName, (li, lai) => {
+          const l = o.lengths[li], la = o.laces[lai];
+          return box1(K(l, _pvBundles, la, _pvFinish), cellLow(hintTable, li, bi, lai, fi),
+            ex.has(`${l}|${_pvBundles}|*`) || ex.has(`${l}|*|${la}`));
+        });
       }
+      html = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <span style="font-size:0.78rem;color:var(--gray-500);">Prices for:</span>${colourSwitch}${extraSelects}
+        </div>
+        <p class="pm-step-help" style="margin-bottom:8px;">${isOther
+          ? 'Other colours: one price for every colour that isn\'t black (#2–#18, #613, blondes, burgundy, ombré…). Leave a box empty to use your black price plus the usual colour extra.'
+          : 'Black (1B): the price for natural black hair.'}</p>` + html;
       const pct = Math.round(Number(document.getElementById('pmSale')?.value));
       const typedCount = Object.keys(_builtOverrides).length;
       const noAuto = auto.fromPrice === null
@@ -1628,6 +1648,7 @@
           ${t.fromPrice !== null ? `Customers pay from <strong>£${Math.round(t.fromPrice)}</strong> to <strong>£${Math.round(t.maxPrice)}</strong>${pct > 0 && pct <= 90 ? ` (before the ${pct}% sale)` : ''}. ` : ''}
           Grey = automatic price · <span style="color:var(--gold-dark);font-weight:700;">gold = your own price</span> · empty a box to go back to automatic.
           ${typedCount ? `<button type="button" id="pmPvReset" style="margin-left:6px;background:none;border:none;color:var(--gold-dark);text-decoration:underline;cursor:pointer;font-size:0.75rem;">Reset all ${typedCount} to automatic</button>` : ''}</p>`;
+      box.querySelectorAll('[data-pvcol]').forEach(b => b.addEventListener('click', () => { _pvColour = b.dataset.pvcol; renderBuiltPreview(); }));
       document.getElementById('pmPvBundles')?.addEventListener('change', e => { _pvBundles = Number(e.target.value); renderBuiltPreview(); });
       document.getElementById('pmPvFinish')?.addEventListener('change', e => { _pvFinish = e.target.value; renderBuiltPreview(); });
       document.getElementById('pmPvReset')?.addEventListener('click', () => {

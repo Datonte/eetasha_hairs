@@ -343,20 +343,22 @@
     // or "length|*|lace" (e.g. 12" with a 13x6 frontal). Customers never see them.
     cfg.excluded = [...new Set((Array.isArray(s.excluded) ? s.excluded : [])
       .map(String).filter(k => /^\d{1,2}\|(\d{1,2}|\*)\|(\d{1,2}x\d{1,2}|\*)$/.test(k)))].slice(0, 500);
-    // Prices the admin typed in herself, e.g. { "18|3|-|-": 250 } = 18" × 3 bundles costs £250.
-    // Key: length|bundles|lace|finish ("-" when it doesn't apply). See priceFor() below.
+    // Prices the admin typed in herself, e.g. { "18|3|-|-": 250, "18|3|-|-|o": 320 }
+    // = 18" × 3 bundles costs £250 in black (1B) and £320 in any other colour.
+    // Key: length|bundles|lace|finish ("-" when it doesn't apply), plus "|o" for other colours.
     cfg.priceOverrides = {};
     if (s.priceOverrides && typeof s.priceOverrides === 'object') {
-      for (const [k, v] of Object.entries(s.priceOverrides).slice(0, 3000)) {
+      for (const [k, v] of Object.entries(s.priceOverrides).slice(0, 6000)) {
         const n = Math.round(Number(v) * 100) / 100;
-        if (/^\d{1,2}\|\d{1,2}\|(\d{1,2}x\d{1,2}|-)\|([a-z]+|-)$/.test(k) && Number.isFinite(n) && n > 0 && n <= 100000) cfg.priceOverrides[k] = n;
+        if (/^\d{1,2}\|\d{1,2}\|(\d{1,2}x\d{1,2}|-)\|([a-z]+|-)(\|o)?$/.test(k) && Number.isFinite(n) && n > 0 && n <= 100000) cfg.priceOverrides[k] = n;
       }
     }
     if (s.legacy && typeof s.legacy === 'object') cfg.legacy = s.legacy;   // old price table kept as a backup
     return cfg;
   }
-  const overrideKey = (cfg, length, bundles, lace, finish) =>
-    `${Number(length)}|${cfg.kind === 'lace' ? 0 : Number(bundles) || 0}|${cfg.kind === 'bundles' ? '-' : (lace || '-')}|${cfg.kind === 'unit' ? (finish || '-') : '-'}`;
+  // otherColour = true → the "other colours" price (anything that isn't black 1B / 1)
+  const overrideKey = (cfg, length, bundles, lace, finish, otherColour) =>
+    `${Number(length)}|${cfg.kind === 'lace' ? 0 : Number(bundles) || 0}|${cfg.kind === 'bundles' ? '-' : (lace || '-')}|${cfg.kind === 'unit' ? (finish || '-') : '-'}${otherColour ? '|o' : ''}`;
   function isExcluded(cfg, length, bundles, lace) {
     const ex = cfg.excluded;
     if (!ex || !ex.length) return false;
@@ -386,20 +388,31 @@
   }
 
   // The selling price of one choice. Automatic (supplier cost + profit) unless the admin
-  // typed her own price for that box. Her price is for the cheapest texture and colour;
-  // other textures and colours keep their usual extra on top.
+  // typed her own price for that box. She can type two prices per box:
+  //   • Black (1B / 1)  • Other colours (every other colour, one price for all of them)
+  // Her price is for the cheapest texture; other textures keep their usual extra on top.
+  // If she only typed the black price, other colours = her black price + the automatic colour extra.
   // Used by the price table (shop + admin) AND checkout, so they always agree.
   function priceFor(pricing, cfg, sel) {
-    const auto = computeUnit(pricing, builtSelection(cfg, sel));
+    const pick = builtSelection(cfg, sel);
+    const auto = computeUnit(pricing, pick);
     const autoV = auto.error ? null : auto.sellGbp;
-    const typed = cfg.priceOverrides?.[overrideKey(cfg, sel.length, sel.bundles, sel.lace, sel.finish)];
+    const key = overrideKey(cfg, sel.length, sel.bundles, sel.lace, sel.finish);
+    const typedBlack = cfg.priceOverrides?.[key];
+    const typedOther = pick.colour === COLOUR_NATURAL ? undefined : cfg.priceOverrides?.[key + '|o'];
+    const lowestOver = groups => {
+      let m = null;
+      for (const texture of cfg.textures) for (const g of groups) {
+        const r = computeUnit(pricing, builtSelection(cfg, { ...sel, texture, colourGroup: g }));
+        if (!r.error && r.sellGbp !== null) m = m === null ? r.sellGbp : Math.min(m, r.sellGbp);
+      }
+      return m;
+    };
+    const typed = typedOther !== undefined ? typedOther : typedBlack;
     if (typed === undefined) return autoV;
-    let base = null;
-    for (const texture of cfg.textures) for (const g of builtColourGroups(cfg)) {
-      const r = computeUnit(pricing, builtSelection(cfg, { ...sel, texture, colourGroup: g }));
-      if (!r.error && r.sellGbp !== null) base = base === null ? r.sellGbp : Math.min(base, r.sellGbp);
-    }
-    if (base === null) return typed;   // no supplier price for this box: her price for every texture/colour
+    // Other-colour price: only the texture extra is added. Black price: texture + colour extras.
+    const base = lowestOver(typedOther !== undefined ? [pick.colour] : builtColourGroups(cfg));
+    if (base === null) return typed;   // no supplier price for this box: her price for every texture
     if (autoV === null) return null;
     return Math.round((typed + autoV - base) * 100) / 100;
   }

@@ -771,13 +771,21 @@ async function openBuiltPicker(p) {
       html += `<div style="margin-bottom:16px;"><div class="variant-step-label">${n++}. Colour</div><div style="font-weight:600;">${escHtml(cfg.fixedColour?.name || '')}</div></div>`;
     } else {
       const base = priceAt(s.li, s.bi, s.lai, s.ti, groupPos(0) >= 0 ? groupPos(0) : 0, s.fi);
+      // Colour sections with their extra cost. When both non-black groups cost the same
+      // (she set one "Other colours" price), show them together as "Other colours".
+      const groupPrice = gi => groupPos(gi) < 0 ? null : priceAt(s.li, s.bi, s.lai, s.ti, groupPos(gi), s.fi);
+      const colsOf = gis => allowedColours.filter(c => gis.includes(colourGroupIndex(c.code)) && groupPos(colourGroupIndex(c.code)) >= 0);
+      const v1 = groupPrice(1), v2 = groupPrice(2);
+      const sections = v1 !== null && v1 === v2
+        ? [{ title: 'Other colours', gis: [1, 2], v: v1 }, { title: COLOUR_GROUP_TITLES[0], gis: [0], v: groupPrice(0) }]
+        : [0, 1, 2].map(gi => ({ title: COLOUR_GROUP_TITLES[gi], gis: [gi], v: groupPrice(gi) }));
+      sections.sort((a, b) => a.gis[0] - b.gis[0]);
       html += `<div style="margin-bottom:16px;"><div class="variant-step-label">${n++}. Colour</div>` +
-        [0, 1, 2].map(gi => {
-          const cols = allowedColours.filter(c => colourGroupIndex(c.code) === gi);
-          if (!cols.length || groupPos(gi) < 0) return '';
-          const v = priceAt(s.li, s.bi, s.lai, s.ti, groupPos(gi), s.fi);
+        sections.map(({ title, gis, v }) => {
+          const cols = colsOf(gis);
+          if (!cols.length) return '';
           const extra = v !== null && base !== null && v > base ? ` <span style="color:var(--gold-dark);">+${currency}${Math.round(v - base)}</span>` : '';
-          return `<div style="font-size:0.75rem;color:var(--gray-500);margin:8px 0 6px;">${COLOUR_GROUP_TITLES[gi]}${extra}</div>
+          return `<div style="font-size:0.75rem;color:var(--gray-500);margin:8px 0 6px;">${title}${extra}</div>
             <div class="colour-swatch-grid">${cols.map(c => `
               <span class="colour-swatch-wrap" onclick="_bp.colour('${c.code.replace(/'/g, "\\'")}')">
                 <span class="colour-swatch-chip${s.colour === c.code ? ' selected' : ''}" style="background:${c.bg};"></span>
