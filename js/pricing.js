@@ -262,6 +262,8 @@
   const COLOUR_GROUPS = [COLOUR_NATURAL, COLOUR_MID, COLOUR_HIGH];
   const MAX_LACE_LENGTH = LACE_LENGTHS[LACE_LENGTHS.length - 1];
   const BUNDLE_QTY_RANGE = Array.from({ length: 40 }, (_, i) => i + 1);   // bundles on their own: 1–40
+  // What bundle products start with: 10, 12, 14 … 40 (she can change it per product)
+  const BUNDLE_DEFAULT_COUNTS = BUNDLE_QTY_RANGE.filter(n => n >= 10 && n % 2 === 0);
   // [1,2,3,5,9,10] → "1–3, 5, 9, 10" (runs of 3 or more are shortened)
   const countsText = list => {
     const n = [...new Set((list || []).map(Number))].filter(Number.isFinite).sort((a, b) => a - b);
@@ -318,7 +320,7 @@
       // Units: 1–6 bundles per unit. Bundles on their own: customers can buy 1–40.
       bundleCounts: kind === 'lace' ? [] : (kind === 'unit'
         ? pick(ints(s.bundleCounts), [1, 2, 3, 4, 5, 6], [3, 4])
-        : pick(ints(s.bundleCounts), BUNDLE_QTY_RANGE, BUNDLE_QTY_RANGE)).sort((a, b) => a - b),
+        : pick(ints(s.bundleCounts), BUNDLE_QTY_RANGE, BUNDLE_DEFAULT_COUNTS)).sort((a, b) => a - b),
       laces: kind === 'bundles' ? [] : pick(s.laces, laceSizes, laceSizes),
       textures: pick(s.textures, TEXTURES, ['Natural straight']),
       colourMode: s.colourMode === 'fixed' ? 'fixed' : 'choose',
@@ -477,7 +479,7 @@
   const api = {
     DEFAULT_PRICING, WEFT_LENGTHS, LACE_LENGTHS, GRADE_LABELS, FINISHES, TEXTURES, COLOUR_GROUPS,
     computeUnit, laceTable, sanitizePricing, overrideKey, priceFor,
-    colourGroup, sanitizeBuiltConfig, buildPriceTable, quoteBuilt, builtKey, parseBuiltKey, laceLengthFor, BUNDLE_QTY_RANGE,
+    colourGroup, sanitizeBuiltConfig, buildPriceTable, quoteBuilt, builtKey, parseBuiltKey, laceLengthFor, BUNDLE_QTY_RANGE, BUNDLE_DEFAULT_COUNTS,
     CAP_SIZES, LACE_TYPES, GRAMS_PER_BUNDLE, bundleText, salePercentOf, applySale, countsText,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
