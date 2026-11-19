@@ -552,7 +552,7 @@
               <div class="pm-step">
                 <div class="pm-step-title"><span class="pm-step-num"></span>Prices customers will pay</div>
                 <p class="pm-step-help">Each box starts with the automatic price from your Pricing tab (in grey). <strong>To set your own price, type it in the box.</strong> Leave a box empty to keep the automatic price. Use <strong>Black (1B)</strong> / <strong>Other colours</strong> to set a price for each. Other textures add their extra on top.</p>
-                <div id="pmBuiltPreview" style="overflow-x:auto;"></div>
+                <div id="pmBuiltPreview"></div>
               </div>
 
               <details style="margin-top:14px;">
@@ -1681,9 +1681,9 @@
         return `<span class="pm-price${typed !== undefined ? ' typed' : ''}">£<input type="number" inputmode="decimal" step="0.01" min="0" data-pk="${escHtml(key)}"
           value="${typed !== undefined ? fmt(typed) : ''}" placeholder="${autoV === null ? 'price' : fmt(autoV)}" aria-label="Price"></span>`;
       };
-      const table = (corner, rows, cols, rowLabel, colLabel, cell) => `<table style="border-collapse:collapse;">
+      const table = (corner, rows, cols, rowLabel, colLabel, cell) => `<div class="pm-table-scroll"><table style="border-collapse:collapse;">
         <thead><tr><th style="${th}text-align:left;">${corner}</th>${cols.map(c => `<th style="${th}">${escHtml(colLabel(c))}</th>`).join('')}</tr></thead>
-        <tbody>${rows.map((r, ri) => `<tr><td style="${td}padding-left:9px;text-align:left;font-weight:600;">${escHtml(rowLabel(r))}</td>${cols.map((c, ci) => `<td style="${td}">${cell(ri, ci)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+        <tbody>${rows.map((r, ri) => `<tr><td style="${td}padding-left:9px;text-align:left;font-weight:600;">${escHtml(rowLabel(r))}</td>${cols.map((c, ci) => `<td style="${td}">${cell(ri, ci)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
       const len = l => `${l}"`;
       const laceName = la => `${la} ${String(la).startsWith('13') ? 'frontal' : 'closure'}`;
       // Two colour prices: Black (1B) and Other colours (everything else)
