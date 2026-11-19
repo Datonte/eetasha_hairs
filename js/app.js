@@ -740,23 +740,14 @@ async function openBuiltPicker(p) {
       return btn(`${l}"`, i === s.li, `_bp.set('li',${i})`, from === null, from !== null ? `from ${currency}${Math.round(from)}` : '');
     }).join(''));
 
-    if (isBundles && o.bundleCounts.length > 12) {
-      // Lots of choices (e.g. 1–40 bundles): a − / + counter instead of a wall of buttons.
-      // It only stops on the numbers this product comes in (set per product in the admin).
-      const qty = o.bundleCounts[s.bi], total = current();
-      const avail = o.bundleCounts.filter((_, i) => anyPrice(table.prices[s.li]?.[i]));
-      const continuous = avail.length && avail[avail.length - 1] - avail[0] + 1 === avail.length;
-      const canDown = o.bundleCounts.slice(0, s.bi).some((_, i) => anyPrice(table.prices[s.li]?.[i]));
-      const canUp   = o.bundleCounts.slice(s.bi + 1).some((_, i) => anyPrice(table.prices[s.li]?.[s.bi + 1 + i]));
-      html += `<div style="margin-bottom:16px;"><div class="variant-step-label">${n++}. Number of bundles</div>
-        <div class="bp-stepper">
-          <button type="button" onclick="_bp.step(-1)" ${canDown ? '' : 'disabled'} aria-label="One less bundle">−</button>
-          <input type="number" inputmode="numeric" min="${o.bundleCounts[0]}" max="${o.bundleCounts[o.bundleCounts.length - 1]}" value="${qty}" onchange="_bp.qty(this.value)" aria-label="Number of bundles">
-          <button type="button" onclick="_bp.step(1)" ${canUp ? '' : 'disabled'} aria-label="One more bundle">+</button>
-          ${total !== null ? `<span class="bp-each">${money(total / qty)} per bundle</span>` : ''}
-        </div>
-        <div style="font-size:0.72rem;color:var(--gray-400);margin-top:6px;">${qty} bundle${qty > 1 ? 's' : ''} = ${qty * 100}g · ${continuous ? `choose ${avail[0]}–${avail[avail.length - 1]} bundles` : `available in ${bundleCountsText(avail)} bundles`}</div></div>`;
-    } else if (!isLace && (o.bundleCounts.length > 1 || isBundles)) {
+    if (isBundles) {
+      // Bundles on their own: a button for every number this product comes in (set per
+      // product in the admin). With lots of numbers the buttons are smaller: "3" + "300g".
+      const many = o.bundleCounts.length > 8, qty = o.bundleCounts[s.bi], total = current();
+      html += step(n++, 'Number of bundles', o.bundleCounts.map((b, i) =>
+        btn(many ? `${b}` : `${b} bundle${b > 1 ? 's' : ''}`, i === s.bi, `_bp.set('bi',${i})`, !anyPrice(table.prices[s.li]?.[i]), `${b * 100}g`)).join('')
+        + (total !== null && qty ? `<div style="flex-basis:100%;font-size:0.75rem;color:var(--gray-500);margin-top:4px;">${qty} bundle${qty > 1 ? 's' : ''} (${qty * 100}g) · ${money(total / qty)} per bundle</div>` : ''));
+    } else if (!isLace && o.bundleCounts.length > 1) {
       html += step(n++, isBundles ? 'Number of bundles' : 'Bundles', o.bundleCounts.map((b, i) =>
         btn(`${b} bundle${b > 1 ? 's' : ''}`, i === s.bi, `_bp.set('bi',${i})`, !anyPrice(table.prices[s.li]?.[i]), `${b * 100}g`)).join(''));
     }
