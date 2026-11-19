@@ -262,6 +262,18 @@
   const COLOUR_GROUPS = [COLOUR_NATURAL, COLOUR_MID, COLOUR_HIGH];
   const MAX_LACE_LENGTH = LACE_LENGTHS[LACE_LENGTHS.length - 1];
   const BUNDLE_QTY_RANGE = Array.from({ length: 40 }, (_, i) => i + 1);   // bundles on their own: 1–40
+  // [1,2,3,5,9,10] → "1–3, 5, 9, 10" (runs of 3 or more are shortened)
+  const countsText = list => {
+    const n = [...new Set((list || []).map(Number))].filter(Number.isFinite).sort((a, b) => a - b);
+    const parts = [];
+    for (let i = 0; i < n.length; i++) {
+      let j = i;
+      while (j + 1 < n.length && n[j + 1] === n[j] + 1) j++;
+      if (j - i >= 2) parts.push(`${n[i]}–${n[j]}`); else for (let k = i; k <= j; k++) parts.push(String(n[k]));
+      i = j;
+    }
+    return parts.join(', ');
+  };
   // Free choices that tell us how to make the piece (they don't change the price)
   const CAP_SIZES  = { S: 'Small cap (21")', M: 'Medium cap (22")', L: 'Large cap (23")' };
   const LACE_TYPES = ['HD', 'Transparent'];
@@ -437,7 +449,7 @@
     DEFAULT_PRICING, WEFT_LENGTHS, LACE_LENGTHS, GRADE_LABELS, FINISHES, TEXTURES, COLOUR_GROUPS,
     computeUnit, laceTable, sanitizePricing,
     colourGroup, sanitizeBuiltConfig, buildPriceTable, quoteBuilt, builtKey, parseBuiltKey, laceLengthFor, BUNDLE_QTY_RANGE,
-    CAP_SIZES, LACE_TYPES, GRAMS_PER_BUNDLE, bundleText, salePercentOf, applySale,
+    CAP_SIZES, LACE_TYPES, GRAMS_PER_BUNDLE, bundleText, salePercentOf, applySale, countsText,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Pricing = api;

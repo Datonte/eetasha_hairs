@@ -468,9 +468,16 @@
               </div>
               <div class="form-group" style="margin-top:10px;"><label class="form-label" style="margin-bottom:8px;">Lengths customers can choose</label><div id="pmBuiltLengths" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
               <div class="form-group" style="margin-top:10px;" id="pmBuiltBundlesWrap"><label class="form-label" style="margin-bottom:8px;" id="pmBuiltBundlesLabel">Bundles per unit</label>
-                <div id="pmBuiltBundlesQuick" style="display:none;gap:6px;margin-bottom:8px;">
-                  <button type="button" class="btn btn-secondary btn-sm" onclick="setAllBuiltBundles(true)">All 1–40</button>
-                  <button type="button" class="btn btn-secondary btn-sm" onclick="setAllBuiltBundles(false)">None</button>
+                <div id="pmBuiltBundlesQuick" style="display:none;flex-direction:column;gap:8px;margin-bottom:8px;">
+                  <div style="font-size:0.75rem;color:var(--gray-500);line-height:1.5;">Tap the numbers this bundle comes in (each product can be different), or type them, e.g. <strong>1, 2, 4, 7</strong> or <strong>1-10, 20, 30-40</strong>.</div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                    <input type="text" id="pmBuiltBundlesType" class="form-input" placeholder="e.g. 1, 3, 5, 9, 10" style="flex:1;min-width:160px;max-width:260px;padding:6px 10px;font-size:0.85rem;"
+                      onkeydown="if(event.key==='Enter'){event.preventDefault();applyTypedBundles();}">
+                    <button type="button" class="btn btn-primary btn-sm" onclick="applyTypedBundles()">Use these</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="setAllBuiltBundles(true)">All 1–40</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="setAllBuiltBundles(false)">None</button>
+                  </div>
+                  <div id="pmBuiltBundlesSummary" style="font-size:0.78rem;color:var(--gold-dark);font-weight:600;"></div>
                 </div><div id="pmBuiltBundles" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
               <div class="form-group" style="margin-top:10px;" id="pmBuiltLacesWrap"><label class="form-label" style="margin-bottom:8px;">Closures / frontals</label><div id="pmBuiltLaces" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
               <div class="form-group" style="margin-top:10px;"><label class="form-label" style="margin-bottom:8px;">Texture <span style="font-size:0.75rem;color:var(--gray-400);">(tick one to fix it, or several to let customers choose)</span></label><div id="pmBuiltTextures" style="display:flex;flex-wrap:wrap;gap:7px;"></div></div>
@@ -1457,6 +1464,7 @@
     // Rebuild the grids whenever lengths, bundle counts, closures or the product kind change
     document.getElementById('pmBuiltSection').addEventListener('change', e => {
       if (e.target.closest('#pmBuiltLengths, #pmBuiltBundles, #pmBuiltLaces') || e.target.id === 'pmBuiltKind') renderBuiltCombos();
+      if (e.target.closest('#pmBuiltBundles')) updateBundlesSummary();
     });
 
     // Units: 1–6 bundles per unit. Bundles on their own: customers can buy 1–40.
@@ -1465,9 +1473,38 @@
       const sel = (selected || []).filter(n => pool.includes(Number(n)));
       _bGrid('pmBuiltBundles', pool, 'bcount', sel.length ? sel : (kind === 'unit' ? [3, 4] : pool));
       document.getElementById('pmBuiltBundlesQuick').style.display = kind === 'bundles' ? 'flex' : 'none';
+      updateBundlesSummary();
     }
     function setAllBuiltBundles(on) {
       document.querySelectorAll('#pmBuiltBundles input[data-bcount]').forEach(cb => { cb.checked = on; cb.dispatchEvent(new Event('change', { bubbles: true })); });
+      updateBundlesSummary();
+    }
+    // "1, 3, 5-9, 20" → [1, 3, 5, 6, 7, 8, 9, 20] (only 1–40)
+    function parseBundleList(text) {
+      const out = new Set();
+      String(text || '').split(/[,\s;]+/).forEach(part => {
+        const m = part.match(/^(\d+)(?:-(\d+))?$/);
+        if (!m) return;
+        let a = Number(m[1]), b = Number(m[2] || m[1]);
+        if (a > b) [a, b] = [b, a];
+        for (let n = a; n <= b; n++) if (n >= 1 && n <= 40) out.add(n);
+      });
+      return [...out].sort((x, y) => x - y);
+    }
+    function applyTypedBundles() {
+      const want = parseBundleList(document.getElementById('pmBuiltBundlesType').value);
+      if (!want.length) { Toast.show('Type numbers from 1 to 40, e.g. 1, 2, 4, 7', 'error'); return; }
+      document.querySelectorAll('#pmBuiltBundles input[data-bcount]').forEach(cb => {
+        cb.checked = want.includes(Number(cb.dataset.bcount));
+        cb.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      updateBundlesSummary();
+    }
+    function updateBundlesSummary() {
+      const el = document.getElementById('pmBuiltBundlesSummary');
+      if (!el) return;
+      const counts = _bChecked('pmBuiltBundles', 'bcount').map(Number).sort((a, b) => a - b);
+      el.textContent = counts.length ? `Customers can buy: ${Pricing.countsText(counts)} bundle${counts.length === 1 && counts[0] === 1 ? '' : 's'}` : 'No bundle numbers ticked yet: tick at least one.';
     }
 
     function onBuiltKindChange(keepLengths) {

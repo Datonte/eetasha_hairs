@@ -458,6 +458,19 @@ function renderFooter() {
 // ============================================================
 //  PRODUCT CARD
 // ============================================================
+// [1,2,3,5,9,10] → "1–3, 5, 9, 10" (same as countsText() in js/pricing.js)
+function bundleCountsText(list) {
+  const n = [...new Set((list || []).map(Number))].filter(Number.isFinite).sort((a, b) => a - b);
+  const parts = [];
+  for (let i = 0; i < n.length; i++) {
+    let j = i;
+    while (j + 1 < n.length && n[j + 1] === n[j] + 1) j++;
+    if (j - i >= 2) parts.push(`${n[i]}–${n[j]}`); else for (let k = i; k <= j; k++) parts.push(String(n[k]));
+    i = j;
+  }
+  return parts.join(', ');
+}
+
 // Sale: whole-percent off, to the penny — must match applySale() in js/pricing.js
 function salePercent(p) {
   const n = Math.round(Number(p?.details?.salePercent));
@@ -727,9 +740,12 @@ async function openBuiltPicker(p) {
       return btn(`${l}"`, i === s.li, `_bp.set('li',${i})`, from === null, from !== null ? `from ${currency}${Math.round(from)}` : '');
     }).join(''));
 
-    if (isBundles && o.bundleCounts.length > 6) {
-      // Lots of choices (e.g. 1–40 bundles): a − / + counter instead of a wall of buttons
+    if (isBundles && o.bundleCounts.length > 12) {
+      // Lots of choices (e.g. 1–40 bundles): a − / + counter instead of a wall of buttons.
+      // It only stops on the numbers this product comes in (set per product in the admin).
       const qty = o.bundleCounts[s.bi], total = current();
+      const avail = o.bundleCounts.filter((_, i) => anyPrice(table.prices[s.li]?.[i]));
+      const continuous = avail.length && avail[avail.length - 1] - avail[0] + 1 === avail.length;
       const canDown = o.bundleCounts.slice(0, s.bi).some((_, i) => anyPrice(table.prices[s.li]?.[i]));
       const canUp   = o.bundleCounts.slice(s.bi + 1).some((_, i) => anyPrice(table.prices[s.li]?.[s.bi + 1 + i]));
       html += `<div style="margin-bottom:16px;"><div class="variant-step-label">${n++}. Number of bundles</div>
@@ -739,8 +755,8 @@ async function openBuiltPicker(p) {
           <button type="button" onclick="_bp.step(1)" ${canUp ? '' : 'disabled'} aria-label="One more bundle">+</button>
           ${total !== null ? `<span class="bp-each">${money(total / qty)} per bundle</span>` : ''}
         </div>
-        <div style="font-size:0.72rem;color:var(--gray-400);margin-top:6px;">${qty} bundle${qty > 1 ? 's' : ''} = ${qty * 100}g · choose ${o.bundleCounts[0]}–${o.bundleCounts[o.bundleCounts.length - 1]} bundles</div></div>`;
-    } else if (!isLace && o.bundleCounts.length > 1) {
+        <div style="font-size:0.72rem;color:var(--gray-400);margin-top:6px;">${qty} bundle${qty > 1 ? 's' : ''} = ${qty * 100}g · ${continuous ? `choose ${avail[0]}–${avail[avail.length - 1]} bundles` : `available in ${bundleCountsText(avail)} bundles`}</div></div>`;
+    } else if (!isLace && (o.bundleCounts.length > 1 || isBundles)) {
       html += step(n++, isBundles ? 'Number of bundles' : 'Bundles', o.bundleCounts.map((b, i) =>
         btn(`${b} bundle${b > 1 ? 's' : ''}`, i === s.bi, `_bp.set('bi',${i})`, !anyPrice(table.prices[s.li]?.[i]), `${b * 100}g`)).join(''));
     }
