@@ -248,7 +248,10 @@ function renderNav(activePage = '', opts = {}) {
   nav.innerHTML = `
     <nav class="nav">
       <div class="nav-inner">
-        <a href="/" class="nav-brand">eetashacollection</a>
+        <a href="/" class="nav-brand" aria-label="eetashacollection — luxury and quality in every strand">
+          <span class="nav-brand-name">eetashacollection</span>
+          <span class="nav-tagline">Luxury and quality in every strand</span>
+        </a>
         <div class="nav-links" id="navLinks">
           <a href="/" class="${activePage === 'home'    ? 'active' : ''}">Home</a>
           <a href="/shop"  class="${activePage === 'shop'    ? 'active' : ''}">Shop</a>

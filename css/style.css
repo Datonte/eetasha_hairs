@@ -87,12 +87,22 @@ h3 { font-size: 1.25rem; }
   border-bottom: 1px solid var(--gray-200);
 }
 .nav-inner {
-  max-width: 1200px; margin: 0 auto; padding: 16px 20px;
+  max-width: 1200px; margin: 0 auto; padding: 10px 20px;   /* keeps the header ~60px with the slogan */
   display: flex; align-items: center; justify-content: space-between;
 }
 .nav-brand {
+  display: flex; flex-direction: column; line-height: 1.1;
   font-family: var(--font-head); font-style: italic; font-size: 1.4rem;
   color: var(--black); letter-spacing: -0.02em;
+}
+/* Slogan under the logo, small */
+.nav-tagline {
+  font-family: var(--font-body); font-style: normal; font-size: 0.58rem; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold-dark);
+  margin-top: 3px; white-space: nowrap;
+}
+@media (max-width: 400px) {
+  .nav-tagline { font-size: 0.52rem; letter-spacing: 0.08em; }
 }
 .nav-links { display: flex; align-items: center; gap: 28px; }
 .nav-links a {
