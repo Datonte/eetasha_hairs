@@ -1394,7 +1394,13 @@ app.post('/api/create-checkout-session', async (req, res) => {
       });
     }
 
+    // Shop name at the top of Stripe's payment page. Without this, Stripe shows the account
+    // holder's legal name for sole-trader accounts. Needs Stripe's newer API, so it is asked for
+    // on this one request only; if Stripe refuses it, the page opens without it (see below).
+    let showShopName = true;
+    const SHOP_DISPLAY_NAME = 'eetashacollection';
     const sessionFor = (methods, shipping) => stripe.checkout.sessions.create({
+      ...(showShopName ? { branding_settings: { display_name: SHOP_DISPLAY_NAME } } : {}),
       payment_method_types: methods,
       line_items:           lineItems,
       mode:                 'payment',
@@ -1404,7 +1410,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
       metadata: { orderId: order.id, orderNumber: order.order_number },
       expires_at: Math.floor(Date.now() / 1000) + 60 * 60,   // abandoned checkouts expire after 1 hour
       ...(shipping ? { payment_intent_data: { shipping } } : {}),
-    });
+    }, showShopName ? { apiVersion: '2025-09-30.clover' } : undefined);
     // Payment options on Stripe's page:
     //  - card (Apple Pay and Google Pay come with it automatically)
     //  - Revolut Pay, Amazon Pay: shown when switched on in the Stripe dashboard
@@ -1422,7 +1428,18 @@ app.post('/api/create-checkout-session', async (req, res) => {
       try {
         sess = await sessionFor(methods, methods.includes('afterpay_clearpay') ? clearpayShipping : null);
       } catch (err) {
+        // The shop-name setting was refused: try again without it (same payment options)
+        if (showShopName && /branding|display_name|api.?version|clover/i.test(err.message || '')) {
+          console.error('Shop name on the payment page not accepted, opening without it:', err.message);
+          showShopName = false;
+          continue;
+        }
         const refused = methods.find(m => m !== 'card' && (err.message || '').includes(m));
+        if (!refused && showShopName) {   // unclear error: drop the shop name before dropping payment options
+          console.error('Payment page error, trying again without the shop name:', err.message);
+          showShopName = false;
+          continue;
+        }
         console.error(`Payment option not available${refused ? ` (${refused})` : ''}:`, err.message);
         if (refused) methods = methods.filter(m => m !== refused);
         else if (methods.length > 1) methods = ['card'];   // unclear which one: fall back to card only
