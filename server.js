@@ -1259,7 +1259,7 @@ async function saveShopOptions(changes) {
 }
 
 // ============================================================
-//  HOME PAGE VIDEOS  (up to 3 short "see the hair" clips)
+//  HOME PAGE VIDEOS  (up to 12 short looping "see the hair" clips)
 // ============================================================
 // Videos are uploaded from the admin straight to Supabase Storage (Vercel can't take
 // files bigger than ~4.5 MB), into a public "site-videos" bucket. The list lives in
@@ -1267,7 +1267,7 @@ async function saveShopOptions(changes) {
 const VIDEO_BUCKET   = 'site-videos';
 const VIDEO_MAX_MB   = 50;   // Supabase free plan: 50 MB per file
 const VIDEO_TYPES    = { 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' };
-const MAX_HOME_VIDEOS = 9;
+const MAX_HOME_VIDEOS = 12;
 function cleanHomeVideos(list) {
   if (!Array.isArray(list)) return [];
   return list.filter(v => v && /^home\/[\w.-]{1,80}\.(mp4|mov|webm)$/.test(String(v.path || ''))).slice(0, MAX_HOME_VIDEOS).map(v => ({

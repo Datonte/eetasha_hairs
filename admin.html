@@ -167,7 +167,7 @@
         <!-- Home page videos -->
         <div class="admin-card" style="margin-top:24px;">
           <h2 class="serif mb-1">Home page videos</h2>
-          <p class="pm-step-help" style="margin-bottom:12px;">Up to 9 short videos showing how the hair looks. They play on a loop (silently) on the home page, with "For more videos, check out our Instagram" underneath.
+          <p class="pm-step-help" style="margin-bottom:12px;">Up to 12 short videos showing how the hair looks. They play on a loop (silently) on the home page, with "For more videos, check out our Instagram" underneath.
             Best under <strong>5 MB</strong> each; the biggest allowed is 50 MB. You can pick several at once. Saved straight away.</p>
           <div id="homeVideosList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;"></div>
           <div id="homeVideosAdd" style="margin-top:14px;">
@@ -1274,7 +1274,7 @@
     }
     function clearSettingsState() { try { sessionStorage.removeItem('adminSettingsState'); } catch {} }
 
-    // ---------- Home page videos (up to 9) ----------
+    // ---------- Home page videos (up to 12) ----------
     let _homeVideos = [];
     function renderHomeVideos() {
       const list = document.getElementById('homeVideosList');
@@ -1289,7 +1289,7 @@
           </div>
         </div>`).join('')
         : '<p style="font-size:0.82rem;color:var(--gray-400);">No videos yet. The video section stays hidden on the home page until you add one.</p>';
-      document.getElementById('homeVideosAdd').style.display = _homeVideos.length >= 9 ? 'none' : '';
+      document.getElementById('homeVideosAdd').style.display = _homeVideos.length >= 12 ? 'none' : '';
       list.querySelectorAll('[data-vcap]').forEach(inp => inp.addEventListener('change', () => { _homeVideos[+inp.dataset.vcap].caption = inp.value.trim(); saveHomeVideos('Caption saved.'); }));
       list.querySelectorAll('[data-vdel]').forEach(b => b.addEventListener('click', () => {
         if (!confirm('Remove this video from the home page? It will be deleted.')) return;
@@ -1312,8 +1312,8 @@
       const files = [...(e.target.files || [])];
       e.target.value = '';
       if (!files.length) return;
-      const room = 9 - _homeVideos.length;
-      if (files.length > room) Toast.show(`Only ${room} more video${room === 1 ? '' : 's'} can be added (9 at most), so the first ${room} will be uploaded.`, 'info');
+      const room = 12 - _homeVideos.length;
+      if (files.length > room) Toast.show(`Only ${room} more video${room === 1 ? '' : 's'} can be added (12 at most), so the first ${room} will be uploaded.`, 'info');
       const prog = document.getElementById('homeVideoProgress'), bar = document.getElementById('homeVideoBar'), status = document.getElementById('homeVideoStatus');
       const todo = files.slice(0, room);
       let added = 0;

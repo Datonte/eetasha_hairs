@@ -54,12 +54,14 @@
   <!-- Hero -->
   <section class="hero">
     <div class="hero-bg">
-      <div class="hero-collage">
-        <img src="images/hero-1.jpg" alt="Blonde body wave wig" fetchpriority="high">
-        <img src="images/hero-2.jpg" alt="Burgundy bone straight wig">
-        <img src="images/hero-3.jpg" alt="Glueless goddess braids wig">
-        <img src="images/hero-4.jpg" alt="Brown to blonde wavy wig">
-      </div>
+      <!-- Phones and upright tablets: tall photo. Computers: wide photo of four looks. -->
+      <picture>
+        <source media="(max-width: 768px), (max-aspect-ratio: 1/1)" srcset="images/hero-banner-mobile.jpg" width="1440" height="1608">
+        <img class="hero-banner" src="images/hero-banner.jpg"
+             srcset="images/hero-banner-1200.jpg 1200w, images/hero-banner.jpg 2400w" sizes="100vw"
+             width="2400" height="1350" fetchpriority="high"
+             alt="eetashacollection hair: water wave, bone straight, deep curly and body wave looks">
+      </picture>
       <div class="hero-overlay"></div>
     </div>
     <div class="hero-content container">
@@ -112,7 +114,7 @@
     </div>
   </section>
 
-  <!-- See the hair: up to 9 short looping videos (added in Admin → Settings → Home page videos) -->
+  <!-- See the hair: up to 12 short looping videos (added in Admin → Settings → Home page videos) -->
   <section class="section hidden" id="homeVideosSection">
     <div class="container text-center">
       <span class="section-subtitle">See it in motion</span>
