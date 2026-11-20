@@ -27,6 +27,11 @@
     .policy li { margin-bottom: 6px; }
     .policy-callout { background: var(--gold-bg); border-left: 3px solid var(--gold); border-radius: var(--radius); padding: 16px 20px; margin: 20px 0; }
     .policy-callout p { margin: 0; color: var(--gray-700); }
+    .policy a { color: var(--gold-dark); text-decoration: underline; }
+    .cancel-form { border: 1px dashed var(--gray-300); border-radius: var(--radius); padding: 16px 20px; background: #fff; }
+    .cancel-form p { margin: 0 0 8px; }
+    .cancel-form-note { font-size: 0.8rem !important; color: var(--gray-400) !important; margin: 0 !important; }
+    .seller-line { font-size: 0.85rem !important; color: var(--gray-500) !important; }
   </style>
 </head>
 <body data-page="returns">
@@ -43,31 +48,29 @@
       </div>
 
       <h2 class="serif">Wrong or faulty item</h2>
-      <p>If we've sent you the wrong unit, or it arrives faulty:</p>
+      <p>If we've sent you the wrong unit, or it arrives faulty or not as described:</p>
       <ul>
-        <li>Contact us <strong>within 48 hours of delivery</strong> by email (or reply to your order email) so we can sort it out quickly.</li>
-        <li>Send clear photos or a video showing the issue, with the <strong>tag still attached</strong> and the hair <strong>unworn</strong>.</li>
-        <li>Once confirmed, we'll exchange or refund the item and cover the return postage.</li>
+        <li>Please email us as soon as possible, <strong>ideally within 48 hours of delivery</strong> (or reply to your order email), so we can sort it out quickly.</li>
+        <li>Send clear photos or a video showing the issue, and keep the <strong>tag on</strong> and the hair <strong>unworn</strong> if you can.</li>
+        <li>We'll replace or refund the item, including the delivery charge, and cover the return postage.</li>
+      </ul>
+      <p>These are your legal rights under the Consumer Rights Act 2015. They still apply if you contact us after 48 hours.</p>
+
+      <h2 class="serif" id="cancel">Changed your mind? 14 days to cancel</h2>
+      <p>You can cancel your order within <strong>14 days of receiving it</strong>, without giving a reason, as long as the hair is unworn and the tag (hygiene seal) is still attached.</p>
+      <ul>
+        <li><strong>Tell us within 14 days:</strong> email us, reply to your order email, or use the <a href="#cancel-form">cancellation form</a> below.</li>
+        <li><strong>Send it back within 14 days</strong> of telling us, unworn, with the tag on and in its original packaging, using a tracked service. Return postage is paid by you.</li>
+        <li><strong>Your refund:</strong> the price of the item <strong>and the standard delivery charge</strong> you paid (if you chose a faster delivery, we refund the cost of our standard option). We refund within 14 days of receiving the item back, or of you showing us proof you've sent it, whichever is sooner, to the same payment method.</li>
+        <li>If the item comes back used or damaged, we may reduce the refund to cover its loss in value.</li>
       </ul>
 
-      <h2 class="serif">Hygiene seal &amp; used hair</h2>
-      <p>For hygiene reasons we can't accept returns of any hair once the tag (hygiene seal) has been removed, or if the hair has been worn, washed, cut, coloured, bleached, plucked or styled, or the lace has been cut.</p>
-
-      <h2 class="serif">Custom units</h2>
-      <p>Wigs that are made, coloured or styled to your order are made to your specification, so they can't be returned if you change your mind.</p>
-
-      <h2 class="serif">Unopened items</h2>
-      <p>Unworn items with the tag still attached can be returned within 14 days of delivery. Let us know within 14 days, then send the item back within 14 days of telling us, using a tracked service. Return postage is paid by you. We'll refund you within 14 days of receiving the item back.</p>
-
-      <h2 class="serif">When we can't accept a return</h2>
+      <h2 class="serif">When the 14 days to cancel don't apply</h2>
       <ul>
-        <li>The tag/hygiene seal has been removed, or the item isn't returned in its original packaging.</li>
-        <li>The hair has been worn, washed, dyed, bleached, heat-damaged, cut or plucked, or the lace has been cut.</li>
-        <li>The wrong length, colour, texture or lace size was chosen when ordering.</li>
-        <li>Normal shedding or tangling caused by care and styling, or slight natural differences in colour and texture.</li>
-        <li>A change of mind more than 14 days after delivery.</li>
-        <li>The parcel was delivered to the address given at checkout.</li>
+        <li><strong>Hygiene seal removed:</strong> for hygiene reasons, hair can't be returned once the tag (hygiene seal) has been removed, or if it has been worn, washed, cut, coloured, bleached, plucked or styled, or the lace has been cut.</li>
+        <li><strong>Custom units:</strong> wigs made, coloured or styled to your order are made to your specification, so they can't be returned if you change your mind.</li>
       </ul>
+      <p>Normal shedding or tangling from wear and styling, and slight natural differences in colour and texture, are not faults.</p>
 
       <h2 class="serif" id="delivery">Delivery</h2>
       <ul>
@@ -78,13 +81,28 @@
       </ul>
 
       <h2 class="serif">International orders</h2>
-      <p>This policy applies to all orders. Shipping charges, import taxes and duties are not refundable.</p>
+      <p>This policy applies to all orders. Import taxes, duties and customs fees charged in your country can't be refunded by us.</p>
 
       <h2 class="serif">Your statutory rights</h2>
       <p>Nothing in this policy affects your statutory rights as a consumer.</p>
 
+      <h2 class="serif" id="cancel-form">Cancellation form</h2>
+      <p>If you'd like to cancel, you can copy this form into an email to us, or just tell us in your own words. Either is fine.</p>
+      <div class="cancel-form">
+        <p><strong>To:</strong> <span class="seller-full">eetashacollection</span>, <a href="mailto:eetasha.collection@gmail.com?subject=Cancellation">eetasha.collection@gmail.com</a></p>
+        <p>I/We [*] hereby give notice that I/We [*] cancel my/our [*] contract of sale of the following goods [*]:</p>
+        <p>Ordered on [*] / received on [*]:</p>
+        <p>Order number:</p>
+        <p>Name of consumer(s):</p>
+        <p>Address of consumer(s):</p>
+        <p>Signature of consumer(s) (only if this form is sent on paper):</p>
+        <p>Date:</p>
+        <p class="cancel-form-note">[*] Delete as appropriate.</p>
+      </div>
+
       <h2 class="serif">Contact us</h2>
       <p>Email: <a href="mailto:eetasha.collection@gmail.com" style="color:var(--gold-dark);">eetasha.collection@gmail.com</a> · Instagram: <a id="returnsInstagram" href="https://instagram.com/eetashacollection" target="_blank" rel="noopener" style="color:var(--gold-dark);">@eetashacollection</a></p>
+      <p class="seller-line"></p>
     </div>
   </section>
 
@@ -99,6 +117,7 @@
       const ig = String(Store.getSettings().instagram || '').trim().replace(/^@/, '');
       const link = document.getElementById('returnsInstagram');
       if (ig) { link.href = `https://instagram.com/${encodeURIComponent(ig)}`; link.textContent = '@' + ig; }
+      fillSellerDetails();
       document.body.classList.add('page-ready');
     });
   </script>

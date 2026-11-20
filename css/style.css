@@ -786,6 +786,7 @@ details > summary.pm-step-title::after { content: '▾'; margin-left: 4px; color
 .dispatch-tag::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; background: var(--gold-dark); vertical-align: 1px; }
 .dispatch-tag.dispatch-ready::before { background: var(--success, #2e7d32); }
 .pay-in-3 { font-size: 0.78rem; color: var(--gray-500); margin: 0 0 8px; }
+.delivery-note { font-size: 0.78rem; color: var(--gray-500); margin: 0 0 6px; }
 .picker-dispatch { font-size: 0.8rem; color: var(--gray-500); margin: 0 0 4px; }
 .picker-dispatch strong { color: var(--black, #111); }
 .picker-guide-link { text-align: center; margin: 12px 0 0; font-size: 0.8rem; }

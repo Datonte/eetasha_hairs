@@ -452,7 +452,7 @@ function renderFooter() {
             ${l.igUrl ? `<a href="${l.igUrl}" target="_blank" rel="noopener">Instagram</a>` : ''}
           </div>
         </div>
-        <div class="footer-bottom">© ${new Date().getFullYear()} eetashacollection. All rights reserved.</div>
+        <div class="footer-bottom">${sellerDetailsText() ? `${escHtml(sellerDetailsText())}<br>` : ''}© ${new Date().getFullYear()} eetashacollection. All rights reserved.</div>
       </div>
     </footer>`;
   hydrateBrandIcons();   // swap any logo placeholders on the page (About, checkout…)
@@ -504,7 +504,40 @@ function payInThreeHTML() {
   const text = k && c ? 'Or pay in interest-free instalments with Klarna (3) or Clearpay (4, UK)'
     : k ? 'Or pay in 3 interest-free instalments with Klarna'
     : c ? 'Or pay in 4 interest-free instalments with Clearpay (UK)' : '';
-  return text ? `<p class="pay-in-3">${text}</p>` : '';
+  return text ? `<p class="pay-in-3">${text}. 18+, T&amp;Cs apply.</p>` : '';
+}
+
+// Delivery is extra, so say so next to the price (UK pricing rules: no surprise costs at checkout)
+function deliveryNoteText() {
+  const s = State.settings || {};
+  const uk = (s.deliveryOptions || []).filter(o => o.active && o.prices?.uk !== null && o.prices?.uk !== undefined && o.prices?.uk !== '')
+    .map(o => Number(o.prices.uk)).sort((a, b) => a - b)[0];
+  return uk !== undefined
+    ? `Plus delivery: UK from £${uk.toFixed(2)}${s.freeUkDeliveryOver ? `, free over £${s.freeUkDeliveryOver}` : ''}. International delivery is shown at checkout.`
+    : 'Plus delivery, shown at checkout.';
+}
+function deliveryNoteHTML() { return `<p class="delivery-note">${escHtml(deliveryNoteText())}</p>`; }
+
+// Policy pages: fill in the seller's name + address wherever the page has a placeholder.
+//  .seller-full → "eetashacollection (Jane Doe), 1 Example St, London"   .seller-line → full sentence
+function fillSellerDetails() {
+  const b = State.settings?.business || {};
+  const full = ['eetashacollection' + (b.ownerName ? ` (${b.ownerName})` : ''), b.address ? String(b.address).replace(/\n+/g, ', ') : '']
+    .filter(Boolean).join(', ');
+  document.querySelectorAll('.seller-full').forEach(el => { el.textContent = full; });
+  document.querySelectorAll('.seller-line').forEach(el => {
+    const t = sellerDetailsText();
+    el.textContent = t;
+    el.style.display = t ? '' : 'none';
+  });
+}
+
+// "eetashacollection is a trading name of …" + postal address, once filled in Admin → Settings
+function sellerDetailsText() {
+  const b = State.settings?.business || {};
+  if (!b.ownerName && !b.address) return '';
+  return [b.ownerName ? `eetashacollection is a trading name of ${b.ownerName}` : 'eetashacollection',
+          b.address ? String(b.address).replace(/\n+/g, ', ') : ''].filter(Boolean).join(' · ');
 }
 
 function productCardHTML(p) {
@@ -820,7 +853,7 @@ async function openBuiltPicker(p) {
         <span style="font-size:0.85rem;color:var(--gray-500);">Price${salePercent(p) ? ` <span class="sale-badge">${salePercent(p)}% off</span>` : ''}</span>
         <span style="font-family:var(--font-head);font-size:1.4rem;color:var(--gold-dark);font-weight:700;">${price !== null ? `${salePercent(p) ? `<s class="price-was">${money(raw)}</s> ` : ''}${money(price)}` : '—'}</span>
       </div>
-      ${payInThreeHTML()}
+      ${deliveryNoteHTML()}${payInThreeHTML()}
       ${dispatch ? `<p class="picker-dispatch"><strong>${dispatch.title}</strong> · ${escHtml(dispatch.text)}</p>` : ''}
       <button class="btn btn-primary btn-full" style="margin-top:10px;" ${price === null ? 'disabled' : ''} onclick="_bp.add()">Add to Bag</button>
       <p class="picker-guide-link"><a href="${productUrl(p)}#guides" onclick="document.getElementById('_variantModal')?.remove()">Length, lace &amp; cap size guide</a></p>
@@ -1101,7 +1134,7 @@ function openVariantModal(productId) {
         <span style="font-size:0.85rem;color:var(--gray-500);">Price ${salePercent(p) ? `<span class="sale-badge" id="vmSale"></span>` : ''}</span>
         <span id="vmPrice" style="font-family:var(--font-head);font-size:1.3rem;color:var(--gold-dark);font-weight:700;">—</span>
       </div>
-      ${payInThreeHTML()}
+      ${deliveryNoteHTML()}${payInThreeHTML()}
       ${dispatchInfo(p) ? `<p class="picker-dispatch"><strong>${dispatchInfo(p).title}</strong> · ${escHtml(dispatchInfo(p).text)}</p>` : ''}
 
       <button id="vmAddBtn" disabled class="btn btn-primary btn-full" style="margin-top:12px;" onclick="_vmAddToCart('${productId}')">Add to Bag</button>

@@ -118,6 +118,19 @@
                 <input type="text" class="form-input" id="setInstagram" placeholder="@eetashahairs">
               </div>
             </div>
+            <h3 class="serif mt-3 mb-1" style="font-size:1.1rem;">Seller details <span style="font-family:var(--font-body);font-size:0.75rem;font-weight:400;color:var(--gray-400);">(required by UK law for online shops)</span></h3>
+            <p class="pm-step-help" style="margin-bottom:10px;">Shown in the website footer, the Terms, Privacy and Returns pages, the cancellation form and every receipt email.
+              Use your full legal name, and a <strong>business or virtual office address</strong>, not your home address. Leave empty until you have them.</p>
+            <div class="grid-2">
+              <div class="form-group">
+                <label class="form-label">Your full legal name</label>
+                <input type="text" class="form-input" id="setOwnerName" maxlength="80" placeholder="e.g. Jane Doe" autocomplete="off">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Business postal address</label>
+                <textarea class="form-input" id="setBusinessAddress" rows="3" maxlength="240" placeholder="e.g. Suite 1, 123 High Street, London, AB1 2CD"></textarea>
+              </div>
+            </div>
             <h3 class="serif mt-3 mb-2" style="font-size:1.1rem;">Bank Transfer Details <span style="font-family:var(--font-body);font-size:0.75rem;font-weight:400;color:var(--gray-400);">(not shown to customers — they pay through Stripe: Apple Pay, Google Pay, card, Revolut Pay, Amazon Pay, Klarna and Clearpay)</span></h3>
             <div class="grid-2">
               <div class="form-group">
@@ -627,6 +640,47 @@
     </div>
   </div>
 
+  <!-- Order sent: courier + tracking number, then the customer is emailed -->
+  <div class="modal-overlay" id="sentModal" onclick="closeSentModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 class="serif" id="sentTitle">Order sent</h3>
+        <button onclick="closeSentModal()" aria-label="Close"><span class="material-symbols-outlined">close</span></button>
+      </div>
+      <div class="modal-body">
+        <div id="sentForm">
+          <p id="sentWho" style="font-size:0.85rem;color:var(--gray-600);margin:0 0 16px;white-space:pre-line;"></p>
+          <div class="form-group">
+            <label class="form-label" for="sentCourier">Courier</label>
+            <select class="form-input" id="sentCourier" onchange="updateSentPreview()">
+              <option value="">Choose the courier…</option>
+              <option>Royal Mail</option><option>Parcelforce</option><option>DPD</option><option>Evri</option>
+              <option>DHL</option><option>UPS</option><option>FedEx</option><option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="sentTracking">Tracking number</label>
+            <input class="form-input" id="sentTracking" maxlength="60" placeholder="e.g. AB123456789GB" oninput="updateSentPreview()" autocomplete="off">
+          </div>
+          <div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:4px 0 6px;">The customer will get this by email</div>
+          <div id="sentPreview" style="background:var(--gold-bg);border-radius:var(--radius);padding:12px 14px;font-size:0.85rem;color:var(--gray-700);line-height:1.6;white-space:pre-line;"></div>
+        </div>
+        <div id="sentDone" class="hidden text-center">
+          <span class="material-symbols-outlined" style="font-size:44px;color:var(--success);">mark_email_read</span>
+          <p id="sentDoneMsg" style="margin:8px 0 16px;color:var(--gray-600);font-size:0.9rem;"></p>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+            <a id="sentWhatsapp" class="btn btn-whatsapp btn-sm hidden" target="_blank" rel="noopener">Also send on WhatsApp</a>
+            <button class="btn btn-secondary btn-sm" onclick="closeSentModal()">Done</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" id="sentFooter">
+        <button class="btn btn-secondary btn-sm" onclick="closeSentModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="sentSendBtn" onclick="submitSent()">Mark as sent &amp; email customer</button>
+      </div>
+    </div>
+  </div>
+
   <script src="js/pricing.js"></script>
   <script src="js/app.js"></script>
   <script>
@@ -709,7 +763,7 @@
           <div class="admin-card admin-stat"><div class="admin-stat-value">${s.products}</div><div class="admin-stat-label">Products</div></div>
           <div class="admin-card admin-stat"><div class="admin-stat-value">${s.orders}</div><div class="admin-stat-label">Total Orders</div></div>
           <div class="admin-card admin-stat"><div class="admin-stat-value">${formatCurrency(s.revenue)}</div><div class="admin-stat-label">Revenue</div></div>
-          <div class="admin-card admin-stat"><div class="admin-stat-value">${s.pending}</div><div class="admin-stat-label">Pending</div></div>`;
+          <div class="admin-card admin-stat"><div class="admin-stat-value"${s.toSend ? ' style="color:var(--gold-dark);"' : ''}>${s.toSend ?? s.pending}</div><div class="admin-stat-label">To send</div></div>`;
       } catch {}
     }
 
@@ -912,6 +966,8 @@
       return `<span style="${base}background:#eee;color:#777;">CARD NOT PAID YET</span>`;
     }
     const isUnfinishedCard = o => o.payment_method === 'stripe' && o.payment_status !== 'paid';
+    // Paid, not yet posted
+    const needsSending = o => o.payment_status === 'paid' && ['pending', 'confirmed'].includes(o.order_status);
 
     function renderAdminOrders() {
       const list   = document.getElementById('adminOrderList');
@@ -933,15 +989,18 @@
               <span class="order-id serif">${escHtml(o.order_number)}</span>
               <select class="form-input" style="width:auto;padding:6px 10px;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;"
                 onchange="updateOrderStatus('${o.id}', this.value)">
-                <option value="pending"   ${o.order_status === 'pending'   ? 'selected' : ''}>Pending</option>
-                <option value="confirmed" ${o.order_status === 'confirmed' ? 'selected' : ''}>Confirmed</option>
-                <option value="shipped"   ${o.order_status === 'shipped'   ? 'selected' : ''}>Shipped</option>
+                <option value="pending"   ${o.order_status === 'pending'   ? 'selected' : ''}>${o.payment_status === 'paid' ? 'Order placed' : 'Awaiting payment'}</option>
+                <option value="confirmed" ${o.order_status === 'confirmed' ? 'selected' : ''}>Order placed</option>
+                <option value="shipped"   ${o.order_status === 'shipped'   ? 'selected' : ''}>Sent</option>
                 <option value="delivered" ${o.order_status === 'delivered' ? 'selected' : ''}>Delivered</option>
                 <option value="cancelled" ${o.order_status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
               </select>
             </div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
               ${paymentBadge(o)}
+              ${needsSending(o) ? `<span style="display:inline-block;padding:3px 9px;border-radius:12px;font-size:0.7rem;font-weight:700;letter-spacing:0.03em;background:var(--gold-bg);color:var(--gold-dark);">ORDER PLACED · READY TO SEND</span>
+                <button class="btn btn-sm btn-primary" style="padding:5px 12px;font-size:0.72rem;" onclick="openSentModal('${o.id}')">Order sent</button>` : ''}
+              ${o.order_status === 'shipped' ? `<span style="display:inline-block;padding:3px 9px;border-radius:12px;font-size:0.7rem;font-weight:700;letter-spacing:0.03em;background:#e2d4f0;color:#6f42c1;">SENT · CUSTOMER EMAILED</span>` : ''}
               ${o.payment_method === 'transfer' && o.payment_status !== 'paid' && o.order_status !== 'cancelled'
                 ? `<button class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:0.72rem;" onclick="markTransferPaid('${o.id}', '${escHtml(o.order_number)}', '${formatCurrency(o.total)}')">Mark as paid</button>` : ''}
             </div>
@@ -1225,23 +1284,114 @@
       }
     }
 
+    const STATUS_NAMES = { pending: 'Order placed', confirmed: 'Order placed', shipped: 'Sent', delivered: 'Delivered', cancelled: 'Cancelled' };
     async function updateOrderStatus(id, status) {
-      const body = { status };
       const order = (_adminOrders || []).find(o => String(o.id) === String(id));
-      if (status === 'shipped' && order?.order_status !== 'shipped') {
-        // Marking as shipped emails the customer — add the tracking number if there is one
-        const t = prompt('Marking as shipped emails the customer that their order is on its way.\n\nTracking number (optional — leave empty if you don\'t have one):', '');
-        if (t === null) { await loadAdminOrders(); return; }   // cancelled: put the dropdown back
-        body.trackingNumber = t.trim();
-      }
+      // Changing to "Sent" goes through the Order sent form (courier, tracking, email)
+      if (status === 'shipped' && order?.order_status !== 'shipped') { openSentModal(id); return; }
       try {
-        const res = await API.put(`/api/orders/${id}/status`, body);
-        if (res?.emailed) Toast.show('Marked as shipped — the customer has been emailed.', 'success');
-        else if ('trackingNumber' in body) Toast.show('Marked as shipped, but the email could not be sent — please message the customer yourself.', 'error');
-        else Toast.show(`Order updated → ${status.charAt(0).toUpperCase() + status.slice(1)}`, 'success');
-        await loadAdminOrders();
-        await loadAdminStats();
+        await API.put(`/api/orders/${id}/status`, { status });
+        Toast.show(`Order updated → ${STATUS_NAMES[status] || status}`, 'success');
+        await Promise.all([loadAdminOrders(), loadAdminStats()]);
       } catch (err) { Toast.show(err.message, 'error'); }
+    }
+
+    // ----- Order sent form -----
+    let _sentOrder = null, _sentDone = false;
+    function sentTrackingUrl(courier, number) {
+      const c = String(courier || '').toLowerCase(), n = encodeURIComponent(number);
+      if (!number) return '';
+      if (c.includes('royal mail') || c.includes('parcelforce')) return `https://www.royalmail.com/track-your-item#/tracking-results/${n}`;
+      if (c.includes('fedex')) return `https://www.fedex.com/fedextrack/?trknbr=${n}`;
+      if (c.includes('dpd'))   return `https://track.dpd.co.uk/parcels/${n}`;
+      if (c.includes('evri') || c.includes('hermes')) return `https://www.evri.com/track/parcel/${n}`;
+      if (c.includes('dhl'))   return `https://www.dhl.com/gb-en/home/tracking.html?tracking-id=${n}`;
+      if (c.includes('ups'))   return `https://www.ups.com/track?tracknum=${n}`;
+      return '';
+    }
+    // Pre-pick the courier if the delivery option's name already says it
+    function guessCourier(text) {
+      const c = String(text || '').toLowerCase();
+      return ['Royal Mail', 'Parcelforce', 'DPD', 'Evri', 'DHL', 'UPS', 'FedEx'].find(x => c.includes(x.toLowerCase())) || '';
+    }
+    // The message she's sending (shown in the form, and used for WhatsApp)
+    function sentMessage() {
+      const o = _sentOrder; if (!o) return '';
+      const courier = document.getElementById('sentCourier').value;
+      const tracking = document.getElementById('sentTracking').value.trim();
+      const first = String(o.customer_name || '').trim().split(/\s+/)[0] || 'there';
+      const shownCourier = courier && courier !== 'Other' ? courier : 'tracked delivery';
+      const url = sentTrackingUrl(courier, tracking);
+      return [
+        `Hi ${first}, your eetashacollection order ${o.order_number} has been sent with ${shownCourier}.`,
+        tracking ? `Tracking number: ${tracking}` : '',
+        url ? `Track it here: ${url}` : '',
+        'Thank you for shopping with us!',
+      ].filter(Boolean).join('\n');
+    }
+    function updateSentPreview() {
+      document.getElementById('sentPreview').textContent = sentMessage();
+    }
+    function openSentModal(id) {
+      _sentOrder = (_adminOrders || []).find(o => String(o.id) === String(id));
+      if (!_sentOrder) return;
+      _sentDone = false;
+      const o = _sentOrder;
+      document.getElementById('sentTitle').textContent = `Order sent · ${o.order_number}`;
+      document.getElementById('sentWho').textContent = `${o.customer_name || ''}${o.customer_email ? ` · ${o.customer_email}` : ''}\n${o.delivery_address || ''}`;
+      document.getElementById('sentCourier').value = guessCourier(o.delivery_carrier);
+      document.getElementById('sentTracking').value = '';
+      document.getElementById('sentForm').classList.remove('hidden');
+      document.getElementById('sentDone').classList.add('hidden');
+      document.getElementById('sentFooter').classList.remove('hidden');
+      const btn = document.getElementById('sentSendBtn');
+      btn.disabled = false;
+      btn.textContent = o.customer_email ? 'Mark as sent & email customer' : 'Mark as sent';
+      updateSentPreview();
+      document.getElementById('sentModal').classList.add('open');
+      setTimeout(() => document.getElementById(document.getElementById('sentCourier').value ? 'sentTracking' : 'sentCourier').focus(), 50);
+    }
+    function closeSentModal() {
+      document.getElementById('sentModal').classList.remove('open');
+      // Not sent: put the order's dropdown back to how it was
+      if (!_sentDone) renderAdminOrders();
+      _sentOrder = null;
+    }
+    // Turns a UK or international phone number into the digits WhatsApp wants (e.g. 447…)
+    function whatsappNumber(phone) {
+      let d = String(phone || '').replace(/[^\d+]/g, '');
+      if (d.startsWith('+')) d = d.slice(1);
+      else if (d.startsWith('00')) d = d.slice(2);
+      else if (d.startsWith('0')) d = '44' + d.slice(1);
+      return d.replace(/\D/g, '').length >= 10 ? d.replace(/\D/g, '') : '';
+    }
+    async function submitSent() {
+      const o = _sentOrder; if (!o) return;
+      const courier  = document.getElementById('sentCourier').value;
+      const tracking = document.getElementById('sentTracking').value.trim();
+      if (!courier) { Toast.show('Please choose the courier.', 'error'); document.getElementById('sentCourier').focus(); return; }
+      if (!tracking && !confirm('Send without a tracking number? The customer will just be told it\'s on its way.')) return;
+      const btn = document.getElementById('sentSendBtn');
+      btn.disabled = true; btn.textContent = 'Sending…';
+      const message = sentMessage();
+      try {
+        const res = await API.put(`/api/orders/${o.id}/status`, { status: 'shipped', trackingNumber: tracking, courier });
+        _sentDone = true;
+        document.getElementById('sentForm').classList.add('hidden');
+        document.getElementById('sentFooter').classList.add('hidden');
+        document.getElementById('sentDone').classList.remove('hidden');
+        document.getElementById('sentDoneMsg').textContent = res?.emailed
+          ? `${o.order_number} is marked as sent and ${o.customer_name || 'the customer'} has been emailed${tracking ? ' the tracking number' : ''}.`
+          : `${o.order_number} is marked as sent, but the email couldn't be sent. Please message the customer yourself.`;
+        const wa = whatsappNumber(o.customer_phone);
+        const waLink = document.getElementById('sentWhatsapp');
+        waLink.classList.toggle('hidden', !wa);
+        if (wa) waLink.href = `https://wa.me/${wa}?text=${encodeURIComponent(message)}`;
+        await Promise.all([loadAdminOrders(), loadAdminStats()]);
+      } catch (err) {
+        Toast.show(err.message, 'error');
+        btn.disabled = false; btn.textContent = o.customer_email ? 'Mark as sent & email customer' : 'Mark as sent';
+      }
     }
 
     // =================== SETTINGS ===================
@@ -1364,6 +1514,8 @@
         document.getElementById('setDeliveryFee').value  = s.deliveryFee   ?? 5.99;
         document.getElementById('setPayInThree').checked = !!s.payInThree;
         document.getElementById('setClearpay').checked   = !!s.clearpay;
+        document.getElementById('setOwnerName').value       = s.business?.ownerName || '';
+        document.getElementById('setBusinessAddress').value = s.business?.address   || '';
         _homeVideos = Array.isArray(s.homeVideos) ? s.homeVideos : [];
         renderHomeVideos();
       } catch {}
@@ -1383,6 +1535,10 @@
           deliveryFee:   parseFloat(document.getElementById('setDeliveryFee').value) || 0,
           payInThree:    document.getElementById('setPayInThree').checked,
           clearpay:      document.getElementById('setClearpay').checked,
+          business: {
+            ownerName: document.getElementById('setOwnerName').value.trim(),
+            address:   document.getElementById('setBusinessAddress').value.trim(),
+          },
         });
         clearSettingsState();
         if (res?.notice) Toast.show(res.notice, 'info');

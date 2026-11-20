@@ -43,6 +43,7 @@
         <div>
           <span class="section-subtitle">Curated Excellence</span>
           <h1 class="serif">The Collection</h1>
+          <p class="delivery-note" id="shopDeliveryNote" style="margin-top:6px;"></p>
         </div>
       </div>
 
@@ -128,6 +129,7 @@
       await initApp();
       renderNav('shop');
       renderFooter();
+      document.getElementById('shopDeliveryNote').textContent = deliveryNoteText();
       updateCartCount();
       renderFilters();
       renderShop();

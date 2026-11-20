@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Page Not Found | eetashacollection</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/images/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
+  <meta name="theme-color" content="#1a1c1c">
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.101.1/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+  <div id="siteNav"></div>
+  <main class="section page-top">
+    <div class="container text-center" style="padding:60px 20px;">
+      <h1 class="serif mb-2">Page not found</h1>
+      <p style="color:var(--gray-500);margin-bottom:24px;">Sorry, we couldn't find that page. It may have moved or no longer exists.</p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        <a href="/shop" class="btn btn-primary">Shop the collection</a>
+        <a href="/" class="btn btn-secondary">Go to home page</a>
+      </div>
+    </div>
+  </main>
+  <div id="siteFooter"></div>
+  <script src="/js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      await initApp();
+      renderNav('');
+      renderFooter();
+      updateCartCount();
+      document.body.classList.add('page-ready');
+    });
+  </script>
+</body>
+</html>

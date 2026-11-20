@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Payment Success | eetashacollection</title>
+  <title>Thank You | eetashacollection</title>
   <meta name="robots" content="noindex">
   <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="/images/favicon-32.png" sizes="32x32" type="image/png">
@@ -16,12 +16,13 @@
   <div id="siteNav"></div>
   <div class="auth-page">
     <div class="auth-card text-center">
-      <span class="material-symbols-outlined" id="statusIcon" style="font-size:56px;color:var(--success);margin-bottom:12px;">check_circle</span>
-      <h1 style="font-size:1.6rem;" class="serif mb-1" id="statusTitle">Payment Successful!</h1>
-      <p style="color:var(--gray-500);font-size:0.9rem;margin-bottom:20px;" id="statusMsg">Thank you for your order. You'll receive a confirmation shortly.</p>
+      <!-- Starts neutral; only says "payment successful" once Stripe confirms it -->
+      <span class="material-symbols-outlined" id="statusIcon" style="font-size:56px;color:var(--gray-400);margin-bottom:12px;">hourglass_top</span>
+      <h1 style="font-size:1.6rem;" class="serif mb-1" id="statusTitle">Checking your payment…</h1>
+      <p style="color:var(--gray-500);font-size:0.9rem;margin-bottom:20px;" id="statusMsg">This only takes a moment.</p>
       <p style="font-family:var(--font-head);color:var(--gold-dark);font-size:1.1rem;margin-bottom:24px;" id="orderId"></p>
       <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
-        <a href="/account" class="btn btn-primary btn-sm">View My Orders</a>
+        <a href="/account" class="btn btn-primary btn-sm hidden" id="viewOrdersBtn">View My Orders</a>
         <a href="/shop" class="btn btn-secondary btn-sm">Continue Shopping</a>
       </div>
     </div>
@@ -38,29 +39,40 @@
       const params    = new URLSearchParams(window.location.search);
       const sessionId = params.get('session_id');
       const orderId   = params.get('order_id');
+      const show = (icon, colour, title, msg, order) => {
+        const i = document.getElementById('statusIcon');
+        i.textContent = icon; i.style.color = colour;
+        document.getElementById('statusTitle').textContent = title;
+        document.getElementById('statusMsg').textContent   = msg;
+        document.getElementById('orderId').textContent     = order ? `Order: ${order}` : '';
+      };
+      // Logged-in customers can see their orders; guests get everything by email
+      if (Store.getSession()) document.getElementById('viewOrdersBtn').classList.remove('hidden');
 
       if (sessionId) {
-        // Verify Stripe payment with server
+        // Ask the server (which asks Stripe) whether this payment really went through
         try {
           const result = await API.get(`/api/verify-payment/${encodeURIComponent(sessionId)}`);
           if (result.paid) {
             // Payment confirmed — now it's safe to empty the bag
             Store.clearCart();
             try { sessionStorage.removeItem('et_delivery'); sessionStorage.removeItem('checkoutFormState'); } catch {}
-            document.getElementById('orderId').textContent = `Order: ${result.orderNumber || orderId}`;
+            show('check_circle', 'var(--success)', 'Thank you for your order!',
+              `Your payment was successful and your receipt has been emailed to ${result.receiptTo || 'you'}. We'll email you again when your order is on its way.`,
+              result.orderNumber || orderId);
           } else {
-            document.getElementById('statusIcon').textContent = 'pending';
-            document.getElementById('statusIcon').style.color = 'var(--warning)';
-            document.getElementById('statusTitle').textContent = 'Payment Pending';
-            document.getElementById('statusMsg').textContent   = 'Your payment is being processed. We\'ll confirm your order shortly.';
-            if (orderId) document.getElementById('orderId').textContent = `Order: ${orderId}`;
+            show('pending', 'var(--warning)', 'Payment pending',
+              "Your payment is still being processed. Your receipt will be emailed to you as soon as it's confirmed.",
+              result.orderNumber || orderId);
           }
         } catch {
-          if (orderId) document.getElementById('orderId').textContent = `Order: ${orderId}`;
+          show('mail', 'var(--gold-dark)', 'Thank you',
+            "We couldn't check your payment just now. If it went through, your receipt is on its way to your email.", orderId);
         }
-      } else if (orderId) {
-        // No payment details in the address (e.g. an older link)
-        document.getElementById('orderId').textContent = `Order: ${orderId}`;
+      } else {
+        // Opened without a payment (typed in or an old link): don't claim anything was paid
+        show('receipt_long', 'var(--gold-dark)', 'Looking for your receipt?',
+          "Receipts are emailed as soon as a payment goes through. Check your inbox (and spam folder), or email us and we'll help.", '');
       }
       document.body.classList.add('page-ready');
     });

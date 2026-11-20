@@ -69,12 +69,41 @@ const F            = 'font-family:Arial,Helvetica,sans-serif;';
 const WHATSAPP_ON  = false;
 
 async function shopContacts() {
-  const { data } = await supabase.from('settings').select('whatsapp, instagram, bank_name, sort_code, account_number, account_name').eq('id', 1).single();
+  const { data } = await supabase.from('settings').select('whatsapp, instagram, bank_name, sort_code, account_number, account_name, shop_options').eq('id', 1).single();
   return {
     whatsapp:  WHATSAPP_ON ? (data?.whatsapp || '') : '',
     instagram: data?.instagram || '@eetashacollection',
     bank: data || {},
+    seller: sellerLine(data?.shop_options?.business),
   };
+}
+
+// The cancellation information UK law says the customer must receive in a lasting form
+// (an email counts; a web page doesn't). Kept short; full details are on the Returns page.
+const CANCEL_URL = () => `${siteUrl()}/returns#cancel`;
+function cancellationHtml() {
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:22px;border:1px solid #f0ede8;border-radius:8px;"><tr>
+      <td style="padding:14px 18px;${F}font-size:13px;color:#555555;line-height:1.7;">
+        <div style="font-size:11px;color:#999999;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Your right to cancel</div>
+        You can cancel within <strong>14 days</strong> of receiving your order, without giving a reason, for unworn hair with the hygiene tag still attached.
+        Just tell us by replying to this email (or use the <a href="${CANCEL_URL()}" style="color:#9b7a2a;">cancellation form</a>), then send the item back within 14 days.
+        We'll refund the price and the standard delivery charge within 14 days of getting the item back (or proof you've sent it). You pay the return postage.
+        Hair can't be returned once the hygiene tag is removed, and wigs made, coloured or styled to your order can't be returned for a change of mind.
+        This doesn't affect your rights if anything is faulty or not as described.
+        <a href="${siteUrl()}/terms" style="color:#9b7a2a;">Terms of Sale</a> · <a href="${siteUrl()}/returns" style="color:#9b7a2a;">Returns policy</a>
+      </td></tr></table>`;
+}
+function cancellationText() {
+  return [
+    'YOUR RIGHT TO CANCEL',
+    'You can cancel within 14 days of receiving your order, without giving a reason, for unworn hair with the hygiene tag still attached.',
+    `Tell us by replying to this email (or use the cancellation form at ${CANCEL_URL()}), then send the item back within 14 days.`,
+    "We'll refund the price and the standard delivery charge within 14 days of getting the item back (or proof you've sent it). You pay the return postage.",
+    "Hair can't be returned once the hygiene tag is removed, and wigs made, coloured or styled to your order can't be returned for a change of mind.",
+    "This doesn't affect your rights if anything is faulty or not as described.",
+    `Terms of Sale: ${siteUrl()}/terms · Returns: ${siteUrl()}/returns`, '',
+  ].join('\n');
 }
 
 function emailLayout({ preheader, heading, intro, content, contacts }) {
@@ -102,8 +131,8 @@ function emailLayout({ preheader, heading, intro, content, contacts }) {
       </td></tr></table>
     </td></tr>
     <tr><td style="padding:18px 28px;text-align:center;border-top:1px solid #f0ede8;${F}font-size:12px;color:#aaaaaa;line-height:1.7;">
-      <a href="${siteUrl()}" style="color:#9b7a2a;">eetashacollection.com</a> · <a href="${siteUrl()}/returns" style="color:#9b7a2a;">Returns policy</a> · <a href="${siteUrl()}/privacy" style="color:#9b7a2a;">Privacy</a><br>
-      © ${new Date().getFullYear()} eetashacollection
+      <a href="${siteUrl()}" style="color:#9b7a2a;">eetashacollection.com</a> · <a href="${siteUrl()}/terms" style="color:#9b7a2a;">Terms</a> · <a href="${siteUrl()}/returns" style="color:#9b7a2a;">Returns policy</a> · <a href="${siteUrl()}/privacy" style="color:#9b7a2a;">Privacy</a><br>
+      ${contacts.seller ? `${escEmail(contacts.seller)}<br>` : ''}© ${new Date().getFullYear()} eetashacollection
     </td></tr>
   </table>
 </td></tr></table>
@@ -163,7 +192,8 @@ function receiptText(order, paymentText, amountLabel) {
 function contactsText(contacts) {
   return [
     'Need help? ' + [contacts.whatsapp && `WhatsApp ${contacts.whatsapp}`, `email ${SHOP_EMAIL} (or reply to this email)`, contacts.instagram && `Instagram ${contacts.instagram}`].filter(Boolean).join(' · '),
-    `${siteUrl()} · Returns policy: ${siteUrl()}/returns`,
+    `${siteUrl()} · Terms: ${siteUrl()}/terms · Returns: ${siteUrl()}/returns`,
+    ...(contacts.seller ? [contacts.seller] : []),
   ].join('\n');
 }
 
@@ -201,7 +231,7 @@ async function sendOrderConfirmationEmail(order, kind = 'paid') {
       preheader: awaitingTransfer ? `Order ${order.order_number}: please complete your bank transfer of ${gbp(order.total)}` : `Receipt for order ${order.order_number} — ${gbp(order.total)} paid`,
       heading:   awaitingTransfer ? 'Order received' : 'Thank you — here is your receipt',
       intro,
-      content:   bankHtml + receiptHtml(order, paymentText, amountLabel),
+      content:   bankHtml + receiptHtml(order, paymentText, amountLabel) + cancellationHtml(),
       contacts,
     });
     const text = [
@@ -211,6 +241,7 @@ async function sendOrderConfirmationEmail(order, kind = 'paid') {
         ? `Please pay ${gbp(order.total)} by bank transfer: ${b.bank_name || ''}, account name ${b.account_name || ''}, sort code ${b.sort_code || ''}, account number ${b.account_number || ''}, reference ${order.order_number}.`
         : 'Your payment has been received. We will email you again when your order is on its way.', '',
       receiptText(order, paymentText, amountLabel),
+      cancellationText(),
       contactsText(contacts),
     ].join('\n');
 
@@ -242,14 +273,17 @@ function trackingUrl(carrierText, number) {
   if (c.includes('ups'))    return `https://www.ups.com/track?tracknum=${n}`;
   return null;
 }
+// Couriers the admin can pick when marking an order as sent
+const COURIERS = ['Royal Mail', 'Parcelforce', 'DPD', 'Evri', 'DHL', 'UPS', 'FedEx', 'Other'];
 
 // "Your order is on its way" — sent once, when the admin marks an order as shipped
-async function sendOrderShippedEmail(order, trackingNumber) {
+async function sendOrderShippedEmail(order, trackingNumber, courier) {
   if (!hasResend) return false;
   try {
     const contacts = await shopContacts();
-    const url = trackingNumber ? trackingUrl(order.delivery_carrier, trackingNumber) : null;
-    const carrier = String(order.delivery_carrier || 'tracked delivery').replace(/ · Tracking .*$/, '');
+    const picked = courier && courier !== 'Other' ? courier : '';
+    const url = trackingNumber ? trackingUrl(picked || order.delivery_carrier, trackingNumber) : null;
+    const carrier = picked || String(order.delivery_carrier || 'tracked delivery').replace(/ · Tracking .*$/, '');
     const items = (order.items || []).map(i => `<li style="margin-bottom:6px;">${escEmail(i.product_name)} × ${Number(i.quantity) || 1}${i.variant_label ? `<br><span style="color:#9b8860;font-size:12px;">${escEmail(i.variant_label)}</span>` : ''}</li>`).join('');
     const content = `
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#faf9f7;border-radius:8px;margin-bottom:22px;"><tr>
@@ -751,8 +785,10 @@ app.get('/api/admin/stats', requireAdmin, async (req, res) => {
     // Revenue = money actually received; "pending" excludes card checkouts that were never paid
     const revenue  = (orders || []).filter(o => o.payment_status === 'paid' && o.order_status !== 'cancelled').reduce((s, o) => s + (parseFloat(o.total) || 0), 0);
     const pending  = (orders || []).filter(o => o.order_status === 'pending' && !(o.payment_method === 'stripe' && o.payment_status !== 'paid')).length;
+    // Paid orders that still need posting
+    const toSend   = (orders || []).filter(o => o.payment_status === 'paid' && ['pending', 'confirmed'].includes(o.order_status)).length;
     const customers = authData?.users?.length || 0;
-    res.json({ products: productCount || 0, orders: orderCount || 0, revenue, pending, customers });
+    res.json({ products: productCount || 0, orders: orderCount || 0, revenue, pending, toSend, customers });
   } catch {
     res.status(500).json({ error: 'Failed to load stats.' });
   }
@@ -1097,6 +1133,7 @@ app.get('/api/orders', requireAdmin, async (req, res) => {
 app.put('/api/orders/:id/status', requireAdmin, [
   body('status').isIn(['pending', 'confirmed', 'shipped', 'delivered', 'cancelled']).withMessage('Invalid status'),
   body('trackingNumber').optional({ nullable: true }).isString().isLength({ max: 60 }).withMessage('Tracking number is too long'),
+  body('courier').optional({ nullable: true }).isIn(COURIERS).withMessage('Unknown courier'),
 ], async (req, res) => {
   if (!valid(req, res)) return;
   try {
@@ -1104,10 +1141,11 @@ app.put('/api/orders/:id/status', requireAdmin, [
     const { data: before } = await supabase.from('orders').select('*').eq('id', req.params.id).single();
     if (!before) return res.status(404).json({ error: 'Order not found.' });
     const updates = { order_status: status };
-    // The tracking number is kept on the order's delivery line, so it shows in the admin too
+    // The tracking number (and courier) is kept on the order's delivery line, so it shows in the admin too
     const tracking = clean(req.body.trackingNumber || '').replace(/[^\w\- ]/g, '').trim();
+    const courier  = req.body.courier && req.body.courier !== 'Other' ? req.body.courier : '';
     if (status === 'shipped' && tracking && !String(before.delivery_carrier || '').includes(tracking)) {
-      updates.delivery_carrier = `${before.delivery_carrier || 'Delivery'} · Tracking ${tracking}`;
+      updates.delivery_carrier = `${before.delivery_carrier || 'Delivery'} · Tracking ${tracking}${courier ? ` (${courier})` : ''}`;
     }
     // Only the change TO shipped emails the customer (choosing "shipped" again doesn't resend)
     const { data: rows, error } = await supabase.from('orders').update(updates)
@@ -1115,7 +1153,7 @@ app.put('/api/orders/:id/status', requireAdmin, [
     if (error || !rows?.length) return res.status(404).json({ error: 'Order not found.' });
     let emailed = false;
     if (status === 'shipped' && before.order_status !== 'shipped' && before.customer_email) {
-      emailed = await sendOrderShippedEmail(rows[0], tracking || null);
+      emailed = await sendOrderShippedEmail(rows[0], tracking || null, req.body.courier || null);
     }
     res.json({ ok: true, emailed });
   } catch {
@@ -1179,15 +1217,21 @@ app.get('/api/settings', async (req, res) => {
   try {
     const { data } = await supabase.from('settings').select('*').eq('id', 1).single();
     if (!data) return res.json({});
+    // Bank details are private: only sent to a logged-in admin, never to the public site
+    const isAdmin = !!(await loadSessionAdmin(req).catch(() => null));
+    res.set('Cache-Control', 'no-store');
     // Map snake_case DB fields → camelCase for the client (same shape as before)
     res.json({
       whatsapp:        WHATSAPP_ON ? data.whatsapp : '',   // old number not sent to the site while WhatsApp is off
       instagram:       data.instagram,
       email:           data.email,
-      bankName:        data.bank_name,
-      sortCode:        data.sort_code,
-      accountNumber:   data.account_number,
-      accountName:     data.account_name,
+      ...(isAdmin ? {
+        bankName:      data.bank_name,
+        sortCode:      data.sort_code,
+        accountNumber: data.account_number,
+        accountName:   data.account_name,
+      } : {}),
+      business:        cleanBusiness(data.shop_options?.business),   // seller name + address (shown on the site and receipts)
       currency:        data.currency,
       deliveryFee:     data.delivery_fee,
       deliveryOptions: deliveryOptionsFrom(data),
@@ -1245,11 +1289,30 @@ app.put('/api/settings', requireAdmin, [
       const { error } = await saveShopOptions({ payInThree: !!req.body.payInThree, clearpay: !!req.body.clearpay });
       if (isMissingColumn(error, 'shop_options')) notice = 'Saved — but Klarna / Clearpay need a one-time database update first: run supabase-shop-extras-migration.sql in the Supabase SQL Editor.';
     }
+    if (req.body.business !== undefined) {
+      const { error } = await saveShopOptions({ business: cleanBusiness(req.body.business) });
+      if (isMissingColumn(error, 'shop_options')) notice = EXTRAS_MIGRATION_MSG;
+    }
     res.json({ ok: true, notice });
   } catch {
     res.status(500).json({ error: 'Failed to save settings.' });
   }
 });
+
+// Seller details the law asks an online shop to show (Consumer Contracts Regs, E-Commerce Regs,
+// business-names rules): the owner's name and a postal address (a business/virtual address is fine).
+// Empty until she fills them in; the site and receipts only show them once they're set.
+function cleanBusiness(b) {
+  const s = (v, max) => clean(String(v ?? '')).replace(/\s+\n/g, '\n').slice(0, max).trim();
+  return { ownerName: s(b?.ownerName, 80), address: s(b?.address, 240) };
+}
+// One line used in emails, e.g. "eetashacollection is a trading name of Jane Doe · 1 Example St, London"
+function sellerLine(business) {
+  const b = cleanBusiness(business);
+  if (!b.ownerName && !b.address) return '';
+  return [b.ownerName ? `eetashacollection is a trading name of ${b.ownerName}` : 'eetashacollection',
+          b.address ? b.address.replace(/\n+/g, ', ') : ''].filter(Boolean).join(' · ');
+}
 
 // settings.shop_options holds several things (pay later, home page videos…): change only the given keys
 async function saveShopOptions(changes) {
@@ -1482,7 +1545,10 @@ app.get('/api/verify-payment/:sessionId', async (req, res) => {
   try {
     const sess = await stripe.checkout.sessions.retrieve(req.params.sessionId);
     if (sess.payment_status === 'paid') await markStripeOrderPaid(sess.id);
-    res.json({ paid: sess.payment_status === 'paid', orderId: sess.metadata?.orderId, orderNumber: sess.metadata?.orderNumber });
+    // "j•••@gmail.com": enough for the customer to recognise where the receipt went
+    const email = String(sess.customer_details?.email || sess.customer_email || '');
+    const masked = email.includes('@') ? `${email[0]}•••@${email.split('@')[1]}` : '';
+    res.json({ paid: sess.payment_status === 'paid', orderId: sess.metadata?.orderId, orderNumber: sess.metadata?.orderNumber, receiptTo: masked });
   } catch (err) {
     console.error('Verify payment error:', err.message);
     res.status(500).json({ error: 'Could not verify payment.' });
@@ -1523,10 +1589,10 @@ function priceInfo(p) {
 // "Or pay in instalments" line — must match payInThreeHTML() in js/app.js
 function payLaterText(o) {
   const k = !!o?.payInThree, c = !!o?.clearpay;
-  if (k && c) return 'Or pay in interest-free instalments with Klarna (3) or Clearpay (4, UK)';
-  if (k) return 'Or pay in 3 interest-free instalments with Klarna';
-  if (c) return 'Or pay in 4 interest-free instalments with Clearpay (UK)';
-  return '';
+  const t = k && c ? 'Or pay in interest-free instalments with Klarna (3) or Clearpay (4, UK)'
+    : k ? 'Or pay in 3 interest-free instalments with Klarna'
+    : c ? 'Or pay in 4 interest-free instalments with Clearpay (UK)' : '';
+  return t ? `${t}. 18+, T&amp;Cs apply.` : '';
 }
 // "Ready to ship" / "Made to order" line. Units made into wigs default to made to order.
 function dispatchInfo(p) {
@@ -1680,6 +1746,11 @@ app.get('/product/:slug', async (req, res) => {
     const dispatch     = dispatchInfo(p);
     const { data: shopSettings } = await supabase.from('settings').select('*').eq('id', 1).single();
     const payLater     = payLaterText(shopSettings?.shop_options);
+    // Delivery is extra, so say so next to the price (UK pricing rules: no surprise costs at checkout)
+    const ukDel        = cheapestActiveOption(deliveryOptionsFrom(shopSettings), 'uk');
+    const deliveryNote = ukDel
+      ? `Plus delivery: UK from £${Number(ukDel.prices.uk).toFixed(2)}, free over £${FREE_UK_DELIVERY_OVER}. International delivery is shown at checkout.`
+      : 'Plus delivery, shown at checkout.';
 
     const ld = {
       '@context': 'https://schema.org',
@@ -1723,6 +1794,7 @@ app.get('/product/:slug', async (req, res) => {
           <div class="product-card-category">${escHtml(p.category || 'Hair')}</div>
           <h1 class="serif">${escHtml(p.name)}</h1>
           <div class="pd-price">${price.hasRange ? `<small>from </small>` : ''}${money(price.low)}${price.pct ? ` <s class="price-was">${money(price.wasLow)}</s> <span class="sale-badge">${price.pct}% off</span>` : ''}</div>
+          <p class="delivery-note">${escHtml(deliveryNote)}</p>
           ${payLater && p.in_stock ? `<p class="pay-in-3">${payLater}</p>` : ''}
           <p class="pd-stock ${p.in_stock ? 'in' : 'out'}">${!p.in_stock ? 'Out of stock – coming back soon' : dispatch ? `${dispatch.title} · <span>${escHtml(dispatch.text)}</span>` : 'In stock'}</p>
           <div class="pd-desc">${escHtml(desc)}</div>

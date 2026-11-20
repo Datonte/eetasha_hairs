@@ -48,6 +48,7 @@
 
       <h2 class="serif">Who we are</h2>
       <p>eetashacollection (eetashacollection.com) is an online shop run by a sole trader in England. We are the "controller" of the personal information described here, which means we decide how it's used and we're responsible for looking after it.</p>
+      <p class="seller-line"></p>
       <p>Questions about your information? Email <a href="mailto:eetasha.collection@gmail.com?subject=Privacy">eetasha.collection@gmail.com</a>.</p>
 
       <h2 class="serif">What we collect</h2>
@@ -135,6 +136,7 @@
       renderFooter();
       updateCartCount();
       const ig = String(Store.getSettings().instagram || '').trim().replace(/^@/, '');
+      fillSellerDetails();
       document.querySelectorAll('.policy-instagram').forEach(link => {
         if (ig) { link.href = `https://instagram.com/${encodeURIComponent(ig)}`; link.textContent = '@' + ig; }
       });
