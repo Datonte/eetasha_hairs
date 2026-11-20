@@ -422,7 +422,7 @@ function renderFooter() {
         <div class="footer-inner">
           <div>
             <div class="footer-brand">eetashacollection</div>
-            <p class="footer-desc">Premium luxury hair for the modern woman. Quality that speaks for itself.</p>
+            <p class="footer-desc">Luxury and quality in every strand.</p>
             <div class="social-links">
               <a href="${l.emailUrl}" title="Email us" aria-label="Email us">${mailIcon(18)}</a>
               ${l.igUrl ? `<a href="${l.igUrl}" target="_blank" rel="noopener" title="Instagram" aria-label="Instagram">${brandIcon('instagram', 18)}</a>` : ''}

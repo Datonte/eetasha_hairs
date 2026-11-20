@@ -88,7 +88,7 @@ function emailLayout({ preheader, heading, intro, content, contacts }) {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;background:#ffffff;border-radius:12px;">
     <tr><td style="background:#1a1a1a;padding:28px;text-align:center;border-radius:12px 12px 0 0;">
       <div style="font-family:Georgia,serif;color:#c9a84c;font-size:22px;letter-spacing:2px;text-transform:uppercase;">eetashacollection</div>
-      <div style="${F}color:#999999;font-size:13px;margin-top:6px;">Luxury Hair Collection</div>
+      <div style="${F}color:#999999;font-size:13px;margin-top:6px;">Luxury and quality in every strand</div>
     </td></tr>
     <tr><td style="padding:32px 28px;">
       <h1 style="margin:0 0 8px;font-family:Georgia,serif;color:#1a1a1a;font-size:21px;font-weight:normal;">${escEmail(heading)}</h1>
@@ -415,7 +415,7 @@ async function ensureDefaults() {
       await supabase.from('products').insert([
         { name: 'Luxury HD Lace Frontal Wig',  price: 285, category: 'Wigs',     in_stock: true,  featured: true,
           image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBT_acbnNJllCa-myvQXbTiAfGG1Ng-QqFbGAkiQs-N2gTLamTG-VBCqWdJxYoLxkEHflEoVFQEO1dNJ7tDEsxeMaI-fo6TsDC2elJ8qLlmjTXj_jIOcxcRzSNC0kF2ZsgbKen96SmIlF-3tdv4-rUDhn5AuTOyqyLkIA5DYLTlTyV68_uJmM-kaukOSoiFnar8gf2jS663m_7sqDHdtlHRRh97ebJC7ktW1AmDgPtNkxRfvLnB4XtTUF6AN4IujIMcVb-dpYiJgg',
-          description: '100% Virgin Human Hair, 180% Density, pre-plucked hairline. HD Swiss Lace.' },
+          description: '100% virgin and raw human hair, 180% density, pre-plucked hairline. HD Swiss Lace.' },
         { name: 'Brazilian Body Wave Bundle',   price: 148, category: 'Bundles',  in_stock: true,  featured: true,
           image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCtFlFGnIJDEScExko8LZfFdetzllUe281nGmyY-_5mvrSwbeNkgPiogL9PDYqoUtYpx5L5S0HJL4veqzYtae3i1_10ziTvrN8pF-Ve4OBKpc97oPc_A_bZxSTAcPY7t_-hTRCktKceWAcVrNgCTsZistyHHHYdd7KBuCFBG76GwV7raWzJ2WLo0hO2ltxV3pEgy-KUGOCbcIO1PCB_icgqMJmBKNGuzYVPvDShIiXHqIDJO3Fvn6nZxQUoPzuqOommSKJKAm9Y-A',
           description: 'Premium Brazilian body wave, double drawn, natural colour. 12-30 inches.' },
